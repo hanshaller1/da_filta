@@ -75,7 +75,7 @@ test('theme selector switches all themes and persists without resetting UI state
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });
 
-test('central state and neutral filterbank module keep L/R base values separate', async ({ page }) => {
+test('central state and the filterbank wrapper keep L/R base values separate', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
 
   const result = await page.evaluate(() => {
@@ -83,44 +83,15 @@ test('central state and neutral filterbank module keep L/R base values separate'
     const state = domain.createInitialState();
     domain.setBandBaseGain(state, 'left', 2, 40);
     domain.setBandBaseGain(state, 'right', 2, -20);
-    const connections = [];
-    const createParam = (value = 0) => ({ value, cancelScheduledValues() {}, setTargetAtTime(nextValue) { this.value = nextValue; } });
-    const createNode = name => ({ name, connect: target => connections.push(`${name}->${target.name}`), disconnect() {} });
-    const context = {
-      createGain: () => Object.assign(createNode(`gain-${connections.length}`), { gain: createParam(1) }),
-      createChannelSplitter: () => createNode(`splitter-${connections.length}`),
-      createChannelMerger: () => createNode(`merger-${connections.length}`),
-      createBiquadFilter: () => Object.assign(createNode(`filter-${connections.length}`), {
-        type: '', frequency: createParam(), Q: createParam()
-      })
-    };
-    const filterbank = new window.Filterbank(context);
-    filterbank.applyState(state);
-    filterbank.setBandBaseGain('right', 2, 60);
-    const snapshot = {
-      left: filterbank.bandGainLeft[2],
-      right: filterbank.bandGainRight[2],
-      leftDelta: filterbank.deltaGains.left[2].gain.value,
-      rightDelta: filterbank.deltaGains.right[2].gain.value,
-      connections: connections.length,
-      filterCount: filterbank.bandFilters.left.length + filterbank.bandFilters.right.length,
-      firstFilter: { type: filterbank.bandFilters.left[0].type, frequency: filterbank.bandFilters.left[0].frequency.value, q: filterbank.bandFilters.left[0].Q.value },
-      lastFilter: { frequency: filterbank.bandFilters.right[9].frequency.value, q: filterbank.bandFilters.right[9].Q.value }
-    };
-    filterbank.dispose();
     return {
       bandCount: domain.BAND_COUNT,
       firstBand: domain.BAND_DEFINITIONS[0],
       defaults: [state.bandGainLeft[0], state.bandGainRight[0]],
       stateValues: [state.bandGainLeft[2], state.bandGainRight[2]],
-      filterbankValues: [snapshot.left, snapshot.right],
-      deltaValues: [snapshot.leftDelta, snapshot.rightDelta],
-      connectionCount: snapshot.connections,
-      filterCount: snapshot.filterCount,
-      firstFilter: snapshot.firstFilter,
-      lastFilter: snapshot.lastFilter,
       qValues: window.Filterbank.BAND_QS,
-      deltaMapping: [window.Filterbank.controlToDeltaGain(40), window.Filterbank.controlToDeltaGain(60)]
+      deltaMapping: [window.Filterbank.controlToDeltaGain(40), window.Filterbank.controlToDeltaGain(-20)],
+      processorName: window.Filterbank.PROCESSOR_NAME,
+      smoothingSeconds: window.Filterbank.PARAMETER_SMOOTHING_SECONDS
     };
   });
 
@@ -128,15 +99,12 @@ test('central state and neutral filterbank module keep L/R base values separate'
   expect(result.firstBand).toEqual({ frequency: 29, label: '29 Hz' });
   expect(result.defaults).toEqual([0, 0]);
   expect(result.stateValues).toEqual([40, -20]);
-  expect(result.filterbankValues).toEqual([40, 60]);
-  expect(result.deltaValues[0]).toBeCloseTo(result.deltaMapping[0], 8);
-  expect(result.deltaValues[1]).toBeCloseTo(result.deltaMapping[1], 8);
-  expect(result.connectionCount).toBeGreaterThan(40);
-  expect(result.filterCount).toBe(20);
-  expect(result.firstFilter).toMatchObject({ type: 'bandpass', frequency: 29 });
-  expect(result.lastFilter.frequency).toBe(11000);
+  expect(result.deltaMapping[0]).toBeCloseTo(10 ** ((12 * 0.4) / 20) - 1, 10);
+  expect(result.deltaMapping[1]).toBeCloseTo(10 ** ((12 * -0.2) / 20) - 1, 10);
   expect(result.qValues).toHaveLength(10);
   expect(result.qValues.every(value => Number.isFinite(value) && value > 0)).toBeTruthy();
+  expect(result.processorName).toBe('resonant-filterbank-processor');
+  expect(result.smoothingSeconds).toBe(0.015);
 });
 
 test('10-band filterbank DSP is neutral, bipolar and stereo-isolated', async ({ page }) => {
@@ -157,7 +125,7 @@ test('10-band filterbank DSP is neutral, bipolar and stereo-isolated', async ({ 
 
       const source = context.createBufferSource();
       source.buffer = input;
-      const filterbank = new window.Filterbank(context);
+      const filterbank = await window.Filterbank.create(context, { bandGainLeft: leftControls, bandGainRight: rightControls });
       filterbank.applyState({ bandGainLeft: leftControls, bandGainRight: rightControls });
       source.connect(filterbank.input);
       filterbank.output.connect(context.destination);
@@ -524,7 +492,17 @@ test('latest FB UI rules keep neutral keys and inactive modes correct', async ({
 
 test('audio I/O controls build and stop a mocked stereo pass-through', async ({ page }) => {
   await page.addInitScript(() => {
-    const testState = { constraints: null, sinkId: null, stopped: false, gains: [] };
+    const testState = {
+      constraints: null,
+      sinkId: null,
+      stopped: false,
+      gains: [],
+      workletModules: [],
+      workletNodes: [],
+      workletMessages: [],
+      closedWorkletPorts: 0,
+      nativeFilters: 0
+    };
     window.__audioTestState = testState;
     const devices = [
       { kind: 'audioinput', deviceId: 'input-1', label: 'Mock Input', groupId: 'group-1' },
@@ -538,8 +516,26 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
     };
     if (!mediaDevices.addEventListener) mediaDevices.addEventListener = () => {};
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: mediaDevices });
+    class MockAudioWorkletNode {
+      constructor(context, name, options) {
+        this.name = name;
+        this.options = options;
+        this.port = {
+          onmessage: null,
+          postMessage: message => testState.workletMessages.push(message),
+          close: () => { testState.closedWorkletPorts += 1; }
+        };
+        testState.workletNodes.push(this);
+      }
+      connect() {}
+      disconnect() {}
+    }
     class MockAudioContext {
-      constructor() { this.state = 'suspended'; }
+      constructor() {
+        this.state = 'suspended';
+        this.currentTime = 0;
+        this.audioWorklet = { addModule: async url => { testState.workletModules.push(url); } };
+      }
       resume() { this.state = 'running'; return Promise.resolve(); }
       createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
       createGain() {
@@ -550,12 +546,14 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
       createChannelSplitter() { return { connect() {}, disconnect() {} }; }
       createChannelMerger() { return { connect() {}, disconnect() {} }; }
       createBiquadFilter() {
+        testState.nativeFilters += 1;
         return { type: '', frequency: { value: 0 }, Q: { value: 0 }, connect() {}, disconnect() {} };
       }
       createMediaStreamDestination() { return { stream: new MediaStream() }; }
       close() { this.state = 'closed'; return Promise.resolve(); }
     }
     window.AudioContext = MockAudioContext;
+    window.AudioWorkletNode = MockAudioWorkletNode;
     HTMLMediaElement.prototype.setSinkId = async function (id) { testState.sinkId = id; };
     HTMLMediaElement.prototype.play = async function () {};
     HTMLMediaElement.prototype.pause = function () {};
@@ -576,6 +574,7 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   await page.locator('[data-control="inputGain"]').fill('6');
   await page.locator('[data-control="dryWet"]').fill('0');
   await page.locator('[data-control="volume"]').fill('-12');
+  await page.locator('.band-fader').nth(0).fill('40');
   await page.locator('[data-audio-start]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('ON');
   await expect(page.locator('audio')).toHaveCount(1);
@@ -593,6 +592,19 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   expect(await page.evaluate(() => window.__audioTestState.gains[1].value)).toBe(1);
   expect(await page.evaluate(() => window.__audioTestState.gains[2].value)).toBe(0);
   expect(await page.evaluate(() => window.__audioTestState.gains[4].value)).toBeCloseTo(10 ** (-12 / 20), 5);
+  expect(await page.evaluate(() => window.__audioTestState.workletModules.length)).toBe(1);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes.length)).toBe(1);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].name)).toBe('resonant-filterbank-processor');
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.outputChannelCount)).toEqual([2]);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.bandGainLeft[0])).toBe(40);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.bandGainRight[0])).toBe(40);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.smoothingTime)).toBe(0.015);
+  expect(await page.evaluate(() => window.__audioTestState.nativeFilters)).toBe(0);
+  await page.locator('.band-fader').nth(4).fill('-25');
+  expect(await page.evaluate(() => window.__audioTestState.workletMessages.filter(message => message.type === 'set-band-base-gain'))).toEqual([
+    { type: 'set-band-base-gain', channel: 'left', index: 4, value: -25 },
+    { type: 'set-band-base-gain', channel: 'right', index: 4, value: -25 }
+  ]);
   await page.locator('[data-control="dryWet"]').fill('100');
   expect(await page.evaluate(() => window.__audioTestState.gains[1].value)).toBe(0);
   expect(await page.evaluate(() => window.__audioTestState.gains[2].value)).toBe(1);
@@ -607,6 +619,8 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   await expect(page.locator('[data-audio-status]')).toHaveText('OFF');
   await expect(page.locator('audio')).toHaveCount(0);
   expect(await page.evaluate(() => window.__audioTestState.stopped)).toBe(true);
+  expect(await page.evaluate(() => window.__audioTestState.closedWorkletPorts)).toBe(1);
+  expect(await page.evaluate(() => window.__audioTestState.workletMessages.some(message => message.type === 'dispose'))).toBeTruthy();
   await expect(page.locator('[data-control="inputGain"]')).toHaveValue('6');
   await expect(page.locator('[data-control="dryWet"]')).toHaveValue('50');
   await expect(page.locator('[data-control="volume"]')).toHaveValue('-12');
@@ -617,6 +631,8 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 1].value, restartGainOffset)).toBe(0.5);
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 2].value, restartGainOffset)).toBe(0.5);
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 4].value, restartGainOffset)).toBeCloseTo(10 ** (-12 / 20), 5);
+  expect(await page.evaluate(() => window.__audioTestState.workletModules.length)).toBe(2);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes.length)).toBe(2);
   await page.locator('[data-audio-stop]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('OFF');
   expect(consoleErrors).toEqual([]);
@@ -641,6 +657,38 @@ test('audio I/O reports a denied permission as ERROR', async ({ page }) => {
   await page.locator('[data-audio-start]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('ERROR');
   await expect(page.locator('[data-audio-message]')).toContainText('verweigert');
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('audio I/O reports an AudioWorklet load error as ERROR', async ({ page }) => {
+  await page.addInitScript(() => {
+    const mediaDevices = navigator.mediaDevices || {};
+    mediaDevices.enumerateDevices = async () => [{ kind: 'audioinput', deviceId: 'input-1', label: 'Mock Input', groupId: 'group-1' }];
+    mediaDevices.getUserMedia = async () => ({ getTracks: () => [{ stop() {} }] });
+    if (!mediaDevices.addEventListener) mediaDevices.addEventListener = () => {};
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: mediaDevices });
+    const node = () => ({ connect() {}, disconnect() {} });
+    class MockAudioContext {
+      constructor() {
+        this.audioWorklet = { addModule: async () => { throw new Error('Worklet module unavailable'); } };
+      }
+      resume() { return Promise.resolve(); }
+      createMediaStreamSource() { return node(); }
+      createGain() { return { ...node(), gain: { value: 0 } }; }
+      createMediaStreamDestination() { return { stream: new MediaStream() }; }
+      close() { return Promise.resolve(); }
+    }
+    window.AudioContext = MockAudioContext;
+  });
+  const consoleErrors = [];
+  const pageErrors = [];
+  page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.locator('[data-audio-start]').click();
+  await expect(page.locator('[data-audio-status]')).toHaveText('ERROR');
+  await expect(page.locator('[data-audio-message]')).toContainText('Filterbank-AudioWorklet konnte nicht geladen werden');
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

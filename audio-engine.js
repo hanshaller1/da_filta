@@ -118,10 +118,12 @@
         this.mixBus = this.context.createGain();
         this.volumeGainNode = this.context.createGain();
         this.destination = this.context.createMediaStreamDestination();
-        this.filterbank = new Filterbank(this.context);
-        this.filterbank.applyState({ bandGainLeft: this.bandGainLeft, bandGainRight: this.bandGainRight });
+        this.filterbank = await Filterbank.create(this.context, {
+          bandGainLeft: this.bandGainLeft,
+          bandGainRight: this.bandGainRight
+        });
 
-        // Neutral wet pass-through; the future filterbank can replace this branch.
+        // The wet branch stays structurally unchanged; Filterbank owns its DSP internally.
         this.source.connect(this.inputGainNode);
         this.inputGainNode.connect(this.dryGainNode);
         this.inputGainNode.connect(this.filterbank.input);

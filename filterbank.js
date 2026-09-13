@@ -8,17 +8,16 @@
   } = window.ResonantState;
 
   const MAX_BAND_GAIN_DB = 12;
+  const PARAMETER_SMOOTHING_SECONDS = 0.015;
+  const PROCESSOR_NAME = 'resonant-filterbank-processor';
+  const workletModuleLoads = new WeakMap();
   const bandFrequencies = Object.freeze(BAND_DEFINITIONS.map(band => band.frequency));
   const bandBoundaries = Object.freeze(
     bandFrequencies.slice(0, -1).map((frequency, index) => Math.sqrt(frequency * bandFrequencies[index + 1]))
   );
   const bandQs = Object.freeze(bandFrequencies.map((frequency, index) => {
-    const lower = index === 0
-      ? (frequency * frequency) / bandBoundaries[0]
-      : bandBoundaries[index - 1];
-    const upper = index === BAND_COUNT - 1
-      ? (frequency * frequency) / bandBoundaries[BAND_COUNT - 2]
-      : bandBoundaries[index];
+    const lower = index === 0 ? (frequency * frequency) / bandBoundaries[0] : bandBoundaries[index - 1];
+    const upper = index === BAND_COUNT - 1 ? (frequency * frequency) / bandBoundaries[BAND_COUNT - 2] : bandBoundaries[index];
     return frequency / (upper - lower);
   }));
 
@@ -29,56 +28,65 @@
     if (channel === 'right' || channel === 'R') return 'right';
     throw new RangeError('Ungültiger Audiokanal.');
   };
+  const readBandControls = (snapshot, property) => {
+    const values = Array.isArray(snapshot?.[property]) ? snapshot[property] : [];
+    return Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(values[index] ?? 0));
+  };
+  const getWorkletModuleUrl = () => new URL('filterbank-processor.js', window.location.href).href;
+
+  const loadWorkletModule = async audioContext => {
+    if (!audioContext?.audioWorklet?.addModule) {
+      throw new Error('AudioWorklet wird von diesem Browser oder AudioContext nicht unterstützt.');
+    }
+
+    const existingLoad = workletModuleLoads.get(audioContext);
+    if (existingLoad) return existingLoad;
+
+    const load = audioContext.audioWorklet.addModule(getWorkletModuleUrl()).catch(error => {
+      workletModuleLoads.delete(audioContext);
+      throw new Error(`Filterbank-AudioWorklet konnte nicht geladen werden: ${error?.message || error}`);
+    });
+    workletModuleLoads.set(audioContext, load);
+    return load;
+  };
 
   class Filterbank {
-    constructor(audioContext) {
-      this.context = audioContext;
-      this.inputNode = audioContext.createGain();
-      this.outputNode = audioContext.createGain();
-      this.splitterNode = audioContext.createChannelSplitter(2);
-      this.mergerNode = audioContext.createChannelMerger(2);
-      this.sums = {
-        left: audioContext.createGain(),
-        right: audioContext.createGain()
-      };
-      this.bandFilters = { left: [], right: [] };
-      this.deltaGains = { left: [], right: [] };
-      this.bandGainLeft = Array(BAND_COUNT).fill(0);
-      this.bandGainRight = Array(BAND_COUNT).fill(0);
-      this.disposed = false;
+    static async create(audioContext, initialState) {
+      await loadWorkletModule(audioContext);
+      return new Filterbank(audioContext, initialState);
+    }
 
-      this.sums.left.gain.value = 1;
-      this.sums.right.gain.value = 1;
-      this.outputNode.gain.value = 1;
-      this.inputNode.connect(this.splitterNode);
-
-      // The unfiltered reference path is always present on each channel.
-      this.splitterNode.connect(this.sums.left, 0, 0);
-      this.splitterNode.connect(this.sums.right, 1, 0);
-
-      for (const channel of ['left', 'right']) {
-        const splitterOutput = channel === 'left' ? 0 : 1;
-        const sum = this.sums[channel];
-        for (let index = 0; index < BAND_COUNT; index += 1) {
-          const bandFilter = audioContext.createBiquadFilter();
-          bandFilter.type = 'bandpass';
-          bandFilter.frequency.value = bandFrequencies[index];
-          bandFilter.Q.value = bandQs[index];
-
-          const deltaGain = audioContext.createGain();
-          deltaGain.gain.value = 0;
-          this.splitterNode.connect(bandFilter, splitterOutput, 0);
-          bandFilter.connect(deltaGain);
-          deltaGain.connect(sum);
-
-          this.bandFilters[channel].push(bandFilter);
-          this.deltaGains[channel].push(deltaGain);
-        }
+    constructor(audioContext, initialState) {
+      if (typeof AudioWorkletNode !== 'function') {
+        throw new Error('AudioWorkletNode wird von diesem Browser nicht unterstützt.');
       }
 
-      this.sums.left.connect(this.mergerNode, 0, 0);
-      this.sums.right.connect(this.mergerNode, 0, 1);
-      this.mergerNode.connect(this.outputNode);
+      this.context = audioContext;
+      this.disposed = false;
+      this.bandGainLeft = readBandControls(initialState, 'bandGainLeft');
+      this.bandGainRight = readBandControls(initialState, 'bandGainRight');
+      this.inputNode = audioContext.createGain();
+      this.outputNode = audioContext.createGain();
+      this.inputNode.gain.value = 1;
+      this.outputNode.gain.value = 1;
+      this.workletNode = new AudioWorkletNode(audioContext, PROCESSOR_NAME, {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+        channelCount: 2,
+        channelCountMode: 'explicit',
+        channelInterpretation: 'discrete',
+        processorOptions: {
+          bandFrequencies: [...bandFrequencies],
+          bandQs: [...bandQs],
+          bandGainLeft: [...this.bandGainLeft],
+          bandGainRight: [...this.bandGainRight],
+          maxBandGainDb: MAX_BAND_GAIN_DB,
+          smoothingTime: PARAMETER_SMOOTHING_SECONDS
+        }
+      });
+      this.inputNode.connect(this.workletNode);
+      this.workletNode.connect(this.outputNode);
     }
 
     get input() {
@@ -95,51 +103,35 @@
       const target = normalizedChannel === 'left' ? this.bandGainLeft : this.bandGainRight;
       const nextValue = setBandBaseGain({ bandGainLeft: this.bandGainLeft, bandGainRight: this.bandGainRight }, normalizedChannel, index, value);
       target[index] = nextValue;
-      this.setDeltaGain(normalizedChannel, index, nextValue, false);
+      this.workletNode.port.postMessage({
+        type: 'set-band-base-gain',
+        channel: normalizedChannel,
+        index,
+        value: nextValue
+      });
       return nextValue;
-    }
-
-    setDeltaGain(channel, index, control, immediate) {
-      const deltaGain = this.deltaGains[channel]?.[index]?.gain;
-      if (!deltaGain) return;
-      const nextGain = controlToDeltaGain(clampBandGain(control));
-      if (immediate) {
-        deltaGain.value = nextGain;
-        return;
-      }
-      const now = this.context.currentTime || 0;
-      if (typeof deltaGain.cancelScheduledValues === 'function') deltaGain.cancelScheduledValues(now);
-      if (typeof deltaGain.setTargetAtTime === 'function') deltaGain.setTargetAtTime(nextGain, now, 0.015);
-      else deltaGain.value = nextGain;
     }
 
     applyState(snapshot) {
       if (this.disposed) return;
-      const nextLeft = Array.isArray(snapshot?.bandGainLeft) ? snapshot.bandGainLeft : [];
-      const nextRight = Array.isArray(snapshot?.bandGainRight) ? snapshot.bandGainRight : [];
-      this.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(nextLeft[index] ?? 0));
-      this.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(nextRight[index] ?? 0));
-      for (let index = 0; index < BAND_COUNT; index += 1) {
-        this.setDeltaGain('left', index, this.bandGainLeft[index], true);
-        this.setDeltaGain('right', index, this.bandGainRight[index], true);
-      }
+      this.bandGainLeft = readBandControls(snapshot, 'bandGainLeft');
+      this.bandGainRight = readBandControls(snapshot, 'bandGainRight');
+      this.workletNode.port.postMessage({
+        type: 'apply-state',
+        bandGainLeft: [...this.bandGainLeft],
+        bandGainRight: [...this.bandGainRight]
+      });
     }
 
     dispose() {
       if (this.disposed) return;
-      [
-        this.inputNode,
-        this.outputNode,
-        this.splitterNode,
-        this.mergerNode,
-        this.sums.left,
-        this.sums.right,
-        ...this.bandFilters.left,
-        ...this.bandFilters.right,
-        ...this.deltaGains.left,
-        ...this.deltaGains.right
-      ].forEach(node => node?.disconnect());
       this.disposed = true;
+      this.workletNode.port.postMessage({ type: 'dispose' });
+      this.workletNode.port.onmessage = null;
+      if (typeof this.workletNode.port.close === 'function') this.workletNode.port.close();
+      this.inputNode.disconnect();
+      this.workletNode.disconnect();
+      this.outputNode.disconnect();
     }
   }
 
@@ -148,5 +140,7 @@
   Filterbank.BAND_QS = bandQs;
   Filterbank.controlToGainDb = controlToGainDb;
   Filterbank.controlToDeltaGain = controlToDeltaGain;
+  Filterbank.PARAMETER_SMOOTHING_SECONDS = PARAMETER_SMOOTHING_SECONDS;
+  Filterbank.PROCESSOR_NAME = PROCESSOR_NAME;
   window.Filterbank = Filterbank;
 })();

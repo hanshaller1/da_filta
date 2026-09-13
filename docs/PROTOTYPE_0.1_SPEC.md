@@ -219,6 +219,18 @@ Für spätere Audio-Versionen:
 
 Prototype 0.1 benötigt noch keinen finalen DSP.
 
+### Aktueller Filterbank-DSP
+
+Die erste Filterbank-DSP-Stufe läuft in einem einzelnen Stereo-`AudioWorkletProcessor`.
+
+- pro Kanal bleibt ein unveränderter Referenzpfad erhalten
+- zehn statische Bandpass-Biquads liefern separate Delta-Beiträge
+- `bandGainLeft` und `bandGainRight` steuern die beiden Kanäle getrennt
+- `-100 … +100` wird als Webapp-Prototypentscheidung auf `-12 … +12 dB` und anschließend auf den Delta-Gain abgebildet
+- bei `0` ist der Delta-Gain `0`; der Referenzpfad bleibt dadurch unverändert
+
+Feedback, Resonance-DSP, LFO, Envelope-Follower und Spread-DSP sind weiterhin nicht implementiert.
+
 ## 6. Grundprinzip der Webapp-Bedienung
 
 Die Webapp übernimmt nicht die Navigation des Hardware-Geräts 1:1.
