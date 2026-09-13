@@ -1,0 +1,183 @@
+(function () {
+  const { BAND_COUNT, BAND_GAIN_MIN, BAND_GAIN_MAX, clampBandGain } = window.ResonantState;
+  const dbToGain = db => 10 ** (Number(db) / 20);
+  const dryWetGains = value => {
+    const wet = Math.min(100, Math.max(0, Number(value))) / 100;
+    return { dry: 1 - wet, wet };
+  };
+
+  class AudioEngine {
+    constructor({ onStatusChange, onDevicesChanged }) {
+      this.onStatusChange = onStatusChange;
+      this.onDevicesChanged = onDevicesChanged;
+      this.status = 'OFF';
+      this.inputGainDb = 0;
+      this.dryWet = 50;
+      this.volumeDb = -6;
+      this.context = null;
+      this.stream = null;
+      this.source = null;
+      this.inputGainNode = null;
+      this.dryGainNode = null;
+      this.wetGainNode = null;
+      this.mixBus = null;
+      this.volumeGainNode = null;
+      this.destination = null;
+      this.outputElement = null;
+      this.filterbank = null;
+      this.bandGainLeft = Array(BAND_COUNT).fill(0);
+      this.bandGainRight = Array(BAND_COUNT).fill(0);
+      this.handleDeviceChange = () => this.refreshDevices().then(devices => this.onDevicesChanged?.(devices)).catch(() => {});
+      if (navigator.mediaDevices?.addEventListener) navigator.mediaDevices.addEventListener('devicechange', this.handleDeviceChange);
+    }
+
+    setStatus(status, message = '') {
+      this.status = status;
+      this.onStatusChange?.(status, message);
+    }
+
+    async refreshDevices() {
+      if (!navigator.mediaDevices?.enumerateDevices) throw new Error('Gerätezugriff wird von diesem Browser nicht unterstützt.');
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return { inputs: devices.filter(device => device.kind === 'audioinput'), outputs: devices.filter(device => device.kind === 'audiooutput') };
+    }
+
+    setInputGainDb(value) {
+      this.inputGainDb = Math.max(0, Math.min(24, Number(value)));
+      this.setSmoothedParam(this.inputGainNode?.gain, dbToGain(this.inputGainDb));
+    }
+
+    setDryWet(value) {
+      this.dryWet = Math.max(0, Math.min(100, Number(value)));
+      const gains = dryWetGains(this.dryWet);
+      this.setSmoothedParam(this.dryGainNode?.gain, gains.dry);
+      this.setSmoothedParam(this.wetGainNode?.gain, gains.wet);
+    }
+
+    setVolumeDb(value) {
+      this.volumeDb = Math.max(-60, Math.min(0, Number(value)));
+      this.setSmoothedParam(this.volumeGainNode?.gain, dbToGain(this.volumeDb));
+    }
+
+    setBandBaseGain(channel, index, value) {
+      if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
+      const nextValue = clampBandGain(value);
+      const target = channel === 'left' ? this.bandGainLeft : this.bandGainRight;
+      target[index] = nextValue;
+      this.filterbank?.setBandBaseGain(channel, index, nextValue);
+      return nextValue;
+    }
+
+    applyState(snapshot) {
+      const left = Array.isArray(snapshot?.bandGainLeft) ? snapshot.bandGainLeft : [];
+      const right = Array.isArray(snapshot?.bandGainRight) ? snapshot.bandGainRight : [];
+      this.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(left[index] ?? 0));
+      this.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(right[index] ?? 0));
+      if (this.filterbank) this.filterbank.applyState({ bandGainLeft: this.bandGainLeft, bandGainRight: this.bandGainRight });
+    }
+
+    setSmoothedParam(param, value) {
+      this.setAudioParam(param, value, false);
+    }
+
+    setAudioParam(param, value, immediate) {
+      if (!param) return;
+      if (immediate) { param.value = value; return; }
+      const now = this.context?.currentTime || 0;
+      if (typeof param.cancelScheduledValues === 'function') param.cancelScheduledValues(now);
+      if (typeof param.setTargetAtTime === 'function') param.setTargetAtTime(value, now, 0.015);
+      else param.value = value;
+    }
+
+    applyAudioParameters(immediate = false) {
+      this.setAudioParam(this.inputGainNode?.gain, dbToGain(this.inputGainDb), immediate);
+      const gains = dryWetGains(this.dryWet);
+      this.setAudioParam(this.dryGainNode?.gain, gains.dry, immediate);
+      this.setAudioParam(this.wetGainNode?.gain, gains.wet, immediate);
+      this.setAudioParam(this.volumeGainNode?.gain, dbToGain(this.volumeDb), immediate);
+    }
+
+    async start({ inputDeviceId, outputDeviceId }) {
+      if (this.status === 'STARTING' || this.status === 'ON') return;
+      this.setStatus('STARTING');
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) throw new Error('AudioContext ist in diesem Browser nicht verfügbar.');
+        this.context = new AudioContextClass();
+        await this.context.resume();
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error('Mikrofonzugriff wird von diesem Browser nicht unterstützt.');
+        const audioConstraints = { channelCount: { ideal: 2 }, echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+        if (inputDeviceId) audioConstraints.deviceId = { exact: inputDeviceId };
+        this.stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+        if (this.onDevicesChanged) this.onDevicesChanged(await this.refreshDevices());
+
+        this.source = this.context.createMediaStreamSource(this.stream);
+        this.inputGainNode = this.context.createGain();
+        this.dryGainNode = this.context.createGain();
+        this.wetGainNode = this.context.createGain();
+        this.mixBus = this.context.createGain();
+        this.volumeGainNode = this.context.createGain();
+        this.destination = this.context.createMediaStreamDestination();
+        this.filterbank = new Filterbank(this.context);
+        this.filterbank.applyState({ bandGainLeft: this.bandGainLeft, bandGainRight: this.bandGainRight });
+
+        // Neutral wet pass-through; the future filterbank can replace this branch.
+        this.source.connect(this.inputGainNode);
+        this.inputGainNode.connect(this.dryGainNode);
+        this.inputGainNode.connect(this.filterbank.input);
+        this.dryGainNode.connect(this.mixBus);
+        this.filterbank.output.connect(this.wetGainNode);
+        this.wetGainNode.connect(this.mixBus);
+        this.mixBus.connect(this.volumeGainNode);
+        this.volumeGainNode.connect(this.destination);
+        this.applyAudioParameters(true);
+
+        this.outputElement = document.createElement('audio');
+        this.outputElement.autoplay = true;
+        this.outputElement.srcObject = this.destination.stream;
+        document.body.appendChild(this.outputElement);
+        if (typeof this.outputElement.setSinkId === 'function') await this.outputElement.setSinkId(outputDeviceId || '');
+        else if (outputDeviceId) throw new Error('Dieses Chrome-Setup unterstützt keine Audio-Auswahl.');
+        await this.outputElement.play();
+        this.setStatus('ON');
+      } catch (error) {
+        await this.cleanup();
+        this.setStatus('ERROR', this.getErrorMessage(error));
+        throw error;
+      }
+    }
+
+    async stop() {
+      await this.cleanup();
+      this.setStatus('OFF');
+    }
+
+    disconnectNode(node) {
+      if (node) node.disconnect();
+    }
+
+    async cleanup() {
+      if (this.filterbank) { this.filterbank.dispose(); this.filterbank = null; }
+      [this.source, this.inputGainNode, this.dryGainNode, this.wetGainNode, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
+      this.source = null;
+      this.inputGainNode = null;
+      this.dryGainNode = null;
+      this.wetGainNode = null;
+      this.mixBus = null;
+      this.volumeGainNode = null;
+      if (this.stream) { this.stream.getTracks().forEach(track => track.stop()); this.stream = null; }
+      if (this.outputElement) { this.outputElement.pause(); this.outputElement.srcObject = null; this.outputElement.remove(); this.outputElement = null; }
+      if (this.context) { await this.context.close(); this.context = null; }
+      this.destination = null;
+    }
+
+    getErrorMessage(error) {
+      if (error?.name === 'NotAllowedError') return 'Audio-Berechtigung wurde verweigert.';
+      if (error?.name === 'NotFoundError') return 'Kein Audio-Eingabegerät gefunden.';
+      if (error?.name === 'NotReadableError') return 'Das Audio-Eingabegerät ist nicht verfügbar.';
+      return error?.message || 'Audio konnte nicht gestartet werden.';
+    }
+  }
+
+  window.AudioEngine = AudioEngine;
+})();

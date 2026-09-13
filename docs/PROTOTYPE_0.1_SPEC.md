@@ -988,9 +988,10 @@ Vor jedem Entwicklungstask:
 
 Wenn ein neuer Feature-/Fix-Task auf `main` beginnt:
 
-- selbstständig einen passenden Feature-/Fix-Branch erstellen
-- diesen Branch auschecken
-- nicht direkt auf `main` entwickeln oder committen
+- der Benutzer ist dafür verantwortlich, einen passenden Feature-/Fix-Branch anzulegen und lokal auszuchecken
+- der Agent darf selbst keinen Branch anlegen oder wechseln
+- der Agent weist den Benutzer darauf hin und wartet, wenn für den Task ein Feature-/Fix-Branch vorgesehen ist, aber `main` aktiv ist
+- erst nach Bereitstellung des passenden Arbeitsbranches wird mit der Entwicklung fortgefahren
 
 Wenn bereits ein passender Arbeitsbranch aktiv ist:
 
@@ -1000,42 +1001,10 @@ Wenn bereits ein passender Arbeitsbranch aktiv ist:
 Zusätzlich:
 
 - ausschließlich im aktuell passenden Arbeitsbranch arbeiten
-- keine Änderungen direkt auf `main` committen
-- nur Änderungen committen, die zum aktuellen Auftrag gehören
-- keine unrelated Änderungen mitcommitten
-- vor jedem Commit `git diff` prüfen
+- nicht direkt auf `main` entwickeln, wenn für den Task ein Feature-/Fix-Branch vorgesehen ist
+- der Agent verändert ausschließlich Projektdateien innerhalb des bereits ausgecheckten Arbeitsbranches
 - fremde Änderungen weder stagen noch verwerfen
 - kein Merge nach `main` ohne ausdrückliche Freigabe
-
-### Commit-Struktur
-
-- kleine Aufgaben dürfen in einem einzelnen Commit umgesetzt werden
-- größere Aufgaben sollen in mehrere logisch sinnvolle Commits aufgeteilt werden, wenn dies Nachvollziehbarkeit, Review oder Fehlersuche verbessert
-- ein Commit soll jeweils eine fachlich oder technisch verständliche Änderungseinheit enthalten
-- keine künstliche Aufteilung in Mini-Commits ohne eigenen fachlichen Wert
-- Zwischenstände nur dann committen, wenn sie in sich konsistent und sinnvoll nachvollziehbar sind
-
-### Commit-Messages
-
-Commit-Messages sollen:
-
-- kurz
-- präzise
-- aussagekräftig
-- auf Englisch
-- im Imperativ
-
-formuliert sein.
-
-Beispiele:
-
-```text
-Add German keyboard mapping
-Connect keyboard input to band state
-Add feedback controls to FB mode
-Fix bipolar fader range
-Refine filterbank layout
-```
 
 ### Abschluss eines Agenten-Auftrags
 
@@ -1043,10 +1012,9 @@ Nach Abschluss:
 
 - Tests und Checks ausführen
 - `git status` prüfen
+- `git diff` prüfen
 - sicherstellen, dass keine unbeabsichtigten Änderungen offen sind
-- alle erzeugten Commit-IDs nennen
-- alle Commit-Messages nennen
-- kurz beschreiben, welcher Commit welchen Teil der Änderung enthält
+- Commit und Push führt der Benutzer außerhalb der Agentenumgebung durch
 - bekannte offene Punkte nennen
 
 Erst nach manueller Prüfung bzw. ausdrücklicher Freigabe darf der Branch in `main` gemerged werden.
@@ -1188,7 +1156,6 @@ Vor **jedem Entwicklungstask**:
    - welche Dateien geändert wurden
    - welche Tests oder Checks ausgeführt wurden
    - ob bekannte offene Punkte verbleiben
-   - Commit-ID(s) und Commit-Message(s), sofern Commits erzeugt wurden
 
 ## 36. Grundsatz
 

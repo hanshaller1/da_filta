@@ -8,7 +8,13 @@
 </head>
 <body>
   <main class="console">
-    <header class="masthead"><div class="brand">RESONANT <span>FILTERBANK</span></div><div class="product-note">Web App Mockup</div><div class="layout-note">Desktop Studio Interface</div></header>
+    <header class="masthead"><div class="brand">RESONANT <span>FILTERBANK</span></div><label class="theme-picker"><span class="sr-only">UI Theme</span><select data-theme-select aria-label="UI Theme"><option value="current">Current / Cyan Studio</option><option value="clean-modern">Clean Modern</option><option value="dark-studio">Dark Studio</option><option value="analog-inspired">Analog Inspired</option><option value="minimal-dark">Minimal Dark</option><option value="soft-neutral">Soft Neutral</option><option value="pro-console">Pro Console</option></select></label><div class="layout-note">Desktop Studio Interface</div></header>
+    <section class="audio-io-bar" aria-label="Audio Ein- und Ausgabe">
+      <label class="audio-device"><span>INPUT</span><select data-audio-input aria-label="Audio-Eingabegerät"><option value="">Geräte werden geladen …</option></select></label>
+      <label class="audio-device"><span>OUTPUT</span><select data-audio-output aria-label="Audio-Ausgabegerät"><option value="">Geräte werden geladen …</option></select></label>
+      <div class="audio-actions"><button type="button" class="audio-button start" data-audio-start>START AUDIO</button><button type="button" class="audio-button stop" data-audio-stop disabled>STOP AUDIO</button></div>
+      <div class="audio-state" aria-live="polite"><span>AUDIO STATUS</span><strong data-audio-status>OFF</strong><small data-audio-message></small></div>
+    </section>
     <section class="global-controls" aria-label="Globale Bedienelemente">
       <label class="control-card"><span class="control-label">INPUT GAIN</span><span class="control-row"><input type="range" min="0" max="24" value="0" data-control="inputGain" aria-label="Input Gain"><output data-output="inputGain">0.0 dB</output></span><span class="control-scale"><span>0</span><span>+24</span></span></label>
       <label class="control-card"><span class="control-label">RESONANCE</span><span class="control-row"><input type="range" min="-1" max="1" step="0.01" value="0" data-control="resonance" aria-label="Resonance"><output data-output="resonance">0</output></span><span class="control-scale"><span>-1</span><span>0</span><span>+1</span></span></label>
@@ -20,6 +26,9 @@
     <section class="fb-workspace" aria-label="FB Workspace"><div class="analyzer" aria-label="Statische Pegelübersicht"><div class="analyzer-header"><strong>FILTERBANK RESPONSE</strong><label class="fb-all-control"><span>FB ALL</span><button class="fb-all-toggle" type="button" aria-label="FB All Platzhalter">OFF</button></label></div><div class="analyzer-status"><span>MODE <b>FB</b></span><span>SCREEN <b>PERFORMANCE</b></span><span>CHANNEL <b>L + R (linked)</b></span><span>SPREAD MODE <b>CLASSIC</b></span></div><div class="chart-grid"><div class="axis-y"><span>+</span><span>0</span><span>−</span></div><div class="bars"></div><div class="axis-x"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div></div><div class="legend"><span><i></i>L</span><span><i></i>R</span></div></div></section>
     <section class="bands" aria-label="Frequenzbänder"></section>
   </main>
+  <script src="state.js"></script>
+  <script src="filterbank.js"></script>
+  <script src="audio-engine.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
