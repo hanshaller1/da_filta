@@ -89,6 +89,38 @@ npm start
 node server.js
 ```
 
+### Lokale Entwicklungsumgebung
+
+Unter Windows PowerShell kann `npm` aufgrund der lokalen PowerShell Execution Policy blockiert sein, weil `npm.ps1` nicht ausgeführt werden darf.
+
+Das ist kein Projektfehler.
+
+Für Start- und npm-Befehle gilt:
+
+- in PowerShell: `npm.cmd ...`
+- in Git Bash oder CMD: `npm ...`
+
+Die Anwendung, `package.json` oder npm-Skripte dürfen nicht verändert werden, nur um diese lokale PowerShell-Einschränkung zu umgehen.
+
+### Browser- und UI-Tests
+
+Für automatisierte Browserprüfungen darf Playwright als reine Entwicklungsabhängigkeit (`devDependency`) verwendet werden.
+
+Playwright ist kein Bestandteil der produktiven Frontend-Anwendung und stellt keine Ausnahme von der Vorgabe „keine externen Frontend-Libraries“ dar.
+
+Zweck:
+
+- lokale Browser-Smoke-Tests
+- Prüfung von DOM und CSS
+- Simulation von Maus- und Tastatureingaben
+- Prüfung der Browser-Konsole
+- Erzeugung von Screenshots für UI-Reviews
+- spätere Regressionstests
+
+Bevorzugter Testbrowser: Chromium.
+
+Browserprüfungen sollen nach Möglichkeit gegen die lokal laufende Anwendung unter `http://localhost:3000` erfolgen.
+
 ### Zielbrowser
 
 - Google Chrome unter Windows 11
@@ -741,7 +773,75 @@ Bei jedem Entwicklungsauftrag gilt:
 - keine zusätzlichen Dependencies ohne Freigabe
 - keine Änderungen nur aus persönlicher Agentenpräferenz
 
-## 31. Codequalität
+## 31. Git- und Branch-Workflow
+
+### Grundsatz
+
+Ab einem stabilen Basisstand wird nicht mehr direkt auf `main` entwickelt.
+
+Für neue Features, größere Anpassungen und Fehlerbehebungen wird jeweils ein eigener Branch verwendet.
+
+Beispiele:
+
+    feature/keyboard-control
+    feature/fb-feedback-ui
+    feature/audio-engine
+    fix/fader-range
+
+### Branch-Regeln
+
+- ausschließlich im aktuell ausgecheckten Branch arbeiten
+- nicht selbstständig auf `main` wechseln
+- keine Änderungen direkt auf `main` committen
+- vor Beginn `git status` prüfen
+- nur Änderungen committen, die zum aktuellen Auftrag gehören
+- keine unrelated Änderungen mitcommitten
+- vor jedem Commit `git diff` prüfen
+- Branch-Wechsel nur durchführen, wenn dies ausdrücklich beauftragt wurde
+
+### Commit-Struktur
+
+- kleine Aufgaben dürfen in einem einzelnen Commit umgesetzt werden
+- größere Aufgaben sollen in mehrere logisch sinnvolle Commits aufgeteilt werden, wenn dies Nachvollziehbarkeit, Review oder Fehlersuche verbessert
+- ein Commit soll jeweils eine fachlich oder technisch verständliche Änderungseinheit enthalten
+- keine künstliche Aufteilung in Mini-Commits ohne eigenen fachlichen Wert
+- Zwischenstände nur dann committen, wenn sie in sich konsistent und sinnvoll nachvollziehbar sind
+
+### Commit-Messages
+
+Commit-Messages sollen:
+
+- kurz
+- präzise
+- aussagekräftig
+- auf Englisch
+- im Imperativ
+
+formuliert sein.
+
+Beispiele:
+
+    Add German keyboard mapping
+    Connect keyboard input to band state
+    Add feedback controls to FB mode
+    Fix bipolar fader range
+    Refine filterbank layout
+
+### Abschluss eines Agenten-Auftrags
+
+Nach Abschluss:
+
+- Tests und Checks ausführen
+- `git status` prüfen
+- sicherstellen, dass keine unbeabsichtigten Änderungen offen sind
+- alle erzeugten Commit-IDs nennen
+- alle Commit-Messages nennen
+- kurz beschreiben, welcher Commit welchen Teil der Änderung enthält
+- bekannte offene Punkte nennen
+
+Erst nach manueller Prüfung bzw. ausdrücklicher Freigabe darf der Branch in `main` gemerged werden.
+
+## 32. Codequalität
 
 Der Code soll:
 
@@ -771,7 +871,7 @@ Vermeiden:
 - unnötige Klassenhierarchien
 - unnötige Patterns
 
-## 32. Zentrale Konstanten
+## 33. Zentrale Konstanten
 
 Frequenzen und Keyboard-Mapping sollen zentral definiert werden.
 
@@ -796,7 +896,7 @@ Keyboard-Mappings ebenfalls zentral.
 
 Nicht dieselben Werte an mehreren Stellen hart codieren.
 
-## 33. Prototype-0.1-Abnahmekriterien
+## 34. Prototype-0.1-Abnahmekriterien
 
 Prototype 0.1 gilt als erfolgreich, wenn:
 
@@ -820,7 +920,7 @@ Prototype 0.1 gilt als erfolgreich, wenn:
 - keine unnötigen Frameworks oder Libraries eingebaut wurden
 - kein finaler DSP vorgetäuscht wird
 
-## 34. Arbeitsweise für Agenten
+## 35. Arbeitsweise für Agenten
 
 Vor jeder größeren Änderung:
 
@@ -836,7 +936,7 @@ Vor jeder größeren Änderung:
    - ob Tests oder Checks ausgeführt wurden
    - ob bekannte offene Punkte verbleiben
 
-## 35. Grundsatz
+## 36. Grundsatz
 
 Die Webapp ist keine pixelgenaue Kopie der Erica Synths Resonant Filterbank.
 
