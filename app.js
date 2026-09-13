@@ -39,7 +39,7 @@ document.querySelectorAll('.mode-button').forEach(button => button.addEventListe
 const FB_CODES = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0'];
 const FADER_UP_CODES = ['KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI','KeyO','KeyP'];
 const FADER_DOWN_CODES = ['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK','KeyL','Semicolon'];
-const isEditableTarget = target => target instanceof HTMLElement && (target.matches('input, textarea, select') || target.isContentEditable);
+const isEditableTarget = target => target instanceof HTMLElement && ((target.matches('input, textarea, select') && !target.matches('input[type="range"]')) || target.isContentEditable);
 document.addEventListener('keydown', event => {
   if (isEditableTarget(event.target)) return;
   const bandIndex = FB_CODES.indexOf(event.code);

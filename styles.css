@@ -20,6 +20,13 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
  .fader-label { position: absolute; color: #f0f5f6; font-size: 16px; }
  .fader-label.positive { top: 0; left: 18px; }
 .fader-label.negative { bottom: 0; left: 18px; }
+.fb-workspace .analyzer { padding-left: 0; padding-right: 0; }
+.fb-workspace .analyzer-header, .fb-workspace .analyzer-status { margin-left: 14px; margin-right: 14px; }
+.fb-workspace .chart-grid { width: 100%; }
+.fb-workspace .chart-grid { border-left: 0; width: calc(100% + 2px); margin-left: -1px; margin-right: -1px; }
+.fb-workspace .bars { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 9px; padding: 0; }
+.fb-workspace .bar-pair { width: auto; justify-content: center; gap: 4px; }
+.fb-workspace .axis-x { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 9px; text-align: center; }
 .band-action.active, .fb-all-toggle.active { color: var(--cyan); border-color: var(--cyan); background: radial-gradient(circle, #0a6570, #10272e 72%); box-shadow: 0 0 8px rgba(0,238,255,.45), inset 0 0 8px rgba(0,238,255,.18); }
 
 .mode-bar { padding-top: 4px; padding-bottom: 4px; }

@@ -71,3 +71,29 @@ test('FB, MOD and band keyboard controls share state with the analyzer', async (
   expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });
+
+test('keyboard shortcuts remain active after focusing a band range with the mouse', async ({ page }) => {
+  const consoleErrors = [];
+  const pageErrors = [];
+  page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto('/', { waitUntil: 'networkidle' });
+
+  const fader = page.locator('.band-fader').nth(0);
+  const fb = page.locator('[data-feedback-band]').nth(0);
+  const mod = page.locator('[data-mod-band]').nth(0);
+
+  await fader.click();
+  await expect(fader).toBeFocused();
+  await page.keyboard.press('KeyQ');
+  await expect(fader).toHaveValue('10');
+  await page.keyboard.press('KeyA');
+  await expect(fader).toHaveValue('0');
+  await page.keyboard.press('Digit1');
+  await expect(fb).toHaveClass(/active/);
+  await page.keyboard.press('Shift+Digit1');
+  await expect(mod).toHaveClass(/active/);
+
+  expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
+  expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
+});
