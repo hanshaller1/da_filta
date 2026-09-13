@@ -15,9 +15,9 @@ test.describe('linear TPT/ZDF SVF parity', () => {
     page.on('pageerror', (error) => pageErrors.push(error.message));
 
     await page.goto('/');
-    await page.addScriptTag({ url: '/tpt-svf.js' });
 
-    const result = await page.evaluate(() => {
+    const result = await page.evaluate(async () => {
+      const { LinearTptSvf } = await import('/tpt-svf.js');
       const frequencies = [...window.Filterbank.BAND_FREQUENCIES];
       const qs = [...window.Filterbank.BAND_QS];
       const sampleRates = [44100, 48000];
@@ -70,7 +70,7 @@ test.describe('linear TPT/ZDF SVF parity', () => {
         analysisFrequency = frequency
       ) => {
         const biquad = createBiquadBandpass(frequency, q, sampleRate);
-        const tpt = new window.LinearTptSvf(sampleRate, frequency, q);
+        const tpt = new LinearTptSvf(sampleRate, frequency, q);
         let maxAbsError = 0;
         let maxAbsBiquad = 0;
         let maxAbsTpt = 0;
@@ -179,7 +179,7 @@ test.describe('linear TPT/ZDF SVF parity', () => {
           const noiseGenerator = createNoise((sampleRate + 1) * (index + 1));
           const noiseFrames = index < 2 ? sampleRate * 4 : sampleRate * 2;
           const noise = compareSignal(sampleRate, frequency, q, () => noiseGenerator(), noiseFrames);
-          const filter = new window.LinearTptSvf(sampleRate, frequency, q);
+          const filter = new LinearTptSvf(sampleRate, frequency, q);
 
           filter.process(0.5);
           filter.process(-0.25);

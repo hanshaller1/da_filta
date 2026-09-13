@@ -1,13 +1,12 @@
-(() => {
-  /**
-   * Linear topology-preserving-transform state-variable filter.
-   *
-   * The unit-bandpass output is mathematically equivalent to the current
-   * Web-Audio bandpass Biquad coefficient model when `k = 1 / Q`. The core is
-   * intentionally standalone: it has no DOM, AudioContext, or app-state
-   * dependency and is not connected to the production signal path yet.
-   */
-  class LinearTptSvf {
+/**
+ * Linear topology-preserving-transform state-variable filter.
+ *
+ * The unit-bandpass output is mathematically equivalent to the current
+ * Web-Audio bandpass Biquad coefficient model when `k = 1 / Q`. The core is
+ * intentionally standalone: it has no DOM, AudioContext, or app-state
+ * dependency.
+ */
+export class LinearTptSvf {
     constructor(sampleRate, frequency, q) {
       this.sampleRate = 0;
       this.frequency = 0;
@@ -87,7 +86,4 @@
 
       return this.unitBand;
     }
-  }
-
-  globalThis.LinearTptSvf = LinearTptSvf;
-})();
+}

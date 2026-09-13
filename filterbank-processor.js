@@ -1,3 +1,5 @@
+import { LinearTptSvf } from './tpt-svf.js';
+
 class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
@@ -99,39 +101,19 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   }
 
   createFilters() {
-    return this.bandFrequencies.map((frequency, index) => {
-      const omega = 2 * Math.PI * frequency / sampleRate;
-      const alpha = Math.sin(omega) / (2 * this.bandQs[index]);
-      const a0 = 1 + alpha;
-      return {
-        b0: alpha / a0,
-        b1: 0,
-        b2: -alpha / a0,
-        a1: (-2 * Math.cos(omega)) / a0,
-        a2: (1 - alpha) / a0,
-        z1: 0,
-        z2: 0
-      };
-    });
+    const filters = new Array(this.bandCount);
+    for (let index = 0; index < this.bandCount; index += 1) {
+      filters[index] = new LinearTptSvf(sampleRate, this.bandFrequencies[index], this.bandQs[index]);
+    }
+    return filters;
   }
 
   resetFilter(filter) {
-    filter.z1 = 0;
-    filter.z2 = 0;
+    filter.reset();
   }
 
   processBandpass(filter, input) {
-    const safeInput = Number.isFinite(input) ? input : 0;
-    const output = filter.b0 * safeInput + filter.z1;
-    const nextZ1 = filter.b1 * safeInput - filter.a1 * output + filter.z2;
-    const nextZ2 = filter.b2 * safeInput - filter.a2 * output;
-    if (!Number.isFinite(output) || !Number.isFinite(nextZ1) || !Number.isFinite(nextZ2)) {
-      this.resetFilter(filter);
-      return 0;
-    }
-    filter.z1 = nextZ1;
-    filter.z2 = nextZ2;
-    return output;
+    return filter.process(input);
   }
 
   setBandControl(channel, index, value, immediate = false) {
