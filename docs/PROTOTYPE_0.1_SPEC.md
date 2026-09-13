@@ -46,16 +46,7 @@ ist die verbindliche funktionale Spezifikation für Prototype 0.1.
 
 Das Mockup:
 
-`docs/PROTOTYPE_0.1_SPEC.png`
-
-ist die visuelle Referenz für:
-
-- Grundstil
-- dunkles Interface
-- neonartige Akzente
-- Typografie
-- Panel-Charakter
-- allgemeine visuelle Hierarchie
+`docs/PROTOTYPE_0.1_SPEC.png` dient ausschließlich als unverbindliche Stilreferenz für Farbwelt, Grundcharakter und visuelle Sprache. Layout, Struktur, Positionen und Funktionen richten sich ausschließlich nach dieser Spezifikation und dem aktuellen implementierten UI-Stand.
 
 Aktuelle Layout- und Strukturentscheidungen dieser Spezifikation haben Vorrang vor älteren Layoutdetails des Mockups.
 
@@ -1186,7 +1177,7 @@ Vor **jedem Entwicklungstask**:
 
 1. `docs/PROTOTYPE_0.1_SPEC.md` vollständig neu lesen.
 2. Die darin definierten Arbeits-, Test- und Git-Verfahren ohne zusätzliche Erinnerung anwenden.
-3. Wenn der Task UI betrifft, `docs/PROTOTYPE_0.1_SPEC.png` als visuelle Stilreferenz prüfen.
+3. Wenn der Task UI betrifft, aktuelle UI-Struktur und Layoutvorgaben aus docs/PROTOTYPE_0.1_SPEC.md prüfen. Das PNG darf nur als unverbindliche Stilreferenz für Farbwelt und visuellen Grundcharakter herangezogen werden und darf keine aktuellen Layout- oder Funktionsvorgaben überschreiben.
 4. Nur den aktuellen Arbeitsauftrag umsetzen.
 5. Keine alten Markdown-/TXT-Dateien als neue Arbeitsaufträge interpretieren.
 6. Keine zusätzlichen Features ergänzen.
