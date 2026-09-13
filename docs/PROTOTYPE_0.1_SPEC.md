@@ -3,19 +3,20 @@
 
 ## 1. Ziel des Prototyps
 
-Dieser Prototyp bildet zunächst nur die allgemeine Bedienoberfläche und den FB-Modus der Erica Synths Resonant Filterbank Desktop Version als eigenständige Webapplikation nach.
+Dieser Prototyp bildet zunächst die allgemeine Bedienoberfläche und den FB-Modus der Erica Synths Resonant Filterbank Desktop Version als eigenständige Webapplikation nach.
 
-Der Prototyp soll nicht das physische Gerät 1:1 kopieren, sondern dessen Bedienlogik auf eine Desktop-Webapp übertragen und für Maus- und Tastaturbedienung optimieren.
+Der Prototyp soll das physische Gerät nicht 1:1 kopieren, sondern dessen Bedienlogik auf eine Desktop-Webapp übertragen und für Maus- und Tastaturbedienung optimieren.
 
 Der Fokus von Prototype 0.1 liegt auf:
 
 - UI-Struktur
-- visueller Umsetzung gemäß Mockup
+- visueller Umsetzung gemäß Spezifikation und Referenz-Mockup
 - Keyboard-Bedienung
 - State-Management
-- FB-Modus
+- FB-Modus als vollständig umgesetzter UI-/State-Modus
 - Feedback-Zuständen
 - Stereo-/Spread-Zuständen
+- modusspezifischem Workspace
 
 Noch nicht Teil von Prototype 0.1 sind:
 
@@ -29,7 +30,7 @@ Noch nicht Teil von Prototype 0.1 sind:
 - LFO-Modulation
 - Snapshot-System
 - vollständige MIDI-Unterstützung
-- vollständiger Analyzer-DSP
+- vollständiger Analyzer-/Audio-DSP
 
 ## 2. Verbindliche Referenzen
 
@@ -47,21 +48,22 @@ Das Mockup:
 
 `docs/PROTOTYPE_0.1_SPEC.png`
 
-ist die verbindliche visuelle Referenz für:
+ist die visuelle Referenz für:
 
-- Layout
-- Hierarchie
-- Abstände
 - Grundstil
-- Anordnung der Bedienelemente
 - dunkles Interface
 - neonartige Akzente
-- Gesamtcharakter der Oberfläche
+- Typografie
+- Panel-Charakter
+- allgemeine visuelle Hierarchie
+
+Aktuelle Layout- und Strukturentscheidungen dieser Spezifikation haben Vorrang vor älteren Layoutdetails des Mockups.
 
 Falls Spezifikation und Mockup voneinander abweichen:
 
 - Funktion und Verhalten richten sich nach der Spezifikation.
-- Optik und Layout richten sich nach dem Mockup.
+- aktuelle Layout- und Workspace-Struktur richten sich nach der Spezifikation.
+- das Mockup bleibt Referenz für Stil, Farbwelt und visuellen Gesamtcharakter.
 
 Keine zusätzlichen UI-Elemente oder Funktionen erfinden, solange sie nicht ausdrücklich beauftragt wurden.
 
@@ -130,7 +132,7 @@ Zweck:
 - Simulation von Maus- und Tastatureingaben
 - Prüfung der Browser-Konsole
 - Erzeugung von Screenshots für UI-Reviews
-- spätere Regressionstests
+- Regressionstests
 
 Bevorzugter Testbrowser: Chromium.
 
@@ -171,12 +173,20 @@ resonant-filterbank-webapp/
 ├─ app.js
 ├─ server.js
 ├─ package.json
+├─ package-lock.json
+├─ playwright.config.js
 ├─ .gitignore
+│
+├─ tests/
+│  ├─ smoke.spec.js
+│  └─ artifacts/          # erzeugte Test-/Screenshot-Artefakte
 │
 └─ docs/
    ├─ PROTOTYPE_0.1_SPEC.md
    └─ PROTOTYPE_0.1_SPEC.png
 ```
+
+`tests/artifacts/` enthält Testausgaben und ist kein produktiver Bestandteil der Webapp.
 
 Die Struktur darf später modular erweitert werden.
 
@@ -198,10 +208,11 @@ Keine unnötige Architektur oder Abstraktion einführen, solange sie für den ak
 - klare Trennung zwischen UI-State und späterem Audio-State
 - keine DSP-Logik direkt in UI-Eventhandler einbauen
 - UI darf den Audio-State nur über definierte State-Updates verändern
-- Zustände sollen zentral und nachvollziehbar verwaltet werden
+- Zustände zentral und nachvollziehbar verwalten
 - keine versteckten Seiteneffekte
 - keine unnötigen globalen Variablen
 - keine unnötigen Framework-Patterns
+- Feedback-State nicht unnötig an einen einzelnen Modus koppeln
 
 ### Audio – später
 
@@ -221,34 +232,40 @@ Prototype 0.1 benötigt noch keinen finalen DSP.
 
 Die Webapp übernimmt nicht die Navigation des Hardware-Geräts 1:1.
 
-Die Hardware verwendet dieselben zehn Taster sowohl zur Moduswahl als auch für modusspezifische Funktionen.
+Die Hardware verwendet dieselben zehn Taster sowohl zur Auswahl von Modi/Hauptfunktionen als auch für modusspezifische Aktionen.
 
-Die Webapp trennt diese Funktionen bewusst auf zwei sichtbare Ebenen.
+Die Webapp trennt diese Funktionen bewusst:
 
-### Ebene A – permanente Modusleiste
+### Ebene A – globaler Shell-Bereich
 
-Die Modusleiste ist jederzeit sichtbar.
+Dauerhaft sichtbar:
 
-Sie dient ausschließlich zur Auswahl von Modi bzw. Hauptfunktionen.
+- globale Slider
+- Mode-/Function-Bar
 
-### Ebene B – modusspezifische Band-/Funktionsbuttons
+### Ebene B – modusspezifischer Workspace
 
-Über den zehn Band-Fadern befindet sich eine separate Reihe von zehn Buttons.
+Unterhalb des globalen Shell-Bereichs befindet sich ein vollständig modusspezifischer Workspace.
 
-Diese Buttons führen die Funktion aus, die beim Hardware-Gerät die zehn Funktionstaster innerhalb des aktuell aktiven Modus haben.
+Mitte und unterer Bereich dürfen je Modus unterschiedlich aufgebaut sein.
 
-Dadurch ist kein Wechsel zurück auf einen Main Screen notwendig.
+Es besteht ausdrücklich **kein** Zwang, in allen Modi dieselben zehn Fader oder dieselbe Struktur anzuzeigen.
 
-## 7. Modusleiste
+Prototype 0.1 setzt ausschließlich den FB-Workspace vollständig um.
 
-Die permanente Modusleiste enthält zehn Buttons.
+## 7. Mode-/Function-Bar
 
-Reihenfolge:
+Die permanente Leiste enthält zehn Einträge.
+
+### Aktive Betriebsmodi
 
 1. FB
 2. FILTER
 3. CLK MOD
 4. DYNAMIC EQ
+
+### Hauptfunktionen / Funktionsseiten
+
 5. MACRO
 6. ENV MOD
 7. LFO MOD
@@ -258,9 +275,9 @@ Reihenfolge:
 
 ### Prototype 0.1
 
-Nur FB ist funktional implementiert.
+Nur FB ist als UI-/State-Modus vollständig umgesetzt.
 
-Die übrigen Buttons dürfen:
+Die übrigen Einträge dürfen:
 
 - sichtbar sein
 - visuell deaktiviert sein
@@ -270,26 +287,11 @@ Sie dürfen noch keine erfundene Funktion besitzen.
 
 ### Tastatur
 
-Die Modusleiste wird über die deutsche Zahlenreihe gesteuert:
+Die Zahlenreihe `1–0` ist in Prototype 0.1 **nicht** für die Mode-/Function-Bar reserviert.
 
-```text
-1 2 3 4 5 6 7 8 9 0
-```
+Sie steuert im FB-Workspace die zehn Band-Feedbacks.
 
-Zuordnung:
-
-```text
-1 = FB
-2 = FILTER
-3 = CLK MOD
-4 = DYNAMIC EQ
-5 = MACRO
-6 = ENV MOD
-7 = LFO MOD
-8 = PLAY / LOAD
-9 = SPECTR
-0 = CONFIG
-```
+Die Mode-/Function-Bar besitzt in Prototype 0.1 noch keine verbindliche Keyboard-Zuordnung.
 
 ## 8. Globale Bedienelemente
 
@@ -320,7 +322,7 @@ Sie werden im UI als Slider dargestellt, nicht als virtuelle Drehregler.
 ### SPREAD
 
 - bipolarer bzw. mittig referenzierter Slider
-- Bedeutung im FB-Modus abhängig vom Stereo-Modus
+- Bedeutung abhängig vom Spread-Modus
 - Mitte klar sichtbar markieren
 
 ### VOLUME
@@ -332,35 +334,56 @@ Sie werden im UI als Slider dargestellt, nicht als virtuelle Drehregler.
 
 ### DATA
 
-Prototype 0.1 benötigt noch keinen vollständig originalgetreuen DATA-Encoder.
+Prototype 0.1 benötigt keinen DATA-Encoder.
 
-Falls dargestellt:
+DATA wird in Prototype 0.1:
 
-- als UI-Steuerelement
-- keine erfundene Funktion
-- spätere Feinsteuerung vorbereiten
+- nicht dargestellt
+- nicht implementiert
+
+Eine spätere Feinsteuerung kann bei Bedarf separat spezifiziert werden.
 
 ### SHIFT
 
-SHIFT bleibt als Modifier-Konzept erhalten.
+SHIFT bleibt als Tastatur-Modifier erhalten.
 
-Prototype 0.1:
+Prototype 0.1 verwendet SHIFT ausdrücklich für Sekundärfunktionen, derzeit:
 
-- Shift-Taste der Tastatur darf für Sekundärfunktionen verwendet werden
-- Verhalten nur dort implementieren, wo es ausdrücklich spezifiziert ist
+- `Shift + 1–0` = MOD für Band 1–10
+
+Ein sichtbarer SHIFT-Button ist nicht erforderlich.
 
 ### BACK
 
-Da die Webapp keine Main-Screen-Navigation wie die Hardware benötigt, ist BACK nicht zum Moduswechsel erforderlich.
+BACK wird in Prototype 0.1:
 
-Falls BACK dargestellt wird:
+- nicht dargestellt
+- nicht implementiert
 
-- nur für sinnvolle Menü-/Overlay-Navigation
-- keine künstliche Hardware-Navigation nachbauen
+Die Webapp baut keine künstliche Hardware-Main-Screen-Navigation nach.
+
+Falls später eine sinnvolle Menü-/Overlay-Navigation entsteht, kann BACK erneut spezifiziert werden.
 
 ## 10. FB-Modus
 
-FB ist der einzige vollständig funktionale Modus in Prototype 0.1.
+FB ist der einzige vollständig umgesetzte **UI-/State-Modus** in Prototype 0.1.
+
+„Vollständig umgesetzt“ bedeutet in diesem Kontext:
+
+- FB-Workspace vorhanden
+- Mausbedienung vorhanden
+- Keyboard-Bedienung vorhanden
+- zentraler State funktioniert
+- Feedback-/MOD-States funktionieren
+- Band-Fader funktionieren
+- Bandvisualisierung reagiert auf die UI
+
+Nicht enthalten sind:
+
+- finaler Audio-DSP
+- klanglich originalgetreue Filtermodellierung
+- klanglich originalgetreues Feedback
+- finale Modulations-DSP-Logik
 
 Der FB-Modus arbeitet mit zehn Frequenzbändern:
 
@@ -379,7 +402,7 @@ Band 10 = 11 kHz
 
 ## 11. Band-Fader
 
-Es gibt zehn vertikale Fader.
+Im FB-Workspace gibt es zehn vertikale Fader.
 
 Jeder Fader besitzt:
 
@@ -403,11 +426,50 @@ Keine erfundenen dB-Werte verwenden.
 
 Die Anwendung wird ausdrücklich für ein deutsches QWERTZ-Tastaturlayout entwickelt.
 
-Die Tastaturbelegung soll über physische Tastenpositionen robust umgesetzt werden.
-
-Bei der Implementierung bevorzugt `KeyboardEvent.code` verwenden, wenn dadurch das deutsche Layout konsistenter abgebildet werden kann.
+Die Keyboard-Zuordnung wird über `KeyboardEvent.code` abgebildet, damit die physische Tastenposition stabil bleibt.
 
 Nicht davon ausgehen, dass ein US-QWERTY-Layout verwendet wird.
+
+### FB – Band 1 bis 10
+
+Sichtbare Tasten:
+
+```text
+1 2 3 4 5 6 7 8 9 0
+```
+
+Technisch:
+
+```text
+Digit1
+Digit2
+Digit3
+Digit4
+Digit5
+Digit6
+Digit7
+Digit8
+Digit9
+Digit0
+```
+
+### MOD – Band 1 bis 10
+
+Sichtbare Tasten:
+
+```text
+Shift + 1 ... Shift + 0
+```
+
+Technisch:
+
+```text
+Shift + Digit1
+...
+Shift + Digit0
+```
+
+`Shift + DigitN` darf nicht zusätzlich FB desselben Bandes toggeln.
 
 ## 13. Band-Fader – positive Bewegung
 
@@ -417,20 +479,22 @@ Positive Faderbewegung für Band 1 bis 10:
 Q W E R T Z U I O P
 ```
 
-Zuordnung:
+Technische Zuordnung:
 
 ```text
-Q = Band 1 hoch
-W = Band 2 hoch
-E = Band 3 hoch
-R = Band 4 hoch
-T = Band 5 hoch
-Z = Band 6 hoch
-U = Band 7 hoch
-I = Band 8 hoch
-O = Band 9 hoch
-P = Band 10 hoch
+Q = KeyQ
+W = KeyW
+E = KeyE
+R = KeyR
+T = KeyT
+Z = KeyY
+U = KeyU
+I = KeyI
+O = KeyO
+P = KeyP
 ```
+
+`KeyY` entspricht auf einer deutschen QWERTZ-Tastatur der sichtbaren Taste `Z`.
 
 ## 14. Band-Fader – negative Bewegung
 
@@ -440,20 +504,22 @@ Negative Faderbewegung für Band 1 bis 10:
 A S D F G H J K L Ö
 ```
 
-Zuordnung:
+Technische Zuordnung:
 
 ```text
-A = Band 1 runter
-S = Band 2 runter
-D = Band 3 runter
-F = Band 4 runter
-G = Band 5 runter
-H = Band 6 runter
-J = Band 7 runter
-K = Band 8 runter
-L = Band 9 runter
-Ö = Band 10 runter
+A = KeyA
+S = KeyS
+D = KeyD
+F = KeyF
+G = KeyG
+H = KeyH
+J = KeyJ
+K = KeyK
+L = KeyL
+Ö = Semicolon
 ```
+
+`Semicolon` entspricht auf einer deutschen QWERTZ-Tastatur der sichtbaren Taste `Ö`.
 
 ## 15. Band-Fader – Neutralstellung
 
@@ -465,66 +531,90 @@ Deutsches Tastaturlayout:
 Y X C V B N M , . -
 ```
 
-Zuordnung:
+Technische Zuordnung:
 
 ```text
-Y = Band 1 neutral
-X = Band 2 neutral
-C = Band 3 neutral
-V = Band 4 neutral
-B = Band 5 neutral
-N = Band 6 neutral
-M = Band 7 neutral
-, = Band 8 neutral
-. = Band 9 neutral
-- = Band 10 neutral
+Y = KeyZ
+X = KeyX
+C = KeyC
+V = KeyV
+B = KeyB
+N = KeyN
+M = KeyM
+, = Comma
+. = Period
+- = Slash
 ```
 
-Diese Zuordnung ist als physische deutsche Tastenreihe zu verstehen.
+`KeyZ` entspricht auf einer deutschen QWERTZ-Tastatur der sichtbaren Taste `Y`.
 
-Bei Browser-Keyboard-Events sicherstellen, dass Komma, Punkt und Minus zuverlässig erkannt werden.
+`Slash` entspricht auf der vorgesehenen physischen deutschen Position der sichtbaren Taste `-`.
+
+Komma, Punkt und Minus müssen zuverlässig über `KeyboardEvent.code` erkannt werden.
 
 ## 16. Verhalten bei Tastendruck
 
-Prototype 0.1:
-
 ### Einzelner Tastendruck
 
-Ein Tastendruck verändert den jeweiligen Fader um einen kleinen festen Schritt.
-
-Die exakte Schrittweite darf zunächst zentral als Konstante definiert werden.
-
-Empfehlung für den ersten Prototyp:
+Ein Tastendruck verändert den jeweiligen Fader verbindlich um:
 
 ```text
-5 % des gesamten Fader-Regelwegs
+5 % des gesamten gültigen Fader-Regelwegs
 ```
+
+Mathematisch:
+
+```js
+step = (max - min) * 0.05
+```
+
+Danach muss sauber auf `min` bzw. `max` begrenzt werden.
 
 ### Gedrückt halten
 
-Gedrückt halten darf Auto-Repeat nutzen.
+Gedrückt halten darf das normale Keyboard-Auto-Repeat nutzen.
 
 Das Verhalten muss kontrolliert und gleichmäßig sein.
 
-Keine unkontrollierte Beschleunigung.
+Keine zusätzliche künstliche Beschleunigung.
 
 ### Neutral-Taste
 
 Die Neutral-Taste setzt den jeweiligen Fader sofort exakt auf Mittelstellung.
 
-## 17. Modusspezifische Buttons über den Fadern
+Die Neutralstellung muss auch nach wiederholten Tastaturänderungen exakt erreichbar bleiben.
 
-Über jedem der zehn Band-Fader befindet sich ein eigener Button.
+## 17. FB- und MOD-Buttons pro Band
 
-Diese Buttons repräsentieren die modusspezifische Funktion der Hardware-Funktionstaster.
+Im FB-Workspace besitzt jedes der zehn Bänder zwei getrennte Buttons:
 
-Sie sind keine Bypass-Buttons.
+- `FB`
+- `MOD`
 
-Die bisherige Bezeichnung `BYPASS` ist vollständig zu entfernen.
+Beide Controls besitzen unabhängige States.
 
-### Im FB-Modus
+Folgende Kombinationen sind zulässig:
 
-Die Buttons führen die FB-spezifische Aktion für das jeweilige Band aus.
+- FB OFF / MOD OFF
+- FB ON / MOD OFF
+- FB OFF / MOD ON
+- FB ON / MOD ON
+
+FB und MOD schließen sich ausdrücklich nicht gegenseitig aus.
+
+### FB
+
+FB repräsentiert den Feedback-Loop des jeweiligen Bandes.
+
+Prototype 0.1 verwendet als vorläufige UI-Logik:
+
+- Klick bzw. zugeordneter Tastendruck toggelt den State
+- aktiver State wird sichtbar dargestellt
+- erneute Aktion deaktiviert den State
+
+### MOD
+
+MOD repräsentiert die temporäre Bandmodulation aus dem Hardware-Konzept.
 
 Grundlage aus dem Manual:
 
@@ -533,38 +623,40 @@ Grundlage aus dem Manual:
 - interne Clock-Frequenz
 - 10 % des maximalen Band-Gains
 
-Prototype 0.1 darf diese Funktion zunächst als State-/UI-Funktion vorbereiten.
+Prototype 0.1 verwendet vorläufig ebenfalls Toggle-Verhalten als UI-State.
 
-Falls noch kein Audio-DSP vorhanden ist:
+Das endgültige Interaktionsverhalten ist noch offen.
 
-- Button-State sichtbar machen
-- gedrückten Zustand darstellen
-- keine falsche Audiofunktion simulieren
+Insbesondere darf später noch entschieden werden:
+
+- Hold/Momentary statt Toggle
+- Mouse-Down/Mouse-Up-Verhalten
+- Key-Down/Key-Up-Verhalten
+- Modulationsdauer
+
+Noch kein finaler MOD-DSP implementieren oder vortäuschen.
 
 ## 18. Feedback-Konfiguration
 
-Der FB-Modus besitzt elf Feedback-Zustände:
+Feedback ist ein Zustand der Filterbank und nicht ausschließlich an den FB-Modus gebunden.
+
+Intern werden getrennte Stereo-Zustände vorbereitet:
 
 ```text
-10 individuelle Band-Feedbacks
-1 Main / Feedback All
+feedbackBandLeft[0..9]
+feedbackBandRight[0..9]
+
+feedbackAllLeft
+feedbackAllRight
 ```
 
 ### Band-Feedback
 
-Für jedes Band existiert ein eigener Feedback-Status:
+Für jedes der zehn Bänder existiert pro Kanal ein Feedback-State.
 
-```text
-feedbackBand[0..9]
-```
+Im aktuellen gekoppelten UI können L und R gemeinsam geschaltet werden.
 
 ### Feedback All
-
-Zusätzlich existiert:
-
-```text
-feedbackAll
-```
 
 Feedback All entspricht dem Main-Feedback-Loop der Hardware.
 
@@ -572,41 +664,55 @@ Er führt die kombinierte Summe aller Bänder zurück.
 
 Band-Feedback und Feedback All dürfen gleichzeitig aktiv sein.
 
+Spätere aktive Modi dürfen dieselben Feedback-Zustände verwenden oder darstellen.
+
+Die aktuelle direkte Bedienoberfläche dafür befindet sich im FB-Workspace.
+
 ## 19. Darstellung der Feedback-Zustände
 
-Feedback-Zustände müssen im UI sichtbar sein.
+Die visuelle Darstellung ist für Prototype 0.1 festgelegt.
 
-Noch nicht festgelegt ist die endgültige visuelle Darstellung.
+### Band-Feedback
 
-Mögliche spätere Varianten:
+- jedes Band besitzt einen sichtbaren `FB`-Button
+- der aktive/inaktive State wird direkt am Button dargestellt
+- aktive Zustände dürfen mit bestehendem Glow/Outline/Active-State hervorgehoben werden
 
-- LED
-- Glow
-- Button-State
-- Outline
-- Overlay
-- Status im zentralen Display
+### Feedback All
 
-Keine endgültige Darstellung erfinden, wenn sie noch nicht beauftragt wurde.
+- `FB ALL` befindet sich als kompakter Toggle oben rechts im Analyzer-/Bandvisualisierungsbereich
+- aktiver/inaktiver State wird direkt am Control dargestellt
+- kein zusätzliches großes Feedback-Panel
+- keine zusätzliche Feedback-Konfigurationsseite
+
+Optische Detailverfeinerungen sind später möglich, die grundsätzliche Darstellung bleibt jedoch direkt am zugehörigen Control.
 
 ## 20. Stereo-State
 
-Intern soll Prototype 0.1 bereits getrennte Zustände für links und rechts vorbereiten.
+Intern soll Prototype 0.1 getrennte Zustände für links und rechts vorbereiten, auch wenn die UI zunächst gekoppelt arbeitet.
 
-Auch wenn die UI zunächst gekoppelt arbeitet.
-
-Empfohlene State-Struktur:
+Verbindliche fachliche Trennung:
 
 ```text
 bandGainLeft[10]
 bandGainRight[10]
+
+feedbackBandLeft[10]
+feedbackBandRight[10]
+
+feedbackAllLeft
+feedbackAllRight
 ```
 
-Nicht nur einen gemeinsamen `bandGain[10]` verwenden, wenn dadurch später Stereo-Funktionalität unnötig erschwert wird.
+Bei gekoppelter Bedienung dürfen L/R gemeinsam aktualisiert werden.
+
+Keine UI-Duplizierung mit separaten L/R-Buttons ist erforderlich.
+
+Die interne Trennung dient der späteren Stereo- und FB_CH_SELECT-Funktionalität.
 
 ## 21. Spread-Modi
 
-Für den FB-Modus sind mindestens zwei Spread-Konzepte vorzubereiten:
+Für Prototype 0.1 sind mindestens zwei Spread-Konzepte vorzubereiten:
 
 ```text
 CLASSIC
@@ -615,8 +721,11 @@ FB_CH_SELECT
 
 ### CLASSIC
 
-- L und R grundsätzlich gekoppelt
-- Spread kann Stereo-Offset erzeugen
+- L und R sind im Grundsatz gekoppelt
+- CLASSIC SPREAD entspricht dem bekannten Hardware-Konzept
+- die exakte mathematische DSP-Abbildung ist derzeit **nicht** spezifiziert
+- keine eigene Panning-, Gain-, Offset- oder Verteilungskurve erfinden
+- Prototype 0.1 bildet dafür nur UI-/State-Verhalten ab, solange keine separate DSP-Spezifikation vorliegt
 
 ### FB_CH_SELECT
 
@@ -628,41 +737,58 @@ Mitte   = LEFT + RIGHT
 rechts  = RIGHT
 ```
 
-Prototype 0.1 muss die Zustände sauber abbilden.
+Prototype 0.1 muss diese Zustände sauber abbilden.
 
-Die exakte Audio-Wirkung von CLASSIC SPREAD ist noch nicht Teil des finalen DSP.
+## 22. Modusspezifischer Workspace
 
-## 22. Zentrale Anzeige / Displaybereich
+Unterhalb des globalen Shell-Bereichs befindet sich der modusspezifische Workspace.
 
-Der zentrale Displaybereich darf größer und übersichtlicher sein als beim Hardware-Gerät.
+Dieser Bereich darf je Modus vollständig unterschiedlich aufgebaut sein.
 
-Er soll mindestens anzeigen können:
+Es besteht kein Zwang, in anderen Modi zehn Fader oder dieselben Bedienelemente zu zeigen.
 
-- aktiver Modus
-- FB aktiv
-- Bandwerte
-- Left / Right
-- Stereo-Zustand
-- Spread-Zustand
-- Feedback-Zustände
-- Feedback All
-- relevante Statusinformationen
+### FB-Workspace
 
-Der Displaybereich soll die visuelle Sprache des Mockups übernehmen.
+Der FB-Workspace besteht aus:
 
-Kein Versuch, das kleine OLED der Hardware pixelgenau zu kopieren.
+1. großem Bandvisualisierungs-/Analyzerbereich über die volle verfügbare Workspace-Breite
+2. `FB ALL` oben rechts innerhalb dieses Bereichs
+3. darunter zehn Bandzüge
+4. pro Band:
+   - `FB`
+   - `MOD`
+   - vertikaler Fader
+   - Frequenzbeschriftung
 
-## 23. Analyzer / Visualisierung
+Der Analyzer-/Visualisierungsbereich soll als dominantes Element der mittleren Zone auftreten.
 
-Prototype 0.1 darf einen visuellen Analyzer-/Spectrum-Bereich gemäß Mockup enthalten.
+Andere Modi werden in Prototype 0.1 noch nicht umgesetzt.
+
+## 23. Analyzer / Bandvisualisierung
+
+Der aktuelle Bereich ist in Prototype 0.1 **kein echter Spektrumanalyzer**.
+
+Er visualisiert die eingestellten Werte der zehn Filterbänder.
+
+### Verhalten
+
+- Fader nach oben → Darstellung des zugehörigen Bandes steigt
+- Fader nach unten → Darstellung des zugehörigen Bandes sinkt
+- Neutralstellung → neutrale Darstellung
+- nur das geänderte Band wird aktualisiert
+- Maus- und Tastaturänderungen aktualisieren die Darstellung unmittelbar
+
+Die zehn Bandgruppen im Graphen sollen horizontal exakt zu den zehn Bandzügen darunter ausgerichtet sein.
+
+Die horizontale Mittelachse jeder Bandgruppe soll mit der horizontalen Mittelachse des zugehörigen Bandzuges übereinstimmen.
 
 Solange noch kein echter Audio-DSP vorhanden ist:
 
 - kein Fake-Audio vortäuschen
 - kein zufälliges Spektrum als echtes Signal darstellen
-- statische oder klar als Demo erkennbare Visualisierung ist erlaubt
+- keine FFT- oder echte Audioanalyse behaupten
 
-Später kann dieser Bereich an echten Audio-Input gekoppelt werden.
+Ein späterer echter Audio-/Spectrum-Analyzer kann separat spezifiziert werden.
 
 ## 24. Keyboard-Mapping im UI
 
@@ -680,7 +806,7 @@ Prototype 0.1 benötigt noch kein Hilfe-Menü.
 
 ## 25. Mausbedienung
 
-Alle sichtbaren Slider und Fader müssen zusätzlich mit der Maus bedienbar sein.
+Alle sichtbaren Slider, Fader und Buttons müssen zusätzlich mit der Maus bedienbar sein.
 
 Tastatur und Maus verändern denselben zentralen State.
 
@@ -688,9 +814,13 @@ Keine getrennten Werte für Maus und Tastatur.
 
 Die UI muss nach Tastaturänderungen sofort aktualisiert werden.
 
+Fokussierte `input[type="range"]`-Elemente dürfen die definierten globalen Keyboard-Shortcuts nicht blockieren.
+
+Echte Texteingaben, `textarea`, `select` und `contenteditable` sollen Keyboard-Shortcuts weiterhin schützen.
+
 ## 26. Visuelle Anforderungen
 
-Grundstil entsprechend Mockup:
+Grundstil entsprechend Referenz-Mockup:
 
 - dunkler Hintergrund
 - klare Panel-Struktur
@@ -700,9 +830,13 @@ Grundstil entsprechend Mockup:
 - keine übertriebene Animation
 - keine verspielten UI-Elemente
 - klare Frequenzbeschriftungen
-- symmetrische 10-Band-Struktur
+- symmetrische 10-Band-Struktur im FB-Workspace
 
 Das UI soll professionell, funktional und ruhig wirken.
+
+Globale Controls bleiben Slider.
+
+Keine Knobs oder Dropdowns ohne ausdrücklichen Auftrag.
 
 ## 27. Responsive Verhalten
 
@@ -713,18 +847,21 @@ Optimierung zunächst für:
 - Windows-PC
 - Chrome
 - normaler Desktop-Monitor
+- Referenzgröße ungefähr 1920 × 1080 px
 
 Prototype 0.1 muss nicht mobil optimiert sein.
 
-Die Oberfläche darf bei kleinen Viewports horizontal oder proportional angepasst werden, solange die 10-Band-Struktur klar bleibt.
+Die Oberfläche soll den verfügbaren Desktop-Viewport sinnvoll ausnutzen.
+
+Die zehn Bandzüge sollen möglichst in einer Reihe bleiben, solange dies sinnvoll darstellbar ist.
 
 Keine aufwendige Mobile-Navigation entwickeln.
 
 ## 28. State-Modell
 
-Prototype 0.1 soll einen klaren zentralen State besitzen.
+Prototype 0.1 besitzt einen klaren zentralen State.
 
-Minimal:
+Fachlich mindestens:
 
 ```js
 {
@@ -732,27 +869,37 @@ Minimal:
 
   inputGain: 0,
   resonance: 0,
-  dryWet: 0,
+  dryWet: 50,
   spread: 0,
-  volume: 0,
+  volume: -6,
 
   spreadMode: "CLASSIC",
   channelSelection: "LR",
 
-  bandGainLeft: [0,0,0,0,0,0,0,0,0,0],
+  bandGainLeft:  [0,0,0,0,0,0,0,0,0,0],
   bandGainRight: [0,0,0,0,0,0,0,0,0,0],
 
-  feedbackBandLeft: [false,false,false,false,false,false,false,false,false,false],
+  feedbackBandLeft:  [false,false,false,false,false,false,false,false,false,false],
   feedbackBandRight: [false,false,false,false,false,false,false,false,false,false],
 
   feedbackAllLeft: false,
-  feedbackAllRight: false
+  feedbackAllRight: false,
+
+  modulated: [false,false,false,false,false,false,false,false,false,false]
 }
 ```
 
 Die konkrete Implementierung darf davon abweichen, wenn sie klarer und wartbarer ist.
 
-Die fachliche Trennung muss erhalten bleiben.
+Verbindlich sind:
+
+- fachliche Trennung von L/R
+- eigener MOD-State
+- Feedback-State nicht ausschließlich an FB gekoppelt
+- Maus und Tastatur verändern denselben zentralen State
+- HTML-Defaultwerte und State-Defaultwerte dürfen sich nicht widersprechen
+
+Bei aktuell gekoppelter Bedienung dürfen L/R-Werte synchron gesetzt werden.
 
 ## 29. Keine impliziten Zusatzfunktionen
 
@@ -798,21 +945,40 @@ Für neue Features, größere Anpassungen und Fehlerbehebungen wird jeweils ein 
 
 Beispiele:
 
-    feature/keyboard-control
-    feature/fb-feedback-ui
-    feature/audio-engine
-    fix/fader-range
+```text
+feature/keyboard-control
+feature/fb-feedback-ui
+feature/audio-engine
+fix/fader-range
+```
 
 ### Branch-Regeln
 
-- ausschließlich im aktuell ausgecheckten Branch arbeiten
-- nicht selbstständig auf `main` wechseln
+Vor jedem Entwicklungstask:
+
+1. `git status` prüfen
+2. aktuellen Branch prüfen
+
+Wenn ein neuer Feature-/Fix-Task auf `main` beginnt:
+
+- selbstständig einen passenden Feature-/Fix-Branch erstellen
+- diesen Branch auschecken
+- nicht direkt auf `main` entwickeln oder committen
+
+Wenn bereits ein passender Arbeitsbranch aktiv ist:
+
+- dort weiterarbeiten
+- nicht eigenmächtig auf einen anderen bestehenden Branch wechseln
+
+Zusätzlich:
+
+- ausschließlich im aktuell passenden Arbeitsbranch arbeiten
 - keine Änderungen direkt auf `main` committen
-- vor Beginn `git status` prüfen
 - nur Änderungen committen, die zum aktuellen Auftrag gehören
 - keine unrelated Änderungen mitcommitten
 - vor jedem Commit `git diff` prüfen
-- Branch-Wechsel nur durchführen, wenn dies ausdrücklich beauftragt wurde
+- fremde Änderungen weder stagen noch verwerfen
+- kein Merge nach `main` ohne ausdrückliche Freigabe
 
 ### Commit-Struktur
 
@@ -836,11 +1002,13 @@ formuliert sein.
 
 Beispiele:
 
-    Add German keyboard mapping
-    Connect keyboard input to band state
-    Add feedback controls to FB mode
-    Fix bipolar fader range
-    Refine filterbank layout
+```text
+Add German keyboard mapping
+Connect keyboard input to band state
+Add feedback controls to FB mode
+Fix bipolar fader range
+Refine filterbank layout
+```
 
 ### Abschluss eines Agenten-Auftrags
 
@@ -909,6 +1077,30 @@ const BAND_FREQUENCIES = [
 
 Keyboard-Mappings ebenfalls zentral.
 
+Verbindliche physische Codes:
+
+```js
+const FB_CODES = [
+  "Digit1","Digit2","Digit3","Digit4","Digit5",
+  "Digit6","Digit7","Digit8","Digit9","Digit0"
+];
+
+const FADER_UP_CODES = [
+  "KeyQ","KeyW","KeyE","KeyR","KeyT",
+  "KeyY","KeyU","KeyI","KeyO","KeyP"
+];
+
+const FADER_DOWN_CODES = [
+  "KeyA","KeyS","KeyD","KeyF","KeyG",
+  "KeyH","KeyJ","KeyK","KeyL","Semicolon"
+];
+
+const FADER_NEUTRAL_CODES = [
+  "KeyZ","KeyX","KeyC","KeyV","KeyB",
+  "KeyN","KeyM","Comma","Period","Slash"
+];
+```
+
 Nicht dieselben Werte an mehreren Stellen hart codieren.
 
 ## 34. Prototype-0.1-Abnahmekriterien
@@ -916,40 +1108,54 @@ Nicht dieselben Werte an mehreren Stellen hart codieren.
 Prototype 0.1 gilt als erfolgreich, wenn:
 
 - die Anwendung über `npm start` startet
-- das UI dem Referenz-Mockup klar entspricht
+- das UI der aktuellen Spezifikation und der visuellen Grundsprache des Referenz-Mockups entspricht
 - die globale Bedienleiste vorhanden ist
-- die permanente Modusleiste vorhanden ist
-- FB als aktiver Modus funktioniert
+- die permanente Mode-/Function-Bar vorhanden ist
+- FB als UI-/State-Modus funktioniert
+- der FB-Workspace über die volle mittlere Breite einen großen Bandvisualisierungsbereich besitzt
+- `FB ALL` oben rechts im Bandvisualisierungsbereich sitzt
 - zehn Band-Fader vorhanden sind
+- pro Band getrennte `FB`- und `MOD`-Buttons vorhanden sind
+- FB und MOD gleichzeitig aktiv sein können
 - alle Fader mit der Maus bedienbar sind
-- das deutsche Keyboard-Mapping funktioniert
-- positive Faderbewegung funktioniert
-- negative Faderbewegung funktioniert
-- Neutralstellung pro Band funktioniert
-- modusspezifische Bandbuttons vorhanden sind
-- Feedback-State für zehn Bänder vorbereitet ist
-- Feedback All vorbereitet ist
+- das deutsche Keyboard-Mapping über `KeyboardEvent.code` funktioniert
+- `1–0` FB für Band 1–10 steuert
+- `Shift + 1–0` MOD für Band 1–10 steuert
+- positive Faderbewegung über `Q W E R T Z U I O P` funktioniert
+- negative Faderbewegung über `A S D F G H J K L Ö` funktioniert
+- Neutralstellung über `Y X C V B N M , . -` funktioniert
+- ein Tastenschritt exakt 5 % des gesamten Regelwegs entspricht
+- Min/Max sauber begrenzt werden
+- die Bandvisualisierung unmittelbar mit den Faderwerten synchronisiert ist
+- die zehn Graph-Bandgruppen horizontal zu den zehn Bandzügen ausgerichtet sind
+- Feedback-State für zehn Bänder getrennt für L/R vorbereitet ist
+- Feedback All getrennt für L/R vorbereitet ist
 - Stereo-State für L/R vorbereitet ist
 - Spread-State vorbereitet ist
 - das Keyboard-Mapping nicht im Haupt-UI angezeigt wird
 - keine unnötigen Frameworks oder Libraries eingebaut wurden
 - kein finaler DSP vorgetäuscht wird
+- vorhandene Playwright-Tests headless ausgeführt werden können
+- keine neuen Browser-Console- oder Page-Errors entstehen
 
 ## 35. Arbeitsweise für Agenten
 
-Vor jeder größeren Änderung:
+Vor **jedem Entwicklungstask**:
 
-1. `docs/PROTOTYPE_0.1_SPEC.md` vollständig lesen. Die darin definierten Arbeits-, Test- und Git-Verfahren sind verbindlich und müssen ohne zusätzliche Erinnerung angewendet werden. Aussagen über fehlende Browser-/Testmöglichkeiten dürfen erst erfolgen, nachdem die in der Spec beschriebenen lokalen CLI-/Playwright-Wege tatsächlich geprüft wurden.
-2. `docs/PROTOTYPE_0.1_SPEC.png` als visuelle Referenz prüfen.
-3. Nur den aktuellen Arbeitsauftrag umsetzen.
-4. Keine alten Markdown-/TXT-Dateien als neue Arbeitsaufträge interpretieren.
-5. Keine zusätzlichen Features ergänzen.
-6. Bestehende Funktionalität nicht unnötig verändern.
-7. Nach der Änderung kurz dokumentieren:
+1. `docs/PROTOTYPE_0.1_SPEC.md` vollständig neu lesen.
+2. Die darin definierten Arbeits-, Test- und Git-Verfahren ohne zusätzliche Erinnerung anwenden.
+3. Wenn der Task UI betrifft, `docs/PROTOTYPE_0.1_SPEC.png` als visuelle Stilreferenz prüfen.
+4. Nur den aktuellen Arbeitsauftrag umsetzen.
+5. Keine alten Markdown-/TXT-Dateien als neue Arbeitsaufträge interpretieren.
+6. Keine zusätzlichen Features ergänzen.
+7. Bestehende Funktionalität nicht unnötig verändern.
+8. Fehlende interaktive `apps`/`browsers` nicht als Nachweis dafür werten, dass Browser-Tests unmöglich sind; zuerst die lokalen CLI-/Playwright-Wege tatsächlich prüfen.
+9. Nach der Änderung kurz dokumentieren:
    - was geändert wurde
    - welche Dateien geändert wurden
-   - ob Tests oder Checks ausgeführt wurden
+   - welche Tests oder Checks ausgeführt wurden
    - ob bekannte offene Punkte verbleiben
+   - Commit-ID(s) und Commit-Message(s), sofern Commits erzeugt wurden
 
 ## 36. Grundsatz
 
@@ -971,4 +1177,5 @@ und optimiert die Bedienung gezielt für:
 - deutsches Tastaturlayout
 - direkten Zugriff
 - übersichtliche Darstellung
+- modusspezifische Workspaces
 - spätere Erweiterbarkeit
