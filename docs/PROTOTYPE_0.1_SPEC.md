@@ -259,31 +259,34 @@ Die permanente Leiste enthält zehn Einträge.
 
 ### Aktive Betriebsmodi
 
-1. FB
-2. FILTER
-3. CLK MOD
-4. DYNAMIC EQ
+- FB
+- FILTER
+- CLK MOD
+- DYNAMIC EQ
 
 ### Hauptfunktionen / Funktionsseiten
 
-5. MACRO
-6. ENV MOD
-7. LFO MOD
-8. PLAY / LOAD
-9. SPECTR
-0. CONFIG
+- MACRO
+- ENV MOD
+- LFO MOD
+- PLAY / LOAD
+- SPECTR
+- CONFIG
 
 ### Prototype 0.1
 
-Nur FB ist als UI-/State-Modus vollständig umgesetzt.
+Nur FB ist als UI-/State-Modus vollständig umgesetzt und auswählbar.
 
-Die übrigen Einträge dürfen:
+Die übrigen Einträge:
 
-- sichtbar sein
-- visuell deaktiviert sein
-- einen „noch nicht implementiert“-Status zeigen
+- bleiben sichtbar
+- dürfen visuell leicht deaktiviert dargestellt werden
+- erhalten keinen Active-State
+- verändern `activeMode` nicht
+- schalten keinen Workspace um
+- lösen keine erfundene Funktion aus
 
-Sie dürfen noch keine erfundene Funktion besitzen.
+Ein zusätzliches Popup oder eine Meldung „noch nicht implementiert“ ist nicht erforderlich.
 
 ### Tastatur
 
@@ -292,6 +295,8 @@ Die Zahlenreihe `1–0` ist in Prototype 0.1 **nicht** für die Mode-/Function-B
 Sie steuert im FB-Workspace die zehn Band-Feedbacks.
 
 Die Mode-/Function-Bar besitzt in Prototype 0.1 noch keine verbindliche Keyboard-Zuordnung.
+
+Daher zeigt die Mode-/Function-Bar keine Shortcut-Hinweise `1–0` und keine Ziffern an den einzelnen Mode-/Function-Buttons.
 
 ## 8. Globale Bedienelemente
 
@@ -302,7 +307,10 @@ Sie werden im UI als Slider dargestellt, nicht als virtuelle Drehregler.
 ### INPUT GAIN
 
 - normaler Slider
-- späterer Wertebereich: 0 dB bis +24 dB
+- Wertebereich in Prototype 0.1: 0 dB bis +24 dB
+- Default: 0 dB
+- keine negativen Input-Gain-Werte
+- sichtbare Skala von `0` bis `+24`
 - Prototype 0.1 zunächst UI-/State-Funktion
 
 ### RESONANCE
@@ -421,6 +429,16 @@ Die neutrale Stellung muss visuell eindeutig erkennbar sein.
 Prototype 0.1 benötigt zunächst keinen final festgelegten dB-Bereich.
 
 Keine erfundenen dB-Werte verwenden.
+
+Für die sichtbare Skala der Band-Fader gilt daher vorläufig:
+
+```text
+oben   = +
+Mitte  = 0
+unten  = −
+```
+
+Die internen Werte `-100 ... +100` sind ausschließlich ein UI-/State-Regelweg und keine behauptete dB-Skala.
 
 ## 12. Keyboard-Steuerung – deutsches Tastaturlayout
 
@@ -751,7 +769,7 @@ Es besteht kein Zwang, in anderen Modi zehn Fader oder dieselben Bedienelemente 
 
 Der FB-Workspace besteht aus:
 
-1. großem Bandvisualisierungs-/Analyzerbereich über die volle verfügbare Workspace-Breite
+1. großem Bandvisualisierungsbereich über die volle verfügbare Workspace-Breite
 2. `FB ALL` oben rechts innerhalb dieses Bereichs
 3. darunter zehn Bandzüge
 4. pro Band:
@@ -760,13 +778,21 @@ Der FB-Workspace besteht aus:
    - vertikaler Fader
    - Frequenzbeschriftung
 
-Der Analyzer-/Visualisierungsbereich soll als dominantes Element der mittleren Zone auftreten.
+Der Bandvisualisierungsbereich soll als dominantes Element der mittleren Zone auftreten.
+
+Für Prototype 0.1 gelten im Statusbereich folgende Bezeichnungen:
+
+- Titel: `FILTERBANK RESPONSE`
+- Spread-Status: `SPREAD MODE  CLASSIC`
+- Kanalstatus: `CHANNEL  L + R` bzw. eine gleichwertige klare L/R-Anzeige
+
+Die Bezeichnungen `FB ANALYZER`, `FB CH SELECT  CLASSIC` und `STEREO READY` sollen nicht mehr verwendet werden.
 
 Andere Modi werden in Prototype 0.1 noch nicht umgesetzt.
 
-## 23. Analyzer / Bandvisualisierung
+## 23. Bandvisualisierung
 
-Der aktuelle Bereich ist in Prototype 0.1 **kein echter Spektrumanalyzer**.
+Der aktuelle Bereich `FILTERBANK RESPONSE` ist in Prototype 0.1 **kein echter Spektrumanalyzer**.
 
 Er visualisiert die eingestellten Werte der zehn Filterbänder.
 
@@ -781,6 +807,16 @@ Er visualisiert die eingestellten Werte der zehn Filterbänder.
 Die zehn Bandgruppen im Graphen sollen horizontal exakt zu den zehn Bandzügen darunter ausgerichtet sein.
 
 Die horizontale Mittelachse jeder Bandgruppe soll mit der horizontalen Mittelachse des zugehörigen Bandzuges übereinstimmen.
+
+Die vertikale Skala verwendet solange kein finaler dB-Bereich spezifiziert ist nur:
+
+```text
++
+0
+−
+```
+
+Konkrete Werte wie `+12` oder `-12` dürfen nicht angezeigt werden.
 
 Solange noch kein echter Audio-DSP vorhanden ist:
 
@@ -1111,10 +1147,13 @@ Prototype 0.1 gilt als erfolgreich, wenn:
 - das UI der aktuellen Spezifikation und der visuellen Grundsprache des Referenz-Mockups entspricht
 - die globale Bedienleiste vorhanden ist
 - die permanente Mode-/Function-Bar vorhanden ist
+- die Mode-/Function-Bar keine `1–0`-Shortcut-Hinweise oder Ziffern an ihren Buttons zeigt
+- nur FB in Prototype 0.1 auswählbar ist; nicht implementierte Einträge keinen Active-State oder Workspace-Wechsel auslösen
 - FB als UI-/State-Modus funktioniert
 - der FB-Workspace über die volle mittlere Breite einen großen Bandvisualisierungsbereich besitzt
 - `FB ALL` oben rechts im Bandvisualisierungsbereich sitzt
 - zehn Band-Fader vorhanden sind
+- Band-Fader und Bandvisualisierung keine erfundenen `+12/-12 dB`-Werte anzeigen, sondern nur `+ / 0 / −`
 - pro Band getrennte `FB`- und `MOD`-Buttons vorhanden sind
 - FB und MOD gleichzeitig aktiv sein können
 - alle Fader mit der Maus bedienbar sind
@@ -1131,7 +1170,10 @@ Prototype 0.1 gilt als erfolgreich, wenn:
 - Feedback-State für zehn Bänder getrennt für L/R vorbereitet ist
 - Feedback All getrennt für L/R vorbereitet ist
 - Stereo-State für L/R vorbereitet ist
+- der zentrale State `activeMode`, `spreadMode` und `channelSelection` enthält
 - Spread-State vorbereitet ist
+- INPUT GAIN von `0 dB` bis `+24 dB` reicht und keine negativen Werte zulässt
+- der FB-Statusbereich `FILTERBANK RESPONSE`, `SPREAD MODE  CLASSIC` und einen klaren L/R-Kanalstatus verwendet
 - das Keyboard-Mapping nicht im Haupt-UI angezeigt wird
 - keine unnötigen Frameworks oder Libraries eingebaut wurden
 - kein finaler DSP vorgetäuscht wird
