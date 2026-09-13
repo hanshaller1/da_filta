@@ -232,7 +232,8 @@ Die erste Filterbank-DSP-Stufe läuft in einem einzelnen Stereo-`AudioWorkletPro
 - der lokale Feedback-Tap liegt post-Bandpass und pre-Delta-Gain; FB ALL verwendet die normierte Summe aller zehn Bandpass-Ausgänge
 - Feedback-Rückführungen verwenden `Math.tanh()` ausschließlich innerhalb der Schleife und einen separaten, positiven Audition-Pfad
 - der bipolare Resonance-Regler steuert nur Feedback-Stärke und -Polarität, nie Q oder Band-Gain
-- das aktuelle Feedback-/Resonance-System bleibt die Phase-2-Prototyplösung; ein separater Resonatorpfad und neue Resonance-Topologien sind noch nicht implementiert
+- zusätzlich existiert pro Band und Kanal ein separater linearer Resonator-TPT-Pfad mit identischen Basisparametern; sein Residual ist noch nicht hörbar aktiv
+- das aktuelle Feedback-/Resonance-System bleibt die Phase-2-Prototyplösung; neue Resonance-Topologien sind noch nicht implementiert
 
 Folgende Werte sind bewusste Webapp-/Prototype-Designentscheidungen und keine behaupteten Erica-Hardwarewerte:
 

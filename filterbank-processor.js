@@ -49,11 +49,28 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       left: Array(this.bandCount).fill(0),
       right: Array(this.bandCount).fill(0)
     };
+    this.resonatorBandOutputs = {
+      left: Array(this.bandCount).fill(0),
+      right: Array(this.bandCount).fill(0)
+    };
+    this.resonanceResiduals = {
+      left: Array(this.bandCount).fill(0),
+      right: Array(this.bandCount).fill(0)
+    };
     this.resonanceTarget = this.clampResonance(processorOptions.resonance);
     this.resonance = this.resonanceTarget;
-    this.filters = {
+    this.baseFilters = {
       left: this.createFilters(),
       right: this.createFilters()
+    };
+    this.resonatorFilters = {
+      left: this.createFilters(),
+      right: this.createFilters()
+    };
+    this.collectResonatorDiagnostics = processorOptions.collectResonatorDiagnostics === true;
+    this.resonatorDiagnostics = {
+      left: { maximumResidual: 0, finite: true },
+      right: { maximumResidual: 0, finite: true }
     };
 
     this.port.onmessage = event => this.handleMessage(event.data);
@@ -108,8 +125,12 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     return filters;
   }
 
-  resetFilter(filter) {
-    filter.reset();
+  publishResonatorDiagnostics() {
+    this.port.postMessage({
+      type: 'resonator-diagnostics',
+      left: { ...this.resonatorDiagnostics.left },
+      right: { ...this.resonatorDiagnostics.right }
+    });
   }
 
   processBandpass(filter, input) {
@@ -189,13 +210,16 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   }
 
   processChannelFrame(input, channel) {
-    const filters = this.filters[channel];
+    const baseFilters = this.baseFilters[channel];
+    const resonatorFilters = this.resonatorFilters[channel];
     const deltaGains = this.deltaGains[channel];
     const deltaTargets = this.deltaTargets[channel];
     const feedbackGates = this.feedbackGates[channel];
     const feedbackGateTargets = this.feedbackGateTargets[channel];
     const feedbackReturns = this.feedbackReturns[channel];
     const bandOutputs = this.bandOutputs[channel];
+    const resonatorBandOutputs = this.resonatorBandOutputs[channel];
+    const resonanceResiduals = this.resonanceResiduals[channel];
     const source = Number.isFinite(input) ? input : 0;
     const feedbackAllGate = this.feedbackAllGateTargets[channel] + this.feedbackGateSmoothingCoefficient * (this.feedbackAllGates[channel] - this.feedbackAllGateTargets[channel]);
     this.feedbackAllGates[channel] = feedbackAllGate;
@@ -210,8 +234,17 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       const previousReturn = Number.isFinite(feedbackReturns[band]) ? feedbackReturns[band] : 0;
       if (!Number.isFinite(feedbackReturns[band])) feedbackReturns[band] = 0;
       const bandInput = source + previousReturn;
-      const bandOutput = this.processBandpass(filters[band], bandInput);
+      const bandOutput = this.processBandpass(baseFilters[band], bandInput);
+      const resonatorBandOutput = this.processBandpass(resonatorFilters[band], source);
+      const resonanceResidual = resonatorBandOutput - bandOutput;
       bandOutputs[band] = bandOutput;
+      resonatorBandOutputs[band] = resonatorBandOutput;
+      resonanceResiduals[band] = Number.isFinite(resonanceResidual) ? resonanceResidual : 0;
+      if (this.collectResonatorDiagnostics) {
+        const diagnostics = this.resonatorDiagnostics[channel];
+        diagnostics.maximumResidual = Math.max(diagnostics.maximumResidual, Math.abs(resonanceResiduals[band]));
+        diagnostics.finite = diagnostics.finite && Number.isFinite(bandOutput) && Number.isFinite(resonatorBandOutput);
+      }
       globalTapSum += bandOutput;
       deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
       mainOutput += deltaGains[band] * bandOutput;
@@ -250,6 +283,7 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       if (leftOutput) leftOutput[frame] = this.processChannelFrame(inputChannels[0]?.[frame], 'left');
       if (rightOutput) rightOutput[frame] = this.processChannelFrame(inputChannels[1]?.[frame], 'right');
     }
+    if (this.collectResonatorDiagnostics) this.publishResonatorDiagnostics();
     return !this.disposed;
   }
 }
