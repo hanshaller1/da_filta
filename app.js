@@ -10,6 +10,8 @@ const {
 } = window.ResonantState;
 const state = createInitialState();
 let audioEngine = null;
+const POSITIVE_RESONANCE_AUDITION_VALUES = [0.10, 0.20, 0.30, 0.40];
+const positiveResonanceAuditionSelect = document.querySelector('[data-positive-resonance-audition]');
 const THEME_STORAGE_KEY = 'resonant-filterbank-theme';
 const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'soft-neutral', 'pro-console'];
 const themeSelect = document.querySelector('[data-theme-select]');
@@ -158,6 +160,14 @@ audioEngine = new AudioEngine({
   onDevicesChanged: devices => { renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät'); renderDevices(outputDeviceSelect, devices.outputs, 'Standardausgabe'); }
 });
 audioEngine.applyState(state);
+const setPositiveResonanceAuditionGain = value => {
+  const numericValue = Number(value);
+  const nextValue = POSITIVE_RESONANCE_AUDITION_VALUES.includes(numericValue) ? numericValue : 0.10;
+  if (positiveResonanceAuditionSelect) positiveResonanceAuditionSelect.value = nextValue.toFixed(2);
+  audioEngine.setPositiveResonanceAuditionGain(nextValue);
+};
+setPositiveResonanceAuditionGain(positiveResonanceAuditionSelect?.value ?? 0.10);
+positiveResonanceAuditionSelect?.addEventListener('change', event => setPositiveResonanceAuditionGain(event.target.value));
 const syncAudioParameters = () => {
   audioEngine.setInputGainDb(state.inputGain);
   audioEngine.setDryWet(state.dryWet);

@@ -13,6 +13,7 @@
       this.status = 'OFF';
       this.inputGainDb = 0;
       this.resonance = 0;
+      this.positiveResonanceAuditionGain = window.Filterbank?.POSITIVE_RESONANCE_AUDITION_GAIN ?? 0.1;
       this.dryWet = 50;
       this.volumeDb = -6;
       this.context = null;
@@ -71,6 +72,15 @@
       return this.resonance;
     }
 
+    setPositiveResonanceAuditionGain(value) {
+      const numericValue = Number(value);
+      this.positiveResonanceAuditionGain = Number.isFinite(numericValue) && numericValue > 0
+        ? numericValue
+        : (window.Filterbank?.POSITIVE_RESONANCE_AUDITION_GAIN ?? 0.1);
+      this.filterbank?.setPositiveResonanceAuditionGain(this.positiveResonanceAuditionGain);
+      return this.positiveResonanceAuditionGain;
+    }
+
     setBandBaseGain(channel, index, value) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
       const nextValue = clampBandGain(value);
@@ -107,7 +117,8 @@
         feedbackBandRight: this.feedbackBandRight,
         feedbackAllLeft: this.feedbackAllLeft,
         feedbackAllRight: this.feedbackAllRight,
-        resonance: this.resonance
+        resonance: this.resonance,
+        positiveResonanceAuditionGain: this.positiveResonanceAuditionGain
       };
     }
 

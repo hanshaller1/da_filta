@@ -14,6 +14,7 @@ export class LinearTptSvf {
       this.g = 0;
       this.k = 0;
       this.baseK = 0;
+      this.dampingScale = 1;
       this.a1 = 0;
       this.a2 = 0;
       this.a3 = 0;
@@ -39,11 +40,27 @@ export class LinearTptSvf {
       this.q = q;
       this.g = Math.tan(Math.PI * frequency / sampleRate);
       this.baseK = 1 / q;
-      this.k = this.baseK;
+      // Recompute the coefficient set even when a reconfiguration keeps the
+      // linear damping value. The constructor starts at that same value.
+      this.dampingScale = 0;
+      this.setDampingScale(1);
+      this.reset();
+
+      return this;
+    }
+
+    setDampingScale(value) {
+      if (!Number.isFinite(value) || value <= 0) {
+        throw new RangeError('TPT SVF requires a positive damping scale.');
+      }
+
+      if (value === this.dampingScale) return this;
+
+      this.dampingScale = value;
+      this.k = this.baseK * this.dampingScale;
       this.a1 = 1 / (1 + this.g * (this.g + this.k));
       this.a2 = this.g * this.a1;
       this.a3 = this.g * this.a2;
-      this.reset();
 
       return this;
     }

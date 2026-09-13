@@ -13,6 +13,9 @@
   const RESONANCE_SMOOTHING_SECONDS = 0.015;
   const MAX_FEEDBACK_GAIN = 1.25;
   const MAX_AUDITION_GAIN = 0.25;
+  const RESONATOR_DAMPING_FLOOR = 0.1;
+  const POSITIVE_RESONANCE_AUDITION_GAIN = 0.10;
+  const POSITIVE_RESONANCE_AUDITION_GAIN_SMOOTHING_SECONDS = 0.015;
   const FEEDBACK_ALL_NORMALIZATION = 1 / Math.sqrt(BAND_COUNT);
   const PROCESSOR_NAME = 'resonant-filterbank-processor';
   const workletModuleLoads = new WeakMap();
@@ -32,6 +35,12 @@
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) return 0;
     return Math.min(1, Math.max(-1, numericValue));
+  };
+  const normalizePositiveResonanceAuditionGain = value => {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) && numericValue > 0
+      ? numericValue
+      : POSITIVE_RESONANCE_AUDITION_GAIN;
   };
   const normalizeChannel = channel => {
     if (channel === 'left' || channel === 'L') return 'left';
@@ -84,6 +93,7 @@
       this.feedbackAllLeft = Boolean(initialState?.feedbackAllLeft);
       this.feedbackAllRight = Boolean(initialState?.feedbackAllRight);
       this.resonance = clampResonance(initialState?.resonance);
+      this.positiveResonanceAuditionGain = normalizePositiveResonanceAuditionGain(initialState?.positiveResonanceAuditionGain);
       this.inputNode = audioContext.createGain();
       this.outputNode = audioContext.createGain();
       this.inputNode.gain.value = 1;
@@ -111,7 +121,10 @@
           resonanceSmoothingTime: RESONANCE_SMOOTHING_SECONDS,
           feedbackAllNormalization: FEEDBACK_ALL_NORMALIZATION,
           maxFeedbackGain: MAX_FEEDBACK_GAIN,
-          maxAuditionGain: MAX_AUDITION_GAIN
+          maxAuditionGain: MAX_AUDITION_GAIN,
+          resonatorDampingFloor: RESONATOR_DAMPING_FLOOR,
+          positiveResonanceAuditionGain: this.positiveResonanceAuditionGain,
+          positiveResonanceAuditionGainSmoothingTime: POSITIVE_RESONANCE_AUDITION_GAIN_SMOOTHING_SECONDS
         }
       });
       this.inputNode.connect(this.workletNode);
@@ -179,6 +192,14 @@
       return nextValue;
     }
 
+    setPositiveResonanceAuditionGain(value) {
+      if (this.disposed) return;
+      const nextValue = normalizePositiveResonanceAuditionGain(value);
+      this.positiveResonanceAuditionGain = nextValue;
+      this.workletNode.port.postMessage({ type: 'set-positive-resonance-audition-gain', value: nextValue });
+      return nextValue;
+    }
+
     applyState(snapshot) {
       if (this.disposed) return;
       this.bandGainLeft = readBandControls(snapshot, 'bandGainLeft');
@@ -188,6 +209,7 @@
       this.feedbackAllLeft = Boolean(snapshot?.feedbackAllLeft);
       this.feedbackAllRight = Boolean(snapshot?.feedbackAllRight);
       this.resonance = clampResonance(snapshot?.resonance);
+      this.positiveResonanceAuditionGain = normalizePositiveResonanceAuditionGain(snapshot?.positiveResonanceAuditionGain ?? this.positiveResonanceAuditionGain);
       this.workletNode.port.postMessage({
         type: 'apply-state',
         bandGainLeft: [...this.bandGainLeft],
@@ -196,7 +218,8 @@
         feedbackBandRight: [...this.feedbackBandRight],
         feedbackAllLeft: this.feedbackAllLeft,
         feedbackAllRight: this.feedbackAllRight,
-        resonance: this.resonance
+        resonance: this.resonance,
+        positiveResonanceAuditionGain: this.positiveResonanceAuditionGain
       });
     }
 
@@ -222,6 +245,9 @@
   Filterbank.RESONANCE_SMOOTHING_SECONDS = RESONANCE_SMOOTHING_SECONDS;
   Filterbank.MAX_FEEDBACK_GAIN = MAX_FEEDBACK_GAIN;
   Filterbank.MAX_AUDITION_GAIN = MAX_AUDITION_GAIN;
+  Filterbank.RESONATOR_DAMPING_FLOOR = RESONATOR_DAMPING_FLOOR;
+  Filterbank.POSITIVE_RESONANCE_AUDITION_GAIN = POSITIVE_RESONANCE_AUDITION_GAIN;
+  Filterbank.POSITIVE_RESONANCE_AUDITION_GAIN_SMOOTHING_SECONDS = POSITIVE_RESONANCE_AUDITION_GAIN_SMOOTHING_SECONDS;
   Filterbank.FEEDBACK_ALL_NORMALIZATION = FEEDBACK_ALL_NORMALIZATION;
   Filterbank.PROCESSOR_NAME = PROCESSOR_NAME;
   window.Filterbank = Filterbank;

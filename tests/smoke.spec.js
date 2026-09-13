@@ -609,8 +609,15 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.feedbackAllRight)).toBe(true);
   expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.feedbackGateSmoothingTime)).toBe(0.008);
   expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.resonanceSmoothingTime)).toBe(0.015);
+  await expect(page.locator('[data-positive-resonance-audition] option')).toHaveCount(4);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.positiveResonanceAuditionGain)).toBe(0.1);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.positiveResonanceAuditionGainSmoothingTime)).toBe(0.015);
   expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.feedbackAllNormalization)).toBeCloseTo(1 / Math.sqrt(10), 12);
   expect(await page.evaluate(() => window.__audioTestState.nativeFilters)).toBe(0);
+  await page.locator('[data-positive-resonance-audition]').selectOption('0.40');
+  expect(await page.evaluate(() => window.__audioTestState.workletMessages.filter(message => message.type === 'set-positive-resonance-audition-gain'))).toEqual([
+    { type: 'set-positive-resonance-audition-gain', value: 0.4 }
+  ]);
   await page.locator('[data-feedback-band]').nth(2).click();
   await page.locator('.fb-all-toggle').click();
   await page.locator('[data-control="resonance"]').fill('-0.5');
@@ -658,6 +665,7 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 4].value, restartGainOffset)).toBeCloseTo(10 ** (-12 / 20), 5);
   expect(await page.evaluate(() => window.__audioTestState.workletModules.length)).toBe(2);
   expect(await page.evaluate(() => window.__audioTestState.workletNodes.length)).toBe(2);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes[1].options.processorOptions.positiveResonanceAuditionGain)).toBe(0.4);
   await page.locator('[data-audio-stop]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('OFF');
   expect(consoleErrors).toEqual([]);

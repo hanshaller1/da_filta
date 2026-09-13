@@ -233,13 +233,16 @@ Die erste Filterbank-DSP-Stufe läuft in einem einzelnen Stereo-`AudioWorkletPro
 - Feedback-Rückführungen verwenden `Math.tanh()` ausschließlich innerhalb der Schleife und einen separaten, positiven Audition-Pfad
 - der bipolare Resonance-Regler steuert nur Feedback-Stärke und -Polarität, nie Q oder Band-Gain
 - zusätzlich existiert pro Band und Kanal ein separater linearer Resonator-TPT-Pfad mit identischen Basisparametern; sein Residual ist noch nicht hörbar aktiv
-- das aktuelle Feedback-/Resonance-System bleibt die Phase-2-Prototyplösung; neue Resonance-Topologien sind noch nicht implementiert
+- der Resonatorpfad liefert bei positiver lokaler Resonance hörbar ausschließlich sein Residual `BPresonant - BPbase`; ein Prototype-Audition-Gain von `0.10` begrenzt den ersten Hörtestwert
+- der alte positive lokale Phase-2-Loop ist dadurch ersetzt; negative Resonance und FB ALL verwenden übergangsweise weiterhin die Phase-2-Prototyplösung
+- neue negative Resonance-Topologien, ein neues Resonator-FB-ALL sowie Drive-/Character-Strukturen sind noch nicht implementiert
 
 Folgende Werte sind bewusste Webapp-/Prototype-Designentscheidungen und keine behaupteten Erica-Hardwarewerte:
 
 - FB-ALL-Normalisierung: `1 / sqrt(10)`
 - maximale Feedback-Stärke: `1.25` mit quadratischer Resonance-Kennlinie
 - maximaler Audition-Anteil: `0.25`
+- positiver TPT-Resonance-Audition-Gain: `0.10` (Prototype-Hörtestwert); er befindet sich in manueller Hörkalibrierung. Der temporäre `DEV RES AUD`-Selector bietet `0.10`, `0.20`, `0.30` und `0.40`; Default nach Reload bleibt `0.10`, ein finaler Classic-Wert ist noch nicht festgelegt.
 - Gate-Smoothing: `8 ms`; Resonance-Smoothing: `15 ms`
 
 LFO, Envelope-Follower und Spread-DSP sind weiterhin nicht implementiert.

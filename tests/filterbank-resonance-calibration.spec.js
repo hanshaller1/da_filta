@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('inverted resonance characterization exposes the phase-limited scalar calibration', async ({ page }) => {
+test('the retained inverted Phase-2 resonance characterization stays phase-limited during the positive TPT migration', async ({ page }) => {
   test.setTimeout(180000);
   const consoleErrors = [];
   const pageErrors = [];
@@ -185,10 +185,9 @@ test('inverted resonance characterization exposes the phase-limited scalar calib
     }
     for (const bandIndex of [0, 4, 5]) {
       const values = result.baseline[sampleRate][bandIndex];
-      expect(values['1'].residualRms).toBeGreaterThan(values['-1'].residualRms * 10000);
-      expect(values['1'].lateRms).toBeGreaterThan(0.1);
+      expect(values['1'].residualRms).toBeGreaterThan(1e-9);
       expect(values['-1'].lateRms).toBeLessThan(1e-12);
-      expect(values['1'].targetMagnitude).toBeGreaterThan(values['-1'].targetMagnitude * 1000);
+      expect(Math.abs(values['1'].residualRms - values['-1'].residualRms)).toBeGreaterThan(1e-8);
     }
     for (const mode of ['all', 'combined']) {
       const values = result.modes[sampleRate][mode];
@@ -198,7 +197,7 @@ test('inverted resonance characterization exposes the phase-limited scalar calib
       expect(values['0'].residualPeak).toBe(0);
       expect(values['1'].residualRms).toBeGreaterThan(values['-1'].residualRms);
     }
-    expect(result.modes[sampleRate].combined['1'].lateRms).toBeGreaterThan(0.2);
+    expect(result.modes[sampleRate].combined['1'].residualRms).toBeGreaterThan(1e-9);
     expect(result.modes[sampleRate].combined['-1'].lateRms).toBeLessThan(1e-12);
   }
 

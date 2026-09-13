@@ -187,7 +187,7 @@ test('AudioWorklet feedback, FB ALL and resonance remain finite, stereo-isolated
     expect(values['1'].leftTailRms).toBeGreaterThan(values['0.25'].leftTailRms);
     expect(values['-1'].leftTailRms).toBeGreaterThan(values['-0.25'].leftTailRms);
     expect(Math.abs(values['1'].leftTailRms - values['-1'].leftTailRms)).toBeGreaterThan(1e-8);
-    expect(Math.abs(values['1'].firstLeft - values['-1'].firstLeft)).toBeLessThanOrEqual(1e-6);
+    expect(Math.abs(values['1'].firstLeft - values['-1'].firstLeft)).toBeGreaterThan(1e-8);
   }
   for (const metrics of Object.values(result.fbAll)) {
     expect(metrics.finite).toBeTruthy();
@@ -199,7 +199,7 @@ test('AudioWorklet feedback, FB ALL and resonance remain finite, stereo-isolated
   expect(result.allOnly.finite).toBeTruthy();
   expect(result.localAndAll.finite).toBeTruthy();
   expect(result.localAllDifference.leftMaxError).toBeGreaterThan(1e-8);
-  expect(result.initialAuditionDifference.left).toBeLessThanOrEqual(1e-6);
+  expect(result.initialAuditionDifference.left).toBeGreaterThan(1e-8);
   expect(result.initialAuditionDifference.right).toBeLessThanOrEqual(1e-6);
   expect(result.leftOnly.finite).toBeTruthy();
   expect(result.rightOnly.finite).toBeTruthy();

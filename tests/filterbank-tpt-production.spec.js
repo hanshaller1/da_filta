@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('the production TPT worklet preserves the previous Biquad filterbank and feedback behaviour', async ({ page }) => {
+test('the production TPT worklet preserves the Biquad base path and the hybrid feedback migration behaviour', async ({ page }) => {
   test.setTimeout(120000);
   const consoleErrors = [];
   const pageErrors = [];
@@ -10,6 +10,7 @@ test('the production TPT worklet preserves the previous Biquad filterbank and fe
   await page.goto('/', { waitUntil: 'networkidle' });
 
   const result = await page.evaluate(async () => {
+    const { LinearTptSvf } = await import('/tpt-svf.js');
     const frequencies = [...window.Filterbank.BAND_FREQUENCIES];
     const qs = [...window.Filterbank.BAND_QS];
     const bandCount = frequencies.length;
@@ -126,14 +127,26 @@ test('the production TPT worklet preserves the previous Biquad filterbank and fe
         left: frequencies.map((frequency, index) => createBiquad(frequency, qs[index], input.sampleRate)),
         right: frequencies.map((frequency, index) => createBiquad(frequency, qs[index], input.sampleRate))
       };
+      const resonatorFilters = {
+        left: frequencies.map((frequency, index) => new LinearTptSvf(input.sampleRate, frequency, qs[index])),
+        right: frequencies.map((frequency, index) => new LinearTptSvf(input.sampleRate, frequency, qs[index]))
+      };
       const returns = { left: Array(bandCount).fill(0), right: Array(bandCount).fill(0) };
       const resonanceMagnitudeSquared = resonance * resonance;
       const feedbackGain = Math.sign(resonance) * window.Filterbank.MAX_FEEDBACK_GAIN * resonanceMagnitudeSquared;
       const auditionGain = window.Filterbank.MAX_AUDITION_GAIN * resonanceMagnitudeSquared;
+      const positiveAuditionGain = window.Filterbank.POSITIVE_RESONANCE_AUDITION_GAIN;
 
       for (const channel of ['left', 'right']) {
         const deltas = controls[channel].map(control => window.Filterbank.controlToDeltaGain(control));
-        const hasActiveFeedback = allGates[channel] > 0 || localGates[channel].some(Boolean);
+        const positiveResonatorMagnitudes = localGates[channel].map(gate => (
+          gate && resonance > 0 ? resonance : 0
+        ));
+        for (let band = 0; band < bandCount; band += 1) {
+          const dampingScale = 1 - (1 - window.Filterbank.RESONATOR_DAMPING_FLOOR) * positiveResonatorMagnitudes[band];
+          resonatorFilters[channel][band].setDampingScale(dampingScale);
+        }
+        const hasActiveLegacyFeedback = allGates[channel] > 0 || (resonance < 0 && localGates[channel].some(Boolean));
         for (let frame = 0; frame < input.length; frame += 1) {
           const source = channels[channel][frame];
           let mainOutput = source;
@@ -142,19 +155,24 @@ test('the production TPT worklet preserves the previous Biquad filterbank and fe
 
           for (let band = 0; band < bandCount; band += 1) {
             const bandOutput = processBiquad(filters[channel][band], source + returns[channel][band]);
+            const resonatorBandOutput = resonatorFilters[channel][band].process(source);
             bandOutputs[band] = bandOutput;
             globalTapSum += bandOutput;
             mainOutput += deltas[band] * bandOutput;
+            if (positiveResonatorMagnitudes[band] > 0) {
+              mainOutput += positiveAuditionGain * (resonatorBandOutput - bandOutput);
+            }
           }
 
-          if (hasActiveFeedback && resonanceMagnitudeSquared > 0) {
+          if (hasActiveLegacyFeedback && resonanceMagnitudeSquared > 0) {
             const globalTap = globalTapSum * window.Filterbank.FEEDBACK_ALL_NORMALIZATION;
             for (let band = 0; band < bandCount; band += 1) {
-              const rawFeedback = (localGates[channel][band] ? bandOutputs[band] : 0) + allGates[channel] * globalTap;
+              const legacyLocalGate = resonance < 0 && localGates[channel][band] ? 1 : 0;
+              const rawFeedback = legacyLocalGate * bandOutputs[band] + allGates[channel] * globalTap;
               const feedbackReturn = Math.tanh(feedbackGain * rawFeedback);
               returns[channel][band] = Number.isFinite(feedbackReturn) ? feedbackReturn : 0;
-              const activeGate = Math.max(localGates[channel][band] ? 1 : 0, allGates[channel]);
-              mainOutput += activeGate * auditionGain * bandOutputs[band];
+              const legacyAuditionGate = Math.max(legacyLocalGate, allGates[channel]);
+              mainOutput += legacyAuditionGate * auditionGain * bandOutputs[band];
             }
           } else {
             for (let band = 0; band < bandCount; band += 1) returns[channel][band] = 0;

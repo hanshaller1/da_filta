@@ -11,10 +11,17 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     this.maxBandGainDb = this.readPositiveOption(processorOptions.maxBandGainDb, 12);
     this.maxFeedbackGain = this.readPositiveOption(processorOptions.maxFeedbackGain, 1.25);
     this.maxAuditionGain = this.readPositiveOption(processorOptions.maxAuditionGain, 0.25);
+    this.resonatorDampingFloor = this.readResonatorDampingFloor(processorOptions.resonatorDampingFloor);
+    this.positiveResonanceAuditionGain = this.readPositiveOption(processorOptions.positiveResonanceAuditionGain, 0.1);
+    this.positiveResonanceAuditionGainTarget = this.positiveResonanceAuditionGain;
     this.feedbackAllNormalization = this.readPositiveOption(processorOptions.feedbackAllNormalization, 1 / Math.sqrt(this.bandCount));
     this.bandGainSmoothingCoefficient = this.smoothingCoefficient(processorOptions.smoothingTime, 0.015);
     this.feedbackGateSmoothingCoefficient = this.smoothingCoefficient(processorOptions.feedbackGateSmoothingTime, 0.008);
     this.resonanceSmoothingCoefficient = this.smoothingCoefficient(processorOptions.resonanceSmoothingTime, 0.015);
+    this.positiveResonanceAuditionGainSmoothingCoefficient = this.smoothingCoefficient(
+      processorOptions.positiveResonanceAuditionGainSmoothingTime,
+      0.015
+    );
     this.disposed = false;
     this.bandControls = {
       left: this.readControls(processorOptions.bandGainLeft),
@@ -67,11 +74,20 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       left: this.createFilters(),
       right: this.createFilters()
     };
+    this.resonatorMagnitudes = {
+      left: Array(this.bandCount).fill(0),
+      right: Array(this.bandCount).fill(0)
+    };
+    this.resonatorAuditionGates = {
+      left: Array(this.bandCount).fill(0),
+      right: Array(this.bandCount).fill(0)
+    };
     this.collectResonatorDiagnostics = processorOptions.collectResonatorDiagnostics === true;
     this.resonatorDiagnostics = {
-      left: { maximumResidual: 0, finite: true },
-      right: { maximumResidual: 0, finite: true }
+      left: this.createResonatorDiagnostics(),
+      right: this.createResonatorDiagnostics()
     };
+    this.initializeResonatorMagnitudes();
 
     this.port.onmessage = event => this.handleMessage(event.data);
   }
@@ -85,6 +101,12 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
 
   readPositiveOption(value, fallback) {
     return Number.isFinite(value) && value > 0 ? value : fallback;
+  }
+
+  readResonatorDampingFloor(value) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue <= 0 || numericValue > 1) return 0.1;
+    return numericValue;
   }
 
   smoothingCoefficient(value, fallback) {
@@ -117,12 +139,59 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     return 10 ** (gainDb / 20) - 1;
   }
 
+  getResonatorMagnitudeTarget(localGate) {
+    if (localGate <= 1e-12 || this.resonanceTarget <= 0) return 0;
+    return Math.min(1, localGate * this.resonanceTarget);
+  }
+
+  getResonatorDampingScale(magnitude) {
+    const normalizedMagnitude = Math.min(1, Math.max(0, magnitude));
+    return 1 - (1 - this.resonatorDampingFloor) * normalizedMagnitude;
+  }
+
+  initializeResonatorMagnitudes() {
+    for (const channel of ['left', 'right']) {
+      for (let band = 0; band < this.bandCount; band += 1) {
+        const magnitude = this.getResonatorMagnitudeTarget(this.feedbackGates[channel][band]);
+        this.resonatorMagnitudes[channel][band] = magnitude;
+        this.resonatorAuditionGates[channel][band] = magnitude > 1e-12 ? 1 : 0;
+        this.resonatorFilters[channel][band].setDampingScale(this.getResonatorDampingScale(magnitude));
+      }
+    }
+  }
+
   createFilters() {
     const filters = new Array(this.bandCount);
     for (let index = 0; index < this.bandCount; index += 1) {
       filters[index] = new LinearTptSvf(sampleRate, this.bandFrequencies[index], this.bandQs[index]);
     }
     return filters;
+  }
+
+  createResonatorDiagnostics() {
+    return {
+      maximumResidual: 0,
+      maximumState: 0,
+      finite: true,
+      frameCount: 0,
+      sourcePeak: 0,
+      sourceEnergy: 0,
+      wetPeak: 0,
+      wetEnergy: 0,
+      positiveResonanceAuditionGain: 0,
+      positiveResonanceAuditionGainTarget: 0,
+      baseBandPeak: Array(this.bandCount).fill(0),
+      baseBandEnergy: Array(this.bandCount).fill(0),
+      bandPeak: Array(this.bandCount).fill(0),
+      bandEnergy: Array(this.bandCount).fill(0),
+      residualPeak: Array(this.bandCount).fill(0),
+      residualEnergy: Array(this.bandCount).fill(0),
+      localGates: Array(this.bandCount).fill(0),
+      resonatorMagnitudes: Array(this.bandCount).fill(0),
+      resonatorDampingScales: Array(this.bandCount).fill(1),
+      resonatorAuditionGates: Array(this.bandCount).fill(0),
+      sampleCount: 0
+    };
   }
 
   publishResonatorDiagnostics() {
@@ -165,6 +234,11 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     if (immediate) this.resonance = this.resonanceTarget;
   }
 
+  setPositiveResonanceAuditionGain(value, immediate = false) {
+    this.positiveResonanceAuditionGainTarget = this.readPositiveOption(value, 0.1);
+    if (immediate) this.positiveResonanceAuditionGain = this.positiveResonanceAuditionGainTarget;
+  }
+
   applyState(data) {
     const leftControls = this.readControls(data.bandGainLeft);
     const rightControls = this.readControls(data.bandGainRight);
@@ -179,6 +253,10 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     this.setFeedbackAll('left', data.feedbackAllLeft, true);
     this.setFeedbackAll('right', data.feedbackAllRight, true);
     this.setResonance(data.resonance, true);
+    if (data.positiveResonanceAuditionGain !== undefined) {
+      this.setPositiveResonanceAuditionGain(data.positiveResonanceAuditionGain, true);
+    }
+    this.initializeResonatorMagnitudes();
   }
 
   handleMessage(data) {
@@ -197,6 +275,10 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     }
     if (data.type === 'set-resonance') {
       this.setResonance(data.value);
+      return;
+    }
+    if (data.type === 'set-positive-resonance-audition-gain') {
+      this.setPositiveResonanceAuditionGain(data.value);
       return;
     }
     if (data.type === 'apply-state') {
@@ -220,17 +302,32 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     const bandOutputs = this.bandOutputs[channel];
     const resonatorBandOutputs = this.resonatorBandOutputs[channel];
     const resonanceResiduals = this.resonanceResiduals[channel];
+    const resonatorMagnitudes = this.resonatorMagnitudes[channel];
+    const resonatorAuditionGates = this.resonatorAuditionGates[channel];
     const source = Number.isFinite(input) ? input : 0;
     const feedbackAllGate = this.feedbackAllGateTargets[channel] + this.feedbackGateSmoothingCoefficient * (this.feedbackAllGates[channel] - this.feedbackAllGateTargets[channel]);
     this.feedbackAllGates[channel] = feedbackAllGate;
     let mainOutput = source;
     let globalTapSum = 0;
-    let hasActiveFeedbackGate = feedbackAllGate > 1e-12;
+    const usesLegacyLocalResonance = this.resonanceTarget < 0 && this.resonance < 0;
+    let hasActiveLegacyFeedbackGate = feedbackAllGate > 1e-12;
 
     for (let band = 0; band < this.bandCount; band += 1) {
       const localGate = feedbackGateTargets[band] + this.feedbackGateSmoothingCoefficient * (feedbackGates[band] - feedbackGateTargets[band]);
       feedbackGates[band] = localGate;
-      if (localGate > 1e-12) hasActiveFeedbackGate = true;
+      if (usesLegacyLocalResonance && localGate > 1e-12) hasActiveLegacyFeedbackGate = true;
+      const resonatorMagnitudeTarget = this.getResonatorMagnitudeTarget(localGate);
+      const resonatorMagnitude = resonatorMagnitudeTarget + this.resonanceSmoothingCoefficient * (
+        resonatorMagnitudes[band] - resonatorMagnitudeTarget
+      );
+      resonatorMagnitudes[band] = resonatorMagnitude;
+      const resonatorDampingScale = this.getResonatorDampingScale(resonatorMagnitude);
+      resonatorFilters[band].setDampingScale(resonatorDampingScale);
+      const resonatorAuditionTarget = this.resonanceTarget > 0 && localGate > 1e-12 ? 1 : 0;
+      const resonatorAuditionGate = resonatorAuditionTarget + this.resonanceSmoothingCoefficient * (
+        resonatorAuditionGates[band] - resonatorAuditionTarget
+      );
+      resonatorAuditionGates[band] = resonatorAuditionGate;
       const previousReturn = Number.isFinite(feedbackReturns[band]) ? feedbackReturns[band] : 0;
       if (!Number.isFinite(feedbackReturns[band])) feedbackReturns[band] = 0;
       const bandInput = source + previousReturn;
@@ -240,10 +337,30 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       bandOutputs[band] = bandOutput;
       resonatorBandOutputs[band] = resonatorBandOutput;
       resonanceResiduals[band] = Number.isFinite(resonanceResidual) ? resonanceResidual : 0;
+      mainOutput += resonatorAuditionGate * this.positiveResonanceAuditionGain * resonanceResiduals[band];
       if (this.collectResonatorDiagnostics) {
         const diagnostics = this.resonatorDiagnostics[channel];
+        const maximumState = Math.max(
+          Math.abs(resonatorFilters[band].ic1eq),
+          Math.abs(resonatorFilters[band].ic2eq)
+        );
         diagnostics.maximumResidual = Math.max(diagnostics.maximumResidual, Math.abs(resonanceResiduals[band]));
-        diagnostics.finite = diagnostics.finite && Number.isFinite(bandOutput) && Number.isFinite(resonatorBandOutput);
+        diagnostics.maximumState = Math.max(diagnostics.maximumState, maximumState);
+        diagnostics.baseBandPeak[band] = Math.max(diagnostics.baseBandPeak[band], Math.abs(bandOutput));
+        diagnostics.baseBandEnergy[band] += bandOutput * bandOutput;
+        diagnostics.bandPeak[band] = Math.max(diagnostics.bandPeak[band], Math.abs(resonatorBandOutput));
+        diagnostics.bandEnergy[band] += resonatorBandOutput * resonatorBandOutput;
+        diagnostics.residualPeak[band] = Math.max(diagnostics.residualPeak[band], Math.abs(resonanceResiduals[band]));
+        diagnostics.residualEnergy[band] += resonanceResiduals[band] * resonanceResiduals[band];
+        diagnostics.localGates[band] = localGate;
+        diagnostics.resonatorMagnitudes[band] = resonatorMagnitude;
+        diagnostics.resonatorDampingScales[band] = resonatorDampingScale;
+        diagnostics.resonatorAuditionGates[band] = resonatorAuditionGate;
+        diagnostics.sampleCount += 1;
+        diagnostics.finite = diagnostics.finite
+          && Number.isFinite(bandOutput)
+          && Number.isFinite(resonatorBandOutput)
+          && Number.isFinite(maximumState);
       }
       globalTapSum += bandOutput;
       deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
@@ -251,17 +368,18 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     }
 
     const resonanceMagnitudeSquared = this.resonance * this.resonance;
-    if (hasActiveFeedbackGate && resonanceMagnitudeSquared > 0) {
+    if (hasActiveLegacyFeedbackGate && resonanceMagnitudeSquared > 0) {
       const globalTap = Number.isFinite(globalTapSum) ? globalTapSum * this.feedbackAllNormalization : 0;
       const feedbackGain = Math.sign(this.resonance) * this.maxFeedbackGain * resonanceMagnitudeSquared;
       const auditionGain = this.maxAuditionGain * resonanceMagnitudeSquared;
       for (let band = 0; band < this.bandCount; band += 1) {
-        const rawFeedback = feedbackGates[band] * bandOutputs[band] + feedbackAllGate * globalTap;
+        const legacyLocalGate = usesLegacyLocalResonance ? feedbackGates[band] : 0;
+        const rawFeedback = legacyLocalGate * bandOutputs[band] + feedbackAllGate * globalTap;
         const feedbackDrive = feedbackGain * rawFeedback;
         const feedbackReturn = Number.isFinite(feedbackDrive) ? Math.tanh(feedbackDrive) : 0;
         feedbackReturns[band] = Number.isFinite(feedbackReturn) ? feedbackReturn : 0;
-        const activeFeedbackGate = Math.max(feedbackGates[band], feedbackAllGate);
-        mainOutput += activeFeedbackGate * auditionGain * bandOutputs[band];
+        const legacyAuditionGate = Math.max(legacyLocalGate, feedbackAllGate);
+        mainOutput += legacyAuditionGate * auditionGain * bandOutputs[band];
       }
     } else {
       for (let band = 0; band < this.bandCount; band += 1) {
@@ -269,7 +387,22 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       }
     }
 
-    return Number.isFinite(mainOutput) ? mainOutput : source;
+    const wetOutput = Number.isFinite(mainOutput) ? mainOutput : source;
+    if (this.collectResonatorDiagnostics) {
+      const diagnostics = this.resonatorDiagnostics[channel];
+      diagnostics.frameCount += 1;
+      diagnostics.sourcePeak = Math.max(diagnostics.sourcePeak, Math.abs(source));
+      diagnostics.sourceEnergy += source * source;
+      diagnostics.wetPeak = Math.max(diagnostics.wetPeak, Math.abs(wetOutput));
+      diagnostics.wetEnergy += wetOutput * wetOutput;
+      diagnostics.positiveResonanceAuditionGain = this.positiveResonanceAuditionGain;
+      diagnostics.positiveResonanceAuditionGainTarget = this.positiveResonanceAuditionGainTarget;
+      diagnostics.finite = diagnostics.finite
+        && Number.isFinite(source)
+        && Number.isFinite(wetOutput);
+    }
+
+    return wetOutput;
   }
 
   process(inputs, outputs) {
@@ -280,6 +413,10 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     const frameCount = Math.max(leftOutput?.length || 0, rightOutput?.length || 0);
     for (let frame = 0; frame < frameCount; frame += 1) {
       this.resonance = this.resonanceTarget + this.resonanceSmoothingCoefficient * (this.resonance - this.resonanceTarget);
+      this.positiveResonanceAuditionGain = this.positiveResonanceAuditionGainTarget
+        + this.positiveResonanceAuditionGainSmoothingCoefficient * (
+          this.positiveResonanceAuditionGain - this.positiveResonanceAuditionGainTarget
+        );
       if (leftOutput) leftOutput[frame] = this.processChannelFrame(inputChannels[0]?.[frame], 'left');
       if (rightOutput) rightOutput[frame] = this.processChannelFrame(inputChannels[1]?.[frame], 'right');
     }

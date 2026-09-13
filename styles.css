@@ -104,6 +104,10 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
 .status-grid { height: clamp(260px, 30vh, 330px); min-height: 260px; grid-template-columns: 18% minmax(0, 64%) 18%; gap: 14px; }
 .analyzer { flex-direction: column; padding: 10px 14px 28px; }
 .analyzer-header { display: flex; justify-content: space-between; align-items: center; min-height: 28px; color: var(--cyan); font-size: 17px; letter-spacing: 1px; }
+.analyzer-header-controls { display: flex; align-items: center; gap: 14px; }
+.dev-audition-control { display: flex; align-items: center; gap: 6px; color: var(--muted-text); font-size: 11px; letter-spacing: .7px; }
+.dev-audition-control span::before { content: 'CAL '; color: var(--secondary-text); }
+.dev-audition-control select { width: 62px; height: 24px; padding: 0 5px; border: 1px dashed var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 600 12px 'Trebuchet MS', Arial, sans-serif; }
 .fb-all-control { display: flex; align-items: center; gap: 8px; color: var(--muted-text); font-size: 13px; }
 .fb-all-toggle { min-width: 43px; height: 24px; padding: 0 7px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 600 12px 'Trebuchet MS', Arial, sans-serif; cursor: pointer; }
 .chart-grid { min-height: 0; width: 100%; }
