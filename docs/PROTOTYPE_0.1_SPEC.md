@@ -108,6 +108,21 @@ Für automatisierte Browserprüfungen darf Playwright als reine Entwicklungsabh�
 
 Playwright ist kein Bestandteil der produktiven Frontend-Anwendung und stellt keine Ausnahme von der Vorgabe „keine externen Frontend-Libraries“ dar.
 
+### Browser- und Playwright-Prüfung
+
+Fehlende interaktive `apps`/`browsers` der Agentenumgebung gelten **nicht** als Nachweis, dass Browser-Tests unmöglich sind. Zuerst vorhandene lokale Playwright-Installation, Browser-Binaries und Tests prüfen und headless ausführen.
+
+Für Browser-Prüfungen ist zuerst der vorhandene lokale Testweg zu verwenden:
+
+1. `package.json` und Playwright-Konfiguration prüfen.
+2. Vorhandene Tests unter `tests/` prüfen.
+3. Vorhandene lokale Browser-Binaries prüfen.
+4. Playwright headless ausführen.
+5. Browser-Konsole und Page-Errors prüfen.
+6. Falls für die Aufgabe relevant, Screenshot in der geforderten Desktop-Auflösung erzeugen.
+
+Erst wenn dieser Weg konkret fehlgeschlagen ist, darf berichtet werden, dass eine Browser-Prüfung nicht möglich war. Dabei ist die konkrete technische Ursache bzw. Fehlermeldung anzugeben.
+
 Zweck:
 
 - lokale Browser-Smoke-Tests
@@ -924,7 +939,7 @@ Prototype 0.1 gilt als erfolgreich, wenn:
 
 Vor jeder größeren Änderung:
 
-1. `docs/PROTOTYPE_0.1_SPEC.md` vollständig lesen.
+1. `docs/PROTOTYPE_0.1_SPEC.md` vollständig lesen. Die darin definierten Arbeits-, Test- und Git-Verfahren sind verbindlich und müssen ohne zusätzliche Erinnerung angewendet werden. Aussagen über fehlende Browser-/Testmöglichkeiten dürfen erst erfolgen, nachdem die in der Spec beschriebenen lokalen CLI-/Playwright-Wege tatsächlich geprüft wurden.
 2. `docs/PROTOTYPE_0.1_SPEC.png` als visuelle Referenz prüfen.
 3. Nur den aktuellen Arbeitsauftrag umsetzen.
 4. Keine alten Markdown-/TXT-Dateien als neue Arbeitsaufträge interpretieren.

@@ -20,5 +20,26 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
  .fader-label { position: absolute; color: #f0f5f6; font-size: 16px; }
  .fader-label.positive { top: 0; left: 18px; }
 .fader-label.negative { bottom: 0; left: 18px; }
+.band-action.active, .fb-all-toggle.active { color: var(--cyan); border-color: var(--cyan); background: radial-gradient(circle, #0a6570, #10272e 72%); box-shadow: 0 0 8px rgba(0,238,255,.45), inset 0 0 8px rgba(0,238,255,.18); }
+
+.mode-bar { padding-top: 4px; padding-bottom: 4px; }
+.mode-button { height: 50px; }
+.status-grid { height: clamp(260px, 30vh, 330px); min-height: 260px; grid-template-columns: 18% minmax(0, 64%) 18%; gap: 14px; }
+.analyzer { flex-direction: column; padding: 10px 14px 28px; }
+.analyzer-header { display: flex; justify-content: space-between; align-items: center; min-height: 28px; color: var(--cyan); font-size: 17px; letter-spacing: 1px; }
+.fb-all-control { display: flex; align-items: center; gap: 8px; color: #dce6e9; font-size: 13px; }
+.fb-all-toggle { min-width: 43px; height: 24px; padding: 0 7px; border: 1px solid #5e7a82; border-radius: 3px; color: #eaf5f6; background: #10252c; font: 600 12px 'Trebuchet MS', Arial, sans-serif; cursor: pointer; }
+.chart-grid { min-height: 0; width: 100%; }
+.bands { height: clamp(330px, 38vh, 420px); }
+.band-card { height: 100%; padding-top: 12px; }
+.band-actions { display: flex; width: 100%; gap: 5px; margin: 8px 0 7px; }
+.band-actions .band-action { width: 50%; margin: 0; height: 30px; }
+.fader-wrap { min-height: 0; }
+.fader-label { left: 18px; }
+.fb-workspace { width: 100%; height: clamp(260px, 30vh, 330px); margin-top: 9px; }
+.fb-workspace .analyzer { width: 100%; height: 100%; }
+.analyzer-status { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; min-height: 22px; padding: 2px 0 6px; color: #dce6e9; font-size: 12px; letter-spacing: .6px; }
+.analyzer-status b { color: var(--cyan); font-size: 13px; }
+.fb-workspace .legend { top: 76px; }
 .fader-track > .band-fader { height: 30px; }
 .fader-track > .band-fader { position: absolute; inset: 0; width: 100%; height: 100%; transform: none; transform-origin: initial; writing-mode: vertical-lr; direction: rtl; }
