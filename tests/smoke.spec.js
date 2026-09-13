@@ -97,3 +97,63 @@ test('keyboard shortcuts remain active after focusing a band range with the mous
   expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });
+
+test('latest FB UI rules keep neutral keys and inactive modes correct', async ({ page }) => {
+  const consoleErrors = [];
+  const pageErrors = [];
+  page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto('/', { waitUntil: 'networkidle' });
+
+  const faders = page.locator('.band-fader');
+  const modeButtons = page.locator('.mode-button');
+  const fb = page.locator('[data-feedback-band]');
+  const mod = page.locator('[data-mod-band]');
+
+  await page.keyboard.press('KeyQ');
+  await expect(faders.nth(0)).toHaveValue('10');
+  await page.keyboard.press('KeyZ');
+  await expect(faders.nth(0)).toHaveValue('0');
+  await page.keyboard.press('KeyA');
+  await expect(faders.nth(0)).toHaveValue('-10');
+  await page.keyboard.press('KeyZ');
+  await expect(faders.nth(0)).toHaveValue('0');
+
+  await page.keyboard.press('KeyP');
+  await expect(faders.nth(9)).toHaveValue('10');
+  await page.keyboard.press('Slash');
+  await expect(faders.nth(9)).toHaveValue('0');
+  await page.keyboard.press('Semicolon');
+  await expect(faders.nth(9)).toHaveValue('-10');
+  await page.keyboard.press('Slash');
+  await expect(faders.nth(9)).toHaveValue('0');
+
+  await faders.nth(0).click();
+  await expect(faders.nth(0)).toBeFocused();
+  await page.keyboard.press('KeyQ');
+  await expect(faders.nth(0)).toHaveValue('10');
+  await page.keyboard.press('KeyZ');
+  await expect(faders.nth(0)).toHaveValue('0');
+  await page.keyboard.press('Digit1');
+  await expect(fb.nth(0)).toHaveClass(/active/);
+  await page.keyboard.press('Shift+Digit1');
+  await expect(mod.nth(0)).toHaveClass(/active/);
+
+  await expect(modeButtons).toHaveCount(10);
+  for (let i = 1; i < 10; i++) await expect(modeButtons.nth(i)).not.toHaveClass(/active/);
+  await expect(modeButtons.nth(0)).not.toContainText(/[0-9]/);
+  for (let i = 1; i < 10; i++) await expect(modeButtons.nth(i)).toBeDisabled();
+  for (let i = 1; i < 10; i++) await expect(modeButtons.nth(i)).not.toHaveClass(/active/);
+
+  const inputGain = page.locator('[data-control="inputGain"]');
+  await expect(inputGain).toHaveAttribute('min', '0');
+  await expect(inputGain).toHaveAttribute('max', '24');
+  const bandText = (await page.locator('.band-card').allTextContents()).join('');
+  expect(bandText).not.toContain('+12');
+  expect(bandText).not.toContain('-12');
+  await expect(page.locator('.axis-y')).not.toContainText('+12');
+  await expect(page.locator('.axis-y')).not.toContainText('-12');
+
+  expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
+  expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
+});
