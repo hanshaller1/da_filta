@@ -84,12 +84,29 @@ test('central state and neutral filterbank module keep L/R base values separate'
     domain.setBandBaseGain(state, 'left', 2, 40);
     domain.setBandBaseGain(state, 'right', 2, -20);
     const connections = [];
+    const createParam = (value = 0) => ({ value, cancelScheduledValues() {}, setTargetAtTime(nextValue) { this.value = nextValue; } });
     const createNode = name => ({ name, connect: target => connections.push(`${name}->${target.name}`), disconnect() {} });
-    const context = { createGain: () => createNode(`node-${connections.length}`) };
+    const context = {
+      createGain: () => Object.assign(createNode(`gain-${connections.length}`), { gain: createParam(1) }),
+      createChannelSplitter: () => createNode(`splitter-${connections.length}`),
+      createChannelMerger: () => createNode(`merger-${connections.length}`),
+      createBiquadFilter: () => Object.assign(createNode(`filter-${connections.length}`), {
+        type: '', frequency: createParam(), Q: createParam()
+      })
+    };
     const filterbank = new window.Filterbank(context);
     filterbank.applyState(state);
     filterbank.setBandBaseGain('right', 2, 60);
-    const snapshot = { left: filterbank.bandGainLeft[2], right: filterbank.bandGainRight[2], connections: connections.length };
+    const snapshot = {
+      left: filterbank.bandGainLeft[2],
+      right: filterbank.bandGainRight[2],
+      leftDelta: filterbank.deltaGains.left[2].gain.value,
+      rightDelta: filterbank.deltaGains.right[2].gain.value,
+      connections: connections.length,
+      filterCount: filterbank.bandFilters.left.length + filterbank.bandFilters.right.length,
+      firstFilter: { type: filterbank.bandFilters.left[0].type, frequency: filterbank.bandFilters.left[0].frequency.value, q: filterbank.bandFilters.left[0].Q.value },
+      lastFilter: { frequency: filterbank.bandFilters.right[9].frequency.value, q: filterbank.bandFilters.right[9].Q.value }
+    };
     filterbank.dispose();
     return {
       bandCount: domain.BAND_COUNT,
@@ -97,7 +114,13 @@ test('central state and neutral filterbank module keep L/R base values separate'
       defaults: [state.bandGainLeft[0], state.bandGainRight[0]],
       stateValues: [state.bandGainLeft[2], state.bandGainRight[2]],
       filterbankValues: [snapshot.left, snapshot.right],
-      passThroughConnectionCount: snapshot.connections
+      deltaValues: [snapshot.leftDelta, snapshot.rightDelta],
+      connectionCount: snapshot.connections,
+      filterCount: snapshot.filterCount,
+      firstFilter: snapshot.firstFilter,
+      lastFilter: snapshot.lastFilter,
+      qValues: window.Filterbank.BAND_QS,
+      deltaMapping: [window.Filterbank.controlToDeltaGain(40), window.Filterbank.controlToDeltaGain(60)]
     };
   });
 
@@ -106,7 +129,147 @@ test('central state and neutral filterbank module keep L/R base values separate'
   expect(result.defaults).toEqual([0, 0]);
   expect(result.stateValues).toEqual([40, -20]);
   expect(result.filterbankValues).toEqual([40, 60]);
-  expect(result.passThroughConnectionCount).toBe(1);
+  expect(result.deltaValues[0]).toBeCloseTo(result.deltaMapping[0], 8);
+  expect(result.deltaValues[1]).toBeCloseTo(result.deltaMapping[1], 8);
+  expect(result.connectionCount).toBeGreaterThan(40);
+  expect(result.filterCount).toBe(20);
+  expect(result.firstFilter).toMatchObject({ type: 'bandpass', frequency: 29 });
+  expect(result.lastFilter.frequency).toBe(11000);
+  expect(result.qValues).toHaveLength(10);
+  expect(result.qValues.every(value => Number.isFinite(value) && value > 0)).toBeTruthy();
+});
+
+test('10-band filterbank DSP is neutral, bipolar and stereo-isolated', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+
+  const result = await page.evaluate(async () => {
+    const renderCase = async (sampleRate, frequency, leftControls, rightControls) => {
+      const frameCount = sampleRate;
+      const context = new OfflineAudioContext(2, frameCount, sampleRate);
+      const input = context.createBuffer(2, frameCount, sampleRate);
+      const leftInput = input.getChannelData(0);
+      const rightInput = input.getChannelData(1);
+      for (let frame = 0; frame < frameCount; frame += 1) {
+        const phase = 2 * Math.PI * frequency * frame / sampleRate;
+        leftInput[frame] = 0.05 * Math.sin(phase);
+        rightInput[frame] = 0.04 * Math.sin(phase + 0.37);
+      }
+
+      const source = context.createBufferSource();
+      source.buffer = input;
+      const filterbank = new window.Filterbank(context);
+      filterbank.applyState({ bandGainLeft: leftControls, bandGainRight: rightControls });
+      source.connect(filterbank.input);
+      filterbank.output.connect(context.destination);
+      source.start();
+      const output = await context.startRendering();
+      const leftOutput = output.getChannelData(0);
+      const rightOutput = output.getChannelData(1);
+      const start = Math.floor(frameCount * 0.25);
+      const metrics = { leftMaxError: 0, rightMaxError: 0, leftRms: 0, rightRms: 0, finite: true };
+      for (let frame = 0; frame < frameCount; frame += 1) {
+        if (!Number.isFinite(leftOutput[frame]) || !Number.isFinite(rightOutput[frame])) metrics.finite = false;
+        metrics.leftMaxError = Math.max(metrics.leftMaxError, Math.abs(leftOutput[frame] - leftInput[frame]));
+        metrics.rightMaxError = Math.max(metrics.rightMaxError, Math.abs(rightOutput[frame] - rightInput[frame]));
+        if (frame >= start) {
+          metrics.leftRms += leftOutput[frame] ** 2;
+          metrics.rightRms += rightOutput[frame] ** 2;
+        }
+      }
+      const measuredFrames = frameCount - start;
+      metrics.leftRms = Math.sqrt(metrics.leftRms / measuredFrames);
+      metrics.rightRms = Math.sqrt(metrics.rightRms / measuredFrames);
+      filterbank.dispose();
+      return metrics;
+    };
+
+    const neutral = () => Array(10).fill(0);
+    const controls = value => Array.from({ length: 10 }, (_, index) => index === value.index ? value.control : 0);
+    const baseline44100 = await renderCase(44100, 777, neutral(), neutral());
+    const baseline48000 = await renderCase(48000, 777, neutral(), neutral());
+    const centerFrequencies = window.Filterbank.BAND_FREQUENCIES;
+    const centerResponses = [];
+    for (let index = 0; index < centerFrequencies.length; index += 1) {
+      const response = await renderCase(44100, centerFrequencies[index], controls({ index, control: 50 }), neutral());
+      centerResponses.push({ index, rms: response.leftRms });
+    }
+    const band1Positive = await renderCase(44100, 29, controls({ index: 0, control: 50 }), neutral());
+    const band1PositiveMax = await renderCase(44100, 29, controls({ index: 0, control: 100 }), neutral());
+    const band5Positive = await renderCase(44100, 411, controls({ index: 4, control: 100 }), neutral());
+    const band5PositiveMid = await renderCase(44100, 411, controls({ index: 4, control: 50 }), neutral());
+    const band10Positive = await renderCase(48000, 11000, controls({ index: 9, control: 50 }), neutral());
+    const band10PositiveMax = await renderCase(48000, 11000, controls({ index: 9, control: 100 }), neutral());
+    const band1Negative = await renderCase(44100, 29, controls({ index: 0, control: -50 }), neutral());
+    const band1NegativeMax = await renderCase(44100, 29, controls({ index: 0, control: -100 }), neutral());
+    const band5Negative = await renderCase(48000, 411, controls({ index: 4, control: -100 }), neutral());
+    const band5NegativeMid = await renderCase(48000, 411, controls({ index: 4, control: -50 }), neutral());
+    const band10Negative = await renderCase(48000, 11000, controls({ index: 9, control: -50 }), neutral());
+    const band10NegativeMax = await renderCase(48000, 11000, controls({ index: 9, control: -100 }), neutral());
+    const leftOnly = await renderCase(48000, 1500, controls({ index: 6, control: 50 }), neutral());
+    const rightOnly = await renderCase(48000, 1500, neutral(), controls({ index: 6, control: 50 }));
+    const mixed = await renderCase(44100, 777, [100, -50, 40, 0, 80, -30, 20, 0, -70, 50], [-80, 30, 0, 60, -20, 45, 0, -40, 70, -10]);
+    return {
+      baseline44100,
+      baseline48000,
+      centerResponses,
+      band1Positive,
+      band1PositiveMax,
+      band5Positive,
+      band5PositiveMid,
+      band10Positive,
+      band10PositiveMax,
+      band1Negative,
+      band1NegativeMax,
+      band5Negative,
+      band5NegativeMid,
+      band10Negative,
+      band10NegativeMax,
+      leftOnly,
+      rightOnly,
+      mixed,
+      qValues: window.Filterbank.BAND_QS,
+      mapping: {
+        neutral: window.Filterbank.controlToDeltaGain(0),
+        positive: window.Filterbank.controlToDeltaGain(100),
+        negative: window.Filterbank.controlToDeltaGain(-100)
+      }
+    };
+  });
+
+  for (const baseline of [result.baseline44100, result.baseline48000]) {
+    expect(baseline.leftMaxError).toBeLessThanOrEqual(1e-6);
+    expect(baseline.rightMaxError).toBeLessThanOrEqual(1e-6);
+    expect(baseline.finite).toBeTruthy();
+  }
+  expect(result.mapping.neutral).toBe(0);
+  expect(result.mapping.positive).toBeCloseTo(10 ** (12 / 20) - 1, 10);
+  expect(result.mapping.negative).toBeCloseTo(10 ** (-12 / 20) - 1, 10);
+  expect(result.band1Positive.leftRms).toBeGreaterThan(result.baseline44100.leftRms * 1.2);
+  expect(result.band1PositiveMax.leftRms).toBeGreaterThan(result.baseline44100.leftRms * 1.2);
+  expect(result.band5Positive.leftRms).toBeGreaterThan(result.baseline44100.leftRms * 1.2);
+  expect(result.band5PositiveMid.leftRms).toBeGreaterThan(result.baseline48000.leftRms * 1.2);
+  expect(result.band10Positive.leftRms).toBeGreaterThan(result.baseline48000.leftRms * 1.2);
+  expect(result.band10PositiveMax.leftRms).toBeGreaterThan(result.baseline48000.leftRms * 1.2);
+  expect(result.band1Negative.leftRms).toBeLessThan(result.baseline44100.leftRms * 0.9);
+  expect(result.band1Negative.leftRms).toBeGreaterThan(0);
+  expect(result.band1NegativeMax.leftRms).toBeLessThan(result.baseline44100.leftRms * 0.9);
+  expect(result.band1NegativeMax.leftRms).toBeGreaterThan(0);
+  expect(result.band5Negative.leftRms).toBeLessThan(result.baseline48000.leftRms * 0.9);
+  expect(result.band5Negative.leftRms).toBeGreaterThan(0);
+  expect(result.band5NegativeMid.leftRms).toBeLessThan(result.baseline48000.leftRms * 0.9);
+  expect(result.band5NegativeMid.leftRms).toBeGreaterThan(0);
+  expect(result.band10Negative.leftRms).toBeLessThan(result.baseline48000.leftRms * 0.9);
+  expect(result.band10Negative.leftRms).toBeGreaterThan(0);
+  expect(result.band10NegativeMax.leftRms).toBeLessThan(result.baseline48000.leftRms * 0.9);
+  expect(result.band10NegativeMax.leftRms).toBeGreaterThan(0);
+  for (const response of result.centerResponses) expect(response.rms).toBeGreaterThan(result.baseline44100.leftRms * 1.05);
+  expect(result.leftOnly.rightMaxError).toBeLessThan(1e-6);
+  expect(result.rightOnly.leftMaxError).toBeLessThan(1e-6);
+  expect(result.mixed.finite).toBeTruthy();
+  for (const q of result.qValues) {
+    expect(Number.isFinite(q)).toBeTruthy();
+    expect(q).toBeGreaterThan(0);
+  }
 });
 
 test('double-click resets every slider through its default update path', async ({ page }) => {
@@ -219,6 +382,22 @@ test('FILTERBANK RESPONSE uses a bipolar zero-centered graph', async ({ page }) 
   const bandBars = index => page.locator(`[data-analyzer-band="${index}"] i`);
   const left = index => bandBars(index).nth(0);
   const right = index => bandBars(index).nth(1);
+  const graphVisuals = await page.locator('.chart-grid').evaluate(graph => {
+    const pair = graph.querySelector('.bar-pair');
+    const bars = pair.querySelectorAll('i');
+    return {
+      backgroundImage: getComputedStyle(graph).backgroundImage,
+      zeroLine: getComputedStyle(graph, '::after').backgroundColor,
+      pairWidth: pair.getBoundingClientRect().width,
+      barWidths: [...bars].map(bar => bar.getBoundingClientRect().width),
+      barCenters: [...bars].map(bar => { const rect = bar.getBoundingClientRect(); return rect.left + rect.width / 2; })
+    };
+  });
+  expect(graphVisuals.backgroundImage).toBe('none');
+  expect(graphVisuals.zeroLine).not.toBe('rgba(0, 0, 0, 0)');
+  expect(graphVisuals.barWidths[0]).toBeLessThan(graphVisuals.pairWidth / 2);
+  expect(graphVisuals.barWidths[1]).toBeLessThan(graphVisuals.pairWidth / 2);
+  expect(graphVisuals.barCenters[1] - graphVisuals.barCenters[0]).toBeGreaterThan(graphVisuals.barWidths[0]);
   const expectBars = async (index, height, isNegative) => {
     for (const bar of [left(index), right(index)]) {
       await expect(bar).toHaveAttribute('style', new RegExp(`height: ${height}%`));
@@ -368,6 +547,11 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
         testState.gains.push(parameter);
         return { gain: parameter, connect() {}, disconnect() {} };
       }
+      createChannelSplitter() { return { connect() {}, disconnect() {} }; }
+      createChannelMerger() { return { connect() {}, disconnect() {} }; }
+      createBiquadFilter() {
+        return { type: '', frequency: { value: 0 }, Q: { value: 0 }, connect() {}, disconnect() {} };
+      }
       createMediaStreamDestination() { return { stream: new MediaStream() }; }
       close() { this.state = 'closed'; return Promise.resolve(); }
     }
@@ -426,12 +610,13 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   await expect(page.locator('[data-control="inputGain"]')).toHaveValue('6');
   await expect(page.locator('[data-control="dryWet"]')).toHaveValue('50');
   await expect(page.locator('[data-control="volume"]')).toHaveValue('-12');
+  const restartGainOffset = await page.evaluate(() => window.__audioTestState.gains.length);
   await page.locator('[data-audio-start]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('ON');
-  expect(await page.evaluate(() => window.__audioTestState.gains[7].value)).toBeCloseTo(10 ** (6 / 20), 5);
-  expect(await page.evaluate(() => window.__audioTestState.gains[8].value)).toBe(0.5);
-  expect(await page.evaluate(() => window.__audioTestState.gains[9].value)).toBe(0.5);
-  expect(await page.evaluate(() => window.__audioTestState.gains[11].value)).toBeCloseTo(10 ** (-12 / 20), 5);
+  expect(await page.evaluate(offset => window.__audioTestState.gains[offset].value, restartGainOffset)).toBeCloseTo(10 ** (6 / 20), 5);
+  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 1].value, restartGainOffset)).toBe(0.5);
+  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 2].value, restartGainOffset)).toBe(0.5);
+  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 4].value, restartGainOffset)).toBeCloseTo(10 ** (-12 / 20), 5);
   await page.locator('[data-audio-stop]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('OFF');
   expect(consoleErrors).toEqual([]);
