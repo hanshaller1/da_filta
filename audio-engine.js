@@ -12,6 +12,7 @@
       this.onDevicesChanged = onDevicesChanged;
       this.status = 'OFF';
       this.inputGainDb = 0;
+      this.resonance = 0;
       this.dryWet = 50;
       this.volumeDb = -6;
       this.context = null;
@@ -27,6 +28,10 @@
       this.filterbank = null;
       this.bandGainLeft = Array(BAND_COUNT).fill(0);
       this.bandGainRight = Array(BAND_COUNT).fill(0);
+      this.feedbackBandLeft = Array(BAND_COUNT).fill(false);
+      this.feedbackBandRight = Array(BAND_COUNT).fill(false);
+      this.feedbackAllLeft = false;
+      this.feedbackAllRight = false;
       this.handleDeviceChange = () => this.refreshDevices().then(devices => this.onDevicesChanged?.(devices)).catch(() => {});
       if (navigator.mediaDevices?.addEventListener) navigator.mediaDevices.addEventListener('devicechange', this.handleDeviceChange);
     }
@@ -59,6 +64,13 @@
       this.setSmoothedParam(this.volumeGainNode?.gain, dbToGain(this.volumeDb));
     }
 
+    setResonance(value) {
+      const numericValue = Number(value);
+      this.resonance = Number.isFinite(numericValue) ? Math.max(-1, Math.min(1, numericValue)) : 0;
+      this.filterbank?.setResonance(this.resonance);
+      return this.resonance;
+    }
+
     setBandBaseGain(channel, index, value) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
       const nextValue = clampBandGain(value);
@@ -68,12 +80,48 @@
       return nextValue;
     }
 
+    setBandFeedback(channel, index, enabled) {
+      if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
+      if (channel !== 'left' && channel !== 'right') throw new RangeError('Ungültiger Audiokanal.');
+      const target = channel === 'left' ? this.feedbackBandLeft : this.feedbackBandRight;
+      const nextValue = Boolean(enabled);
+      target[index] = nextValue;
+      this.filterbank?.setBandFeedback(channel, index, nextValue);
+      return nextValue;
+    }
+
+    setFeedbackAll(channel, enabled) {
+      if (channel !== 'left' && channel !== 'right') throw new RangeError('Ungültiger Audiokanal.');
+      const nextValue = Boolean(enabled);
+      if (channel === 'left') this.feedbackAllLeft = nextValue;
+      else this.feedbackAllRight = nextValue;
+      this.filterbank?.setFeedbackAll(channel, nextValue);
+      return nextValue;
+    }
+
+    getFilterbankState() {
+      return {
+        bandGainLeft: this.bandGainLeft,
+        bandGainRight: this.bandGainRight,
+        feedbackBandLeft: this.feedbackBandLeft,
+        feedbackBandRight: this.feedbackBandRight,
+        feedbackAllLeft: this.feedbackAllLeft,
+        feedbackAllRight: this.feedbackAllRight,
+        resonance: this.resonance
+      };
+    }
+
     applyState(snapshot) {
       const left = Array.isArray(snapshot?.bandGainLeft) ? snapshot.bandGainLeft : [];
       const right = Array.isArray(snapshot?.bandGainRight) ? snapshot.bandGainRight : [];
       this.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(left[index] ?? 0));
       this.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(right[index] ?? 0));
-      if (this.filterbank) this.filterbank.applyState({ bandGainLeft: this.bandGainLeft, bandGainRight: this.bandGainRight });
+      this.feedbackBandLeft = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandLeft?.[index]));
+      this.feedbackBandRight = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandRight?.[index]));
+      this.feedbackAllLeft = Boolean(snapshot?.feedbackAllLeft);
+      this.feedbackAllRight = Boolean(snapshot?.feedbackAllRight);
+      this.setResonance(snapshot?.resonance);
+      if (this.filterbank) this.filterbank.applyState(this.getFilterbankState());
     }
 
     setSmoothedParam(param, value) {
@@ -118,10 +166,7 @@
         this.mixBus = this.context.createGain();
         this.volumeGainNode = this.context.createGain();
         this.destination = this.context.createMediaStreamDestination();
-        this.filterbank = await Filterbank.create(this.context, {
-          bandGainLeft: this.bandGainLeft,
-          bandGainRight: this.bandGainRight
-        });
+        this.filterbank = await Filterbank.create(this.context, this.getFilterbankState());
 
         // The wet branch stays structurally unchanged; Filterbank owns its DSP internally.
         this.source.connect(this.inputGainNode);

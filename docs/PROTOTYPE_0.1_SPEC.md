@@ -228,8 +228,19 @@ Die erste Filterbank-DSP-Stufe läuft in einem einzelnen Stereo-`AudioWorkletPro
 - `bandGainLeft` und `bandGainRight` steuern die beiden Kanäle getrennt
 - `-100 … +100` wird als Webapp-Prototypentscheidung auf `-12 … +12 dB` und anschließend auf den Delta-Gain abgebildet
 - bei `0` ist der Delta-Gain `0`; der Referenzpfad bleibt dadurch unverändert
+- per-band Feedback und FB ALL laufen vollständig getrennt für L/R innerhalb desselben Worklets
+- der lokale Feedback-Tap liegt post-Bandpass und pre-Delta-Gain; FB ALL verwendet die normierte Summe aller zehn Bandpass-Ausgänge
+- Feedback-Rückführungen verwenden `Math.tanh()` ausschließlich innerhalb der Schleife und einen separaten, positiven Audition-Pfad
+- der bipolare Resonance-Regler steuert nur Feedback-Stärke und -Polarität, nie Q oder Band-Gain
 
-Feedback, Resonance-DSP, LFO, Envelope-Follower und Spread-DSP sind weiterhin nicht implementiert.
+Folgende Werte sind bewusste Webapp-/Prototype-Designentscheidungen und keine behaupteten Erica-Hardwarewerte:
+
+- FB-ALL-Normalisierung: `1 / sqrt(10)`
+- maximale Feedback-Stärke: `1.25` mit quadratischer Resonance-Kennlinie
+- maximaler Audition-Anteil: `0.25`
+- Gate-Smoothing: `8 ms`; Resonance-Smoothing: `15 ms`
+
+LFO, Envelope-Follower und Spread-DSP sind weiterhin nicht implementiert.
 
 ## 6. Grundprinzip der Webapp-Bedienung
 

@@ -9,6 +9,11 @@
 
   const MAX_BAND_GAIN_DB = 12;
   const PARAMETER_SMOOTHING_SECONDS = 0.015;
+  const FEEDBACK_GATE_SMOOTHING_SECONDS = 0.008;
+  const RESONANCE_SMOOTHING_SECONDS = 0.015;
+  const MAX_FEEDBACK_GAIN = 1.25;
+  const MAX_AUDITION_GAIN = 0.25;
+  const FEEDBACK_ALL_NORMALIZATION = 1 / Math.sqrt(BAND_COUNT);
   const PROCESSOR_NAME = 'resonant-filterbank-processor';
   const workletModuleLoads = new WeakMap();
   const bandFrequencies = Object.freeze(BAND_DEFINITIONS.map(band => band.frequency));
@@ -23,6 +28,11 @@
 
   const controlToGainDb = control => MAX_BAND_GAIN_DB * (Number(control) / BAND_GAIN_MAX);
   const controlToDeltaGain = control => 10 ** (controlToGainDb(control) / 20) - 1;
+  const clampResonance = value => {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) return 0;
+    return Math.min(1, Math.max(-1, numericValue));
+  };
   const normalizeChannel = channel => {
     if (channel === 'left' || channel === 'L') return 'left';
     if (channel === 'right' || channel === 'R') return 'right';
@@ -31,6 +41,10 @@
   const readBandControls = (snapshot, property) => {
     const values = Array.isArray(snapshot?.[property]) ? snapshot[property] : [];
     return Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(values[index] ?? 0));
+  };
+  const readFeedbackGates = (snapshot, property) => {
+    const values = Array.isArray(snapshot?.[property]) ? snapshot[property] : [];
+    return Array.from({ length: BAND_COUNT }, (_, index) => Boolean(values[index]));
   };
   const getWorkletModuleUrl = () => new URL('filterbank-processor.js', window.location.href).href;
 
@@ -65,6 +79,11 @@
       this.disposed = false;
       this.bandGainLeft = readBandControls(initialState, 'bandGainLeft');
       this.bandGainRight = readBandControls(initialState, 'bandGainRight');
+      this.feedbackBandLeft = readFeedbackGates(initialState, 'feedbackBandLeft');
+      this.feedbackBandRight = readFeedbackGates(initialState, 'feedbackBandRight');
+      this.feedbackAllLeft = Boolean(initialState?.feedbackAllLeft);
+      this.feedbackAllRight = Boolean(initialState?.feedbackAllRight);
+      this.resonance = clampResonance(initialState?.resonance);
       this.inputNode = audioContext.createGain();
       this.outputNode = audioContext.createGain();
       this.inputNode.gain.value = 1;
@@ -81,8 +100,18 @@
           bandQs: [...bandQs],
           bandGainLeft: [...this.bandGainLeft],
           bandGainRight: [...this.bandGainRight],
+          feedbackBandLeft: [...this.feedbackBandLeft],
+          feedbackBandRight: [...this.feedbackBandRight],
+          feedbackAllLeft: this.feedbackAllLeft,
+          feedbackAllRight: this.feedbackAllRight,
+          resonance: this.resonance,
           maxBandGainDb: MAX_BAND_GAIN_DB,
-          smoothingTime: PARAMETER_SMOOTHING_SECONDS
+          smoothingTime: PARAMETER_SMOOTHING_SECONDS,
+          feedbackGateSmoothingTime: FEEDBACK_GATE_SMOOTHING_SECONDS,
+          resonanceSmoothingTime: RESONANCE_SMOOTHING_SECONDS,
+          feedbackAllNormalization: FEEDBACK_ALL_NORMALIZATION,
+          maxFeedbackGain: MAX_FEEDBACK_GAIN,
+          maxAuditionGain: MAX_AUDITION_GAIN
         }
       });
       this.inputNode.connect(this.workletNode);
@@ -112,14 +141,62 @@
       return nextValue;
     }
 
+    setBandFeedback(channel, index, enabled) {
+      if (this.disposed) return;
+      if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
+      const normalizedChannel = normalizeChannel(channel);
+      const target = normalizedChannel === 'left' ? this.feedbackBandLeft : this.feedbackBandRight;
+      const nextValue = Boolean(enabled);
+      target[index] = nextValue;
+      this.workletNode.port.postMessage({
+        type: 'set-band-feedback',
+        channel: normalizedChannel,
+        index,
+        enabled: nextValue
+      });
+      return nextValue;
+    }
+
+    setFeedbackAll(channel, enabled) {
+      if (this.disposed) return;
+      const normalizedChannel = normalizeChannel(channel);
+      const nextValue = Boolean(enabled);
+      if (normalizedChannel === 'left') this.feedbackAllLeft = nextValue;
+      else this.feedbackAllRight = nextValue;
+      this.workletNode.port.postMessage({
+        type: 'set-feedback-all',
+        channel: normalizedChannel,
+        enabled: nextValue
+      });
+      return nextValue;
+    }
+
+    setResonance(value) {
+      if (this.disposed) return;
+      const nextValue = clampResonance(value);
+      this.resonance = nextValue;
+      this.workletNode.port.postMessage({ type: 'set-resonance', value: nextValue });
+      return nextValue;
+    }
+
     applyState(snapshot) {
       if (this.disposed) return;
       this.bandGainLeft = readBandControls(snapshot, 'bandGainLeft');
       this.bandGainRight = readBandControls(snapshot, 'bandGainRight');
+      this.feedbackBandLeft = readFeedbackGates(snapshot, 'feedbackBandLeft');
+      this.feedbackBandRight = readFeedbackGates(snapshot, 'feedbackBandRight');
+      this.feedbackAllLeft = Boolean(snapshot?.feedbackAllLeft);
+      this.feedbackAllRight = Boolean(snapshot?.feedbackAllRight);
+      this.resonance = clampResonance(snapshot?.resonance);
       this.workletNode.port.postMessage({
         type: 'apply-state',
         bandGainLeft: [...this.bandGainLeft],
-        bandGainRight: [...this.bandGainRight]
+        bandGainRight: [...this.bandGainRight],
+        feedbackBandLeft: [...this.feedbackBandLeft],
+        feedbackBandRight: [...this.feedbackBandRight],
+        feedbackAllLeft: this.feedbackAllLeft,
+        feedbackAllRight: this.feedbackAllRight,
+        resonance: this.resonance
       });
     }
 
@@ -141,6 +218,11 @@
   Filterbank.controlToGainDb = controlToGainDb;
   Filterbank.controlToDeltaGain = controlToDeltaGain;
   Filterbank.PARAMETER_SMOOTHING_SECONDS = PARAMETER_SMOOTHING_SECONDS;
+  Filterbank.FEEDBACK_GATE_SMOOTHING_SECONDS = FEEDBACK_GATE_SMOOTHING_SECONDS;
+  Filterbank.RESONANCE_SMOOTHING_SECONDS = RESONANCE_SMOOTHING_SECONDS;
+  Filterbank.MAX_FEEDBACK_GAIN = MAX_FEEDBACK_GAIN;
+  Filterbank.MAX_AUDITION_GAIN = MAX_AUDITION_GAIN;
+  Filterbank.FEEDBACK_ALL_NORMALIZATION = FEEDBACK_ALL_NORMALIZATION;
   Filterbank.PROCESSOR_NAME = PROCESSOR_NAME;
   window.Filterbank = Filterbank;
 })();

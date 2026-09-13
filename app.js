@@ -59,6 +59,22 @@ const setBandBaseGain = (channel, index, value) => {
   });
   renderBand(index);
 };
+const setBandFeedback = (channel, index, enabled) => {
+  const channels = state.channelSelection === 'LR' ? ['left', 'right'] : [channel];
+  channels.forEach(targetChannel => {
+    const target = targetChannel === 'left' ? state.feedbackBandLeft : state.feedbackBandRight;
+    target[index] = Boolean(enabled);
+    audioEngine?.setBandFeedback(targetChannel, index, target[index]);
+  });
+};
+const setFeedbackAll = (channel, enabled) => {
+  const channels = state.channelSelection === 'LR' ? ['left', 'right'] : [channel];
+  channels.forEach(targetChannel => {
+    if (targetChannel === 'left') state.feedbackAllLeft = Boolean(enabled);
+    else state.feedbackAllRight = Boolean(enabled);
+    audioEngine?.setFeedbackAll(targetChannel, enabled);
+  });
+};
 faders.forEach((slider,index) => {
   slider.addEventListener('input', () => setBandBaseGain('left', index, slider.value));
   slider.addEventListener('dblclick', () => setBandBaseGain('left', index, BAND_GAIN_NEUTRAL));
@@ -81,10 +97,10 @@ document.querySelectorAll('[data-control]').forEach(slider => {
   });
   update();
 });
-document.querySelectorAll('[data-feedback-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.feedbackBand); const nextValue=!state.feedbackBandLeft[index]; state.feedbackBandLeft[index]=nextValue; state.feedbackBandRight[index]=nextValue; button.classList.toggle('active',nextValue); button.setAttribute('aria-pressed',String(nextValue)); }));
+document.querySelectorAll('[data-feedback-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.feedbackBand); const nextValue=!state.feedbackBandLeft[index]; setBandFeedback('left', index, nextValue); button.classList.toggle('active',nextValue); button.setAttribute('aria-pressed',String(nextValue)); }));
 document.querySelectorAll('[data-mod-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.modBand); state.modulated[index]=!state.modulated[index]; button.classList.toggle('active',state.modulated[index]); button.setAttribute('aria-pressed',String(state.modulated[index])); }));
 const fbAllButton = document.querySelector('.fb-all-toggle');
-fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; state.feedbackAllLeft=nextValue; state.feedbackAllRight=nextValue; fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent=nextValue?'ON':'OFF'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
+fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent=nextValue?'ON':'OFF'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
 
 const FB_CODES = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0'];
 const FADER_UP_CODES = ['KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI','KeyO','KeyP'];
@@ -150,6 +166,7 @@ const syncAudioParameters = () => {
 document.querySelector('[data-control="inputGain"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="dryWet"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="volume"]').addEventListener('input', syncAudioParameters);
+document.querySelector('[data-control="resonance"]').addEventListener('input', () => audioEngine.setResonance(state.resonance));
 syncAudioParameters();
 const refreshAudioDevices = async () => {
   try {
