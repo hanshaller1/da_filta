@@ -206,3 +206,153 @@ export class LinearTptSvf {
       return this.unitBand;
     }
 }
+
+// A small, symmetric 15-tap halfband FIR. Its response is approximately
+// flat at the native band range and attenuates the third harmonic of 11 kHz
+// before 2x decimation. Seven high-rate samples of group delay occur in each
+// direction, for a known total of seven native-rate samples.
+const HALF_BAND_2X_COEFFICIENTS = [
+  -0.0036514539902271761,
+  0,
+  0.016179253392499472,
+  0,
+  -0.068411776788146514,
+  0,
+  0.30494751734108722,
+  0.50187292008957385,
+  0.30494751734108722,
+  0,
+  -0.068411776788146514,
+  0,
+  0.016179253392499472,
+  0,
+  -0.0036514539902271761
+];
+
+class FixedHalfBandFir {
+  constructor() {
+    this.history = new Float64Array(HALF_BAND_2X_COEFFICIENTS.length);
+    this.writeIndex = 0;
+  }
+
+  reset() {
+    this.history.fill(0);
+    this.writeIndex = 0;
+  }
+
+  process(input) {
+    this.history[this.writeIndex] = Number.isFinite(input) ? input : 0;
+    let result = 0;
+    let index = this.writeIndex;
+    for (let tap = 0; tap < HALF_BAND_2X_COEFFICIENTS.length; tap += 1) {
+      result += HALF_BAND_2X_COEFFICIENTS[tap] * this.history[index];
+      index -= 1;
+      if (index < 0) index = HALF_BAND_2X_COEFFICIENTS_LENGTH - 1;
+    }
+    this.writeIndex += 1;
+    if (this.writeIndex === HALF_BAND_2X_COEFFICIENTS.length) this.writeIndex = 0;
+    return Number.isFinite(result) ? result : 0;
+  }
+}
+
+const HALF_BAND_2X_COEFFICIENTS_LENGTH = HALF_BAND_2X_COEFFICIENTS.length;
+
+/**
+ * Diagnostic-only 2x wrapper for a nonlinear positive TPT resonator.
+ *
+ * A separate linear reference traverses the identical interpolation and
+ * decimation filters. This makes `nonlinearBand - linearBand` free of FIR
+ * latency and phase artifacts before it is used as a future residual.
+ */
+export class OversampledPositiveTptResonator {
+  constructor(sampleRate, frequency, q) {
+    this.sampleRate = sampleRate;
+    this.oversampledSampleRate = sampleRate * 2;
+    this.frequency = frequency;
+    this.q = q;
+    this.latencyNativeSamples = 7;
+    this.inputInterpolator = new FixedHalfBandFir();
+    this.referenceDecimator = new FixedHalfBandFir();
+    this.nonlinearDecimator = new FixedHalfBandFir();
+    this.linearReferenceFilter = new LinearTptSvf(this.oversampledSampleRate, frequency, q);
+    this.nonlinearFilter = new LinearTptSvf(this.oversampledSampleRate, frequency, q);
+    this.linearBand = 0;
+    this.nonlinearBand = 0;
+    this.residual = 0;
+  }
+
+  reset() {
+    this.inputInterpolator.reset();
+    this.referenceDecimator.reset();
+    this.nonlinearDecimator.reset();
+    this.linearReferenceFilter.reset();
+    this.nonlinearFilter.reset();
+    this.linearBand = 0;
+    this.nonlinearBand = 0;
+    this.residual = 0;
+  }
+
+  process(input, dampingScale, drive, nonlinearEnabled) {
+    const sample = Number.isFinite(input) ? input : 0;
+    const useNonlinearStateFeedback = nonlinearEnabled === true;
+    this.linearReferenceFilter.setDampingScale(dampingScale);
+    this.nonlinearFilter.setDampingScale(dampingScale);
+
+    // Zero-stuffing uses a factor-of-two impulse before the unity-DC FIR.
+    // Both high-rate phases are always processed, preserving deterministic
+    // state evolution and constant latency.
+    for (let phase = 0; phase < 2; phase += 1) {
+      const interpolatedInput = this.inputInterpolator.process(phase === 0 ? 2 * sample : 0);
+      const referenceBand = this.linearReferenceFilter.process(interpolatedInput);
+      const nonlinearBand = useNonlinearStateFeedback
+        ? this.nonlinearFilter.processPositiveStateFeedback(interpolatedInput, dampingScale, drive)
+        : this.nonlinearFilter.process(interpolatedInput);
+      this.linearBand = this.referenceDecimator.process(referenceBand);
+      this.nonlinearBand = this.nonlinearDecimator.process(nonlinearBand);
+    }
+
+    this.residual = this.nonlinearBand - this.linearBand;
+    if (!Number.isFinite(this.linearBand + this.nonlinearBand + this.residual)) {
+      this.reset();
+      return 0;
+    }
+    return this.nonlinearBand;
+  }
+
+  get nonlinearSolverCallCount() {
+    return this.nonlinearFilter.nonlinearSolverCallCount;
+  }
+
+  get nonlinearSolverIterationTotal() {
+    return this.nonlinearFilter.nonlinearSolverIterationTotal;
+  }
+
+  get nonlinearSolverIterationMaximum() {
+    return this.nonlinearFilter.nonlinearSolverIterationMaximum;
+  }
+
+  get nonlinearFallbackCount() {
+    return this.nonlinearFilter.nonlinearFallbackCount;
+  }
+
+  get nonlinearNonFiniteResetCount() {
+    return this.nonlinearFilter.nonlinearNonFiniteResetCount;
+  }
+
+  get lastNonlinearSolverIterations() {
+    return this.nonlinearFilter.lastNonlinearSolverIterations;
+  }
+
+  get lastNonlinearConvergenceError() {
+    return this.nonlinearFilter.lastNonlinearConvergenceError;
+  }
+
+  get statePeak() {
+    return Math.max(
+      Math.abs(this.linearReferenceFilter.ic1eq),
+      Math.abs(this.linearReferenceFilter.ic2eq),
+      Math.abs(this.nonlinearFilter.ic1eq),
+      Math.abs(this.nonlinearFilter.ic2eq)
+    );
+  }
+}

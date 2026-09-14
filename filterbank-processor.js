@@ -1,4 +1,4 @@
-import { LinearTptSvf } from './tpt-svf.js';
+import { LinearTptSvf, OversampledPositiveTptResonator } from './tpt-svf.js';
 
 class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -77,8 +77,8 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       right: this.createFilters()
     };
     this.nonlinearResonatorFilters = this.enableNonlinearResonatorDiagnostics ? {
-      left: this.createFilters(),
-      right: this.createFilters()
+      left: this.createOversampledResonatorFilters(),
+      right: this.createOversampledResonatorFilters()
     } : null;
     this.resonatorMagnitudes = {
       left: Array(this.bandCount).fill(0),
@@ -169,8 +169,6 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
         this.resonatorMagnitudes[channel][band] = magnitude;
         this.resonatorAuditionGates[channel][band] = magnitude > 1e-12 ? 1 : 0;
         this.resonatorFilters[channel][band].setDampingScale(this.getResonatorDampingScale(magnitude));
-        this.nonlinearResonatorFilters?.[channel][band]
-          .setDampingScale(this.getResonatorDampingScale(magnitude));
       }
     }
   }
@@ -179,6 +177,18 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     const filters = new Array(this.bandCount);
     for (let index = 0; index < this.bandCount; index += 1) {
       filters[index] = new LinearTptSvf(sampleRate, this.bandFrequencies[index], this.bandQs[index]);
+    }
+    return filters;
+  }
+
+  createOversampledResonatorFilters() {
+    const filters = new Array(this.bandCount);
+    for (let index = 0; index < this.bandCount; index += 1) {
+      filters[index] = new OversampledPositiveTptResonator(
+        sampleRate,
+        this.bandFrequencies[index],
+        this.bandQs[index]
+      );
     }
     return filters;
   }
@@ -352,7 +362,6 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       resonatorMagnitudes[band] = resonatorMagnitude;
       const resonatorDampingScale = this.getResonatorDampingScale(resonatorMagnitude);
       resonatorFilters[band].setDampingScale(resonatorDampingScale);
-      nonlinearResonatorFilters?.[band].setDampingScale(resonatorDampingScale);
       const resonatorAuditionTarget = this.resonanceTarget > 0 && localGate > 1e-12 ? 1 : 0;
       const resonatorAuditionGate = resonatorAuditionTarget + this.resonanceSmoothingCoefficient * (
         resonatorAuditionGates[band] - resonatorAuditionTarget
@@ -368,10 +377,13 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       let nonlinearResidual = 0;
       if (nonlinearResonatorFilters) {
         const nonlinearFilter = nonlinearResonatorFilters[band];
-        nonlinearResonatorBandOutput = resonatorMagnitude > 1e-12
-          ? nonlinearFilter.processPositiveStateFeedback(source, resonatorDampingScale, this.nonlinearResonatorDrive)
-          : nonlinearFilter.process(source);
-        nonlinearResidual = nonlinearResonatorBandOutput - bandOutput;
+        nonlinearResonatorBandOutput = nonlinearFilter.process(
+          source,
+          resonatorDampingScale,
+          this.nonlinearResonatorDrive,
+          resonatorMagnitude > 1e-12
+        );
+        nonlinearResidual = nonlinearFilter.residual;
       }
       bandOutputs[band] = bandOutput;
       resonatorBandOutputs[band] = resonatorBandOutput;
@@ -398,8 +410,8 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
         if (nonlinearResonatorFilters) {
           const nonlinearFilter = nonlinearResonatorFilters[band];
           const nonlinearStatePeak = Math.max(
-            Math.abs(nonlinearFilter.ic1eq),
-            Math.abs(nonlinearFilter.ic2eq)
+            nonlinearFilter.statePeak,
+            0
           );
           diagnostics.nonlinearBandPeak[band] = Math.max(
             diagnostics.nonlinearBandPeak[band], Math.abs(nonlinearResonatorBandOutput)
