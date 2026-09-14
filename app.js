@@ -31,8 +31,52 @@ const addDevSelectOptions = (select, values, format = value => String(value)) =>
 addDevSelectOptions(positiveResonanceAuditionSelect, [1.50, 2.00, 4.00], value => value.toFixed(2));
 addDevSelectOptions(positiveResonanceDriveSelect, [24, 32]);
 addDevSelectOptions(positiveResonanceDampingFloorSelect, [-0.05, -0.10], value => value.toFixed(2));
+const devLabPanel = document.querySelector('[data-dev-lab-panel]');
+const devLabToggle = document.querySelector('[data-dev-lab-toggle]');
+const devLabControls = document.querySelector('.dev-lab-panel .dev-lab-controls');
+const devLabGroups = new Map();
+[['input', 'INPUT'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
+  const group = document.createElement('section');
+  group.className = 'dev-lab-group';
+  group.dataset.devLabGroup = value;
+  group.innerHTML = `<h2>${label}</h2>`;
+  devLabControls?.append(group);
+  devLabGroups.set(value, group);
+});
+const groupForDevControl = control => {
+  const attribute = control.querySelector('select')?.getAttributeNames().find(name => name.startsWith('data-')) ?? '';
+  if (attribute === 'data-input-preamp-stage') return 'input';
+  if (attribute === 'data-reference-level' || attribute === 'data-band-boost-db' || attribute === 'data-band-cut-db' || attribute === 'data-wet-model') return 'filterbank';
+  if (attribute === 'data-feedback-all-engine' || attribute === 'data-feedback-all-source' || attribute === 'data-feedback-all-level') return 'main';
+  return 'resonator';
+};
+const inlineDevLabControls = document.querySelector('.analyzer-header .dev-lab-controls');
+inlineDevLabControls?.querySelectorAll(':scope > .dev-audition-control, :scope > .dev-lab-control').forEach(control => {
+  devLabGroups.get(groupForDevControl(control))?.append(control);
+});
+inlineDevLabControls?.remove();
+devLabToggle?.addEventListener('click', () => {
+  const open = Boolean(devLabPanel?.hidden);
+  if (devLabPanel) devLabPanel.hidden = !open;
+  devLabToggle.classList.toggle('active', open);
+  devLabToggle.setAttribute('aria-expanded', String(open));
+});
 const addDevLabSelector = (label, attribute, options) => {
-  const container = document.querySelector('.dev-lab-controls');
+  const container = devLabGroups.get({
+    'data-input-preamp-stage': 'input',
+    'data-reference-level': 'filterbank',
+    'data-band-boost-db': 'filterbank',
+    'data-band-cut-db': 'filterbank',
+    'data-wet-model': 'filterbank',
+    'data-feedback-topology': 'local-feedback',
+    'data-feedback-tap': 'local-feedback',
+    'data-common-bus-saturation-mode': 'local-feedback',
+    'data-common-bus-drive': 'local-feedback',
+    'data-common-bus-ceiling': 'local-feedback',
+    'data-feedback-all-engine': 'main',
+    'data-feedback-all-source': 'main',
+    'data-feedback-all-level': 'main'
+  }[attribute] ?? 'resonator');
   if (!container) return null;
   const control = document.createElement('label');
   control.className = 'dev-lab-control';
