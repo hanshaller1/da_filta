@@ -11,6 +11,7 @@ const {
 } = window.ResonantState;
 const state = createInitialState();
 let audioEngine = null;
+let panic = () => {};
 const POSITIVE_RESONANCE_AUDITION_VALUES = [0.10, 0.20, 0.30, 0.40, 0.60, 0.80, 1.00, 1.50, 2.00, 4.00];
 const positiveResonanceAuditionSelect = document.querySelector('[data-positive-resonance-audition]');
 const positiveResonanceDriveSelect = document.querySelector('[data-positive-resonance-drive]');
@@ -441,9 +442,43 @@ const FADER_UP_CODES = ['KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI',
 const FADER_DOWN_CODES = ['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK','KeyL','Semicolon'];
 const FADER_NEUTRAL_CODES = ['KeyZ','KeyX','KeyC','KeyV','KeyB','KeyN','KeyM','Comma','Period','Slash'];
 const BAND_GAIN_STEP = (BAND_GAIN_MAX - BAND_GAIN_MIN) * 0.05;
+const DRIVE_UP_CODE = 'Equal';
+const DRIVE_DOWN_CODE = 'Minus';
+const RESONANCE_UP_CODE = 'BracketRight';
+const RESONANCE_DOWN_CODE = 'BracketLeft';
+const VOLUME_UP_CODE = 'Backslash';
+const VOLUME_DOWN_CODE = 'Quote';
 const isEditableTarget = target => target instanceof HTMLElement && ((target.matches('input, textarea, select') && !target.matches('input[type="range"]')) || target.isContentEditable);
+const renderGlobalControlValue = (name, value) => {
+  const definition = GLOBAL_CONTROL_DEFINITIONS[name];
+  const slider = document.querySelector(`[data-control="${name}"]`);
+  if (!definition || !slider) return;
+  const clamped = Math.min(definition.max, Math.max(definition.min, Number(value)));
+  const normalized = Number(clamped.toFixed(2));
+  state[name] = normalized;
+  slider.value = String(normalized);
+  const output = document.querySelector(`[data-output="${name}"]`);
+  if (output) output.textContent = formatValue(name, normalized);
+};
+const setGlobalControlValue = (name, value) => {
+  const slider = document.querySelector(`[data-control="${name}"]`);
+  renderGlobalControlValue(name, value);
+  if (!slider) return;
+  slider.dispatchEvent(new Event('input', { bubbles: true }));
+};
 document.addEventListener('keydown', event => {
   if (isEditableTarget(event.target)) return;
+  if (event.code === 'Space' || event.code === 'Enter' || event.code === 'NumpadEnter') {
+    if (!event.repeat) panic();
+    event.preventDefault();
+    return;
+  }
+  if (event.code === DRIVE_UP_CODE) { setGlobalControlValue('inputGain', state.inputGain + 0.5); event.preventDefault(); return; }
+  if (event.code === DRIVE_DOWN_CODE) { setGlobalControlValue('inputGain', state.inputGain - 0.5); event.preventDefault(); return; }
+  if (event.code === RESONANCE_UP_CODE) { setGlobalControlValue('resonance', state.resonance + 0.02); event.preventDefault(); return; }
+  if (event.code === RESONANCE_DOWN_CODE) { setGlobalControlValue('resonance', state.resonance - 0.02); event.preventDefault(); return; }
+  if (event.code === VOLUME_UP_CODE) { setGlobalControlValue('volume', state.volume + 0.5); event.preventDefault(); return; }
+  if (event.code === VOLUME_DOWN_CODE) { setGlobalControlValue('volume', state.volume - 0.5); event.preventDefault(); return; }
   const bandIndex = FB_CODES.indexOf(event.code);
   if (bandIndex !== -1) { if(event.shiftKey) document.querySelector(`[data-mod-band="${bandIndex}"]`).click(); else document.querySelector(`[data-feedback-band="${bandIndex}"]`).click(); event.preventDefault(); return; }
   const upIndex = FADER_UP_CODES.indexOf(event.code);
@@ -458,6 +493,7 @@ const inputDeviceSelect = document.querySelector('[data-audio-input]');
 const outputDeviceSelect = document.querySelector('[data-audio-output]');
 const startAudioButton = document.querySelector('[data-audio-start]');
 const stopAudioButton = document.querySelector('[data-audio-stop]');
+const panicAudioButton = document.querySelector('[data-audio-panic]');
 const audioStatus = document.querySelector('[data-audio-status]');
 const audioMessage = document.querySelector('[data-audio-message]');
 let hasManualInputSelection = false;
@@ -576,6 +612,23 @@ document.querySelector('[data-control="dryWet"]').addEventListener('input', sync
 document.querySelector('[data-control="volume"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="resonance"]').addEventListener('input', () => audioEngine.setResonance(state.resonance));
 syncAudioParameters();
+panic = () => {
+  audioEngine?.panic();
+  renderGlobalControlValue('resonance', 0);
+  renderGlobalControlValue('dryWet', 0);
+  renderGlobalControlValue('inputGain', 0);
+  state.feedbackBandLeft.fill(false);
+  state.feedbackBandRight.fill(false);
+  state.feedbackAllLeft = false;
+  state.feedbackAllRight = false;
+  document.querySelectorAll('[data-feedback-band]').forEach(button => {
+    button.classList.remove('active');
+    button.setAttribute('aria-pressed', 'false');
+  });
+  fbAllButton.classList.remove('active');
+  fbAllButton.textContent = 'OFF';
+  fbAllButton.setAttribute('aria-pressed', 'false');
+};
 const refreshAudioDevices = async () => {
   try {
     const devices = await audioEngine.refreshDevices();
@@ -593,5 +646,6 @@ startAudioButton.addEventListener('click', async () => {
   }
 });
 stopAudioButton.addEventListener('click', () => audioEngine.stop());
+panicAudioButton?.addEventListener('click', panic);
 updateAudioStatus('OFF');
 refreshAudioDevices();

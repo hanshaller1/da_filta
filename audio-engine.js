@@ -91,11 +91,22 @@
       return this.inputPreampStage;
     }
 
-    setDryWet(value) {
+    setDryWet(value, smoothingTime = 0.015) {
       this.dryWet = Math.max(0, Math.min(100, Number(value)));
       const gains = dryWetGains(this.dryWet);
-      this.setSmoothedParam(this.dryGainNode?.gain, gains.dry);
-      this.setSmoothedParam(this.wetGainNode?.gain, gains.wet);
+      this.setSmoothedParam(this.dryGainNode?.gain, gains.dry, smoothingTime);
+      this.setSmoothedParam(this.wetGainNode?.gain, gains.wet, smoothingTime);
+    }
+
+    panic() {
+      this.setDryWet(0, 0.008);
+      this.setResonance(0);
+      this.feedbackBandLeft.fill(false);
+      this.feedbackBandRight.fill(false);
+      this.feedbackAllLeft = false;
+      this.feedbackAllRight = false;
+      this.filterbank?.panic();
+      this.setInputGainDb(0);
     }
 
     setVolumeDb(value) {
@@ -248,16 +259,16 @@
       if (this.filterbank) this.filterbank.applyState(this.getFilterbankState());
     }
 
-    setSmoothedParam(param, value) {
-      this.setAudioParam(param, value, false);
+    setSmoothedParam(param, value, smoothingTime = 0.015) {
+      this.setAudioParam(param, value, false, smoothingTime);
     }
 
-    setAudioParam(param, value, immediate) {
+    setAudioParam(param, value, immediate, smoothingTime = 0.015) {
       if (!param) return;
       if (immediate) { param.value = value; return; }
       const now = this.context?.currentTime || 0;
       if (typeof param.cancelScheduledValues === 'function') param.cancelScheduledValues(now);
-      if (typeof param.setTargetAtTime === 'function') param.setTargetAtTime(value, now, 0.015);
+      if (typeof param.setTargetAtTime === 'function') param.setTargetAtTime(value, now, smoothingTime);
       else param.value = value;
     }
 

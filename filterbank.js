@@ -257,6 +257,15 @@
       return nextValue;
     }
 
+    panic() {
+      this.feedbackBandLeft.fill(false);
+      this.feedbackBandRight.fill(false);
+      this.feedbackAllLeft = false;
+      this.feedbackAllRight = false;
+      this.resonance = 0;
+      if (!this.disposed) this.workletNode.port.postMessage({ type: 'panic' });
+    }
+
     setPositiveResonanceAuditionGain(value) {
       if (this.disposed) return;
       const nextValue = normalizePositiveResonanceAuditionGain(value);

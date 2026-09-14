@@ -490,6 +490,30 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     }
   }
 
+  panic() {
+    this.setResonance(0, true);
+    for (const channel of ['left', 'right']) {
+      this.feedbackGates[channel].fill(0);
+      this.feedbackGateTargets[channel].fill(0);
+      this.feedbackReturns[channel].fill(0);
+      this.bandOutputs[channel].fill(0);
+      this.resonatorBandOutputs[channel].fill(0);
+      this.resonanceResiduals[channel].fill(0);
+      this.resonatorMagnitudes[channel].fill(0);
+      this.resonatorAuditionGates[channel].fill(0);
+      this.resonatorFilters[channel].forEach(filter => filter.reset());
+      this.nonlinearResonatorFilters?.[channel].forEach(filter => filter.reset());
+    }
+    this.feedbackAllGates.left = 0;
+    this.feedbackAllGates.right = 0;
+    this.feedbackAllGateTargets.left = 0;
+    this.feedbackAllGateTargets.right = 0;
+    this.commonFeedbackReturns.left = 0;
+    this.commonFeedbackReturns.right = 0;
+    this.clearMainCommonFeedbackReturns();
+    this.clearLegacyFeedbackReturns();
+  }
+
   applyCommonBusSaturation(drive) {
     if (!Number.isFinite(drive)) return null;
     return this.commonBusSaturationMode === 'constant-ceiling'
@@ -613,6 +637,7 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-feedback-all-engine') { this.setFeedbackAllEngine(data.value); return; }
     if (data.type === 'set-feedback-all-source') { this.setFeedbackAllSource(data.value); return; }
     if (data.type === 'set-feedback-all-level') { this.setFeedbackAllLevel(data.value); return; }
+    if (data.type === 'panic') { this.panic(); return; }
     if (data.type === 'apply-state') {
       this.applyState(data);
       return;

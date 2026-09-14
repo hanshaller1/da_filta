@@ -17,11 +17,11 @@
   const BAND_GAIN_MAX = 100;
   const BAND_GAIN_NEUTRAL = 0;
   const GLOBAL_CONTROL_DEFINITIONS = Object.freeze({
-    inputGain: Object.freeze({ min: 0, max: 24, step: 1, defaultValue: 0 }),
+    inputGain: Object.freeze({ min: 0, max: 24, step: 0.5, defaultValue: 0 }),
     resonance: Object.freeze({ min: -1, max: 1, step: 0.01, defaultValue: 0 }),
     dryWet: Object.freeze({ min: 0, max: 100, step: 1, defaultValue: 50 }),
     spread: Object.freeze({ min: -1, max: 1, step: 0.01, defaultValue: 0 }),
-    volume: Object.freeze({ min: -60, max: 0, step: 1, defaultValue: -6 })
+    volume: Object.freeze({ min: -60, max: 0, step: 0.5, defaultValue: -6 })
   });
 
   const createArray = (value) => Array(BAND_COUNT).fill(value);
