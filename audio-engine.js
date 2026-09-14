@@ -6,6 +6,7 @@
     return { dry: 1 - wet, wet };
   };
   const INPUT_PREAMP_PROCESSOR_NAME = 'resonant-input-preamp-processor';
+  const FEEDBACK_ALL_LEVELS = Object.freeze(['raw', 'sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth']);
   const inputPreampModuleLoads = new WeakMap();
   const loadInputPreampModule = async audioContext => {
     if (!audioContext?.audioWorklet?.addModule) throw new Error('AudioWorklet wird von diesem Browser oder AudioContext nicht unterstÃ¼tzt.');
@@ -166,7 +167,7 @@
     setCommonBusCeiling(value) { this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setCommonBusCeiling(this.commonBusCeiling); return this.commonBusCeiling; }
     setFeedbackAllEngine(value) { this.feedbackAllEngine = value === 'common-bus' ? 'common-bus' : 'legacy'; this.filterbank?.setFeedbackAllEngine(this.feedbackAllEngine); return this.feedbackAllEngine; }
     setFeedbackAllSource(value) { this.feedbackAllSource = value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; this.filterbank?.setFeedbackAllSource(this.feedbackAllSource); return this.feedbackAllSource; }
-    setFeedbackAllLevel(value) { this.feedbackAllLevel = value === 'sqrt10' || value === 'tenth' ? value : 'raw'; this.filterbank?.setFeedbackAllLevel(this.feedbackAllLevel); return this.feedbackAllLevel; }
+    setFeedbackAllLevel(value) { this.feedbackAllLevel = FEEDBACK_ALL_LEVELS.includes(value) ? value : 'raw'; this.filterbank?.setFeedbackAllLevel(this.feedbackAllLevel); return this.feedbackAllLevel; }
 
     setBandBaseGain(channel, index, value) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');

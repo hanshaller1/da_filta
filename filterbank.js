@@ -26,6 +26,7 @@
   const REFERENCE_LEVEL = 1;
   const BAND_BOOST_DB = 12;
   const BAND_CUT_DB = 12;
+  const FEEDBACK_ALL_LEVELS = Object.freeze(['raw', 'sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth']);
   const FEEDBACK_ALL_NORMALIZATION = 1 / Math.sqrt(BAND_COUNT);
   const PROCESSOR_NAME = 'resonant-filterbank-processor';
   const workletModuleLoads = new WeakMap();
@@ -72,6 +73,7 @@
   const normalizeReferenceLevel = value => [1, 0.75, 0.5, 0.25, 0].includes(Number(value)) ? Number(value) : REFERENCE_LEVEL;
   const normalizeBandBoostDb = value => [12, 18, 24].includes(Number(value)) ? Number(value) : BAND_BOOST_DB;
   const normalizeBandCutDb = value => [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : BAND_CUT_DB;
+  const normalizeFeedbackAllLevel = value => FEEDBACK_ALL_LEVELS.includes(value) ? value : 'raw';
   const normalizePositiveResonanceEngine = value => value === 'phase2' ? value : 'tpt';
   const normalizeChannel = channel => {
     if (channel === 'left' || channel === 'L') return 'left';
@@ -142,9 +144,7 @@
       this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(initialState?.commonBusCeiling)) ? Number(initialState.commonBusCeiling) : 1;
       this.feedbackAllEngine = initialState?.feedbackAllEngine === 'common-bus' ? 'common-bus' : 'legacy';
       this.feedbackAllSource = initialState?.feedbackAllSource === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum';
-      this.feedbackAllLevel = initialState?.feedbackAllLevel === 'sqrt10' || initialState?.feedbackAllLevel === 'tenth'
-        ? initialState.feedbackAllLevel
-        : 'raw';
+      this.feedbackAllLevel = normalizeFeedbackAllLevel(initialState?.feedbackAllLevel);
       this.inputNode = audioContext.createGain();
       this.outputNode = audioContext.createGain();
       this.inputNode.gain.value = 1;
@@ -317,7 +317,7 @@
     setCommonBusCeiling(value) { if (!this.disposed) { this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; this.workletNode.port.postMessage({ type: 'set-common-bus-ceiling', value: this.commonBusCeiling }); } return this.commonBusCeiling; }
     setFeedbackAllEngine(value) { if (!this.disposed) { this.feedbackAllEngine = value === 'common-bus' ? 'common-bus' : 'legacy'; this.workletNode.port.postMessage({ type: 'set-feedback-all-engine', value: this.feedbackAllEngine }); } return this.feedbackAllEngine; }
     setFeedbackAllSource(value) { if (!this.disposed) { this.feedbackAllSource = value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; this.workletNode.port.postMessage({ type: 'set-feedback-all-source', value: this.feedbackAllSource }); } return this.feedbackAllSource; }
-    setFeedbackAllLevel(value) { if (!this.disposed) { this.feedbackAllLevel = value === 'sqrt10' || value === 'tenth' ? value : 'raw'; this.workletNode.port.postMessage({ type: 'set-feedback-all-level', value: this.feedbackAllLevel }); } return this.feedbackAllLevel; }
+    setFeedbackAllLevel(value) { if (!this.disposed) { this.feedbackAllLevel = normalizeFeedbackAllLevel(value); this.workletNode.port.postMessage({ type: 'set-feedback-all-level', value: this.feedbackAllLevel }); } return this.feedbackAllLevel; }
 
     applyState(snapshot) {
       if (this.disposed) return;
@@ -343,9 +343,7 @@
       this.wetModel = snapshot?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : this.wetModel;
       this.feedbackAllEngine = snapshot?.feedbackAllEngine === 'common-bus' ? 'common-bus' : this.feedbackAllEngine;
       this.feedbackAllSource = snapshot?.feedbackAllSource === 'pre-gain-sum' ? 'pre-gain-sum' : this.feedbackAllSource;
-      this.feedbackAllLevel = snapshot?.feedbackAllLevel === 'sqrt10' || snapshot?.feedbackAllLevel === 'tenth'
-        ? snapshot.feedbackAllLevel
-        : this.feedbackAllLevel;
+      if (snapshot?.feedbackAllLevel !== undefined) this.feedbackAllLevel = normalizeFeedbackAllLevel(snapshot.feedbackAllLevel);
       this.workletNode.port.postMessage({
         type: 'apply-state',
         bandGainLeft: [...this.bandGainLeft],
