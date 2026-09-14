@@ -10,10 +10,27 @@ const {
 } = window.ResonantState;
 const state = createInitialState();
 let audioEngine = null;
-const POSITIVE_RESONANCE_AUDITION_VALUES = [0.10, 0.20, 0.30, 0.40, 0.60, 0.80, 1.00];
+const POSITIVE_RESONANCE_AUDITION_VALUES = [0.10, 0.20, 0.30, 0.40, 0.60, 0.80, 1.00, 1.50, 2.00, 4.00];
 const positiveResonanceAuditionSelect = document.querySelector('[data-positive-resonance-audition]');
 const positiveResonanceDriveSelect = document.querySelector('[data-positive-resonance-drive]');
 const positiveResonanceDampingFloorSelect = document.querySelector('[data-positive-resonance-damping-floor]');
+const positiveResonanceOutputSelect = document.querySelector('[data-positive-resonance-output]');
+const positiveResonanceLatencySelect = document.querySelector('[data-positive-resonance-latency]');
+const positiveResonanceCurveSelect = document.querySelector('[data-positive-resonance-curve]');
+const addDevSelectOptions = (select, values, format = value => String(value)) => {
+  if (!select) return;
+  values.forEach(value => {
+    const optionValue = format(value);
+    if ([...select.options].some(option => option.value === optionValue)) return;
+    const option = document.createElement('option');
+    option.value = optionValue;
+    option.textContent = optionValue;
+    select.append(option);
+  });
+};
+addDevSelectOptions(positiveResonanceAuditionSelect, [1.50, 2.00, 4.00], value => value.toFixed(2));
+addDevSelectOptions(positiveResonanceDriveSelect, [24, 32]);
+addDevSelectOptions(positiveResonanceDampingFloorSelect, [-0.05, -0.10], value => value.toFixed(2));
 const THEME_STORAGE_KEY = 'resonant-filterbank-theme';
 const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'soft-neutral', 'pro-console'];
 const themeSelect = document.querySelector('[data-theme-select]');
@@ -170,7 +187,7 @@ const setPositiveResonanceAuditionGain = value => {
 };
 setPositiveResonanceAuditionGain(positiveResonanceAuditionSelect?.value ?? 0.10);
 positiveResonanceAuditionSelect?.addEventListener('change', event => setPositiveResonanceAuditionGain(event.target.value));
-const POSITIVE_RESONANCE_DRIVE_VALUES = [1, 2, 4, 8, 16];
+const POSITIVE_RESONANCE_DRIVE_VALUES = [1, 2, 4, 8, 16, 24, 32];
 const setPositiveResonanceDrive = value => {
   const numericValue = Number(value);
   const nextValue = POSITIVE_RESONANCE_DRIVE_VALUES.includes(numericValue) ? numericValue : 1;
@@ -179,7 +196,7 @@ const setPositiveResonanceDrive = value => {
 };
 setPositiveResonanceDrive(positiveResonanceDriveSelect?.value ?? 1);
 positiveResonanceDriveSelect?.addEventListener('change', event => setPositiveResonanceDrive(event.target.value));
-const POSITIVE_RESONANCE_DAMPING_FLOOR_VALUES = [0.10, 0.05, 0.02, 0.00, -0.02];
+const POSITIVE_RESONANCE_DAMPING_FLOOR_VALUES = [0.10, 0.05, 0.02, 0.00, -0.02, -0.05, -0.10];
 const setPositiveResonanceDampingFloor = value => {
   const numericValue = Number(value);
   const nextValue = POSITIVE_RESONANCE_DAMPING_FLOOR_VALUES.includes(numericValue) ? numericValue : 0.10;
@@ -188,6 +205,30 @@ const setPositiveResonanceDampingFloor = value => {
 };
 setPositiveResonanceDampingFloor(positiveResonanceDampingFloorSelect?.value ?? 0.10);
 positiveResonanceDampingFloorSelect?.addEventListener('change', event => setPositiveResonanceDampingFloor(event.target.value));
+const POSITIVE_RESONANCE_OUTPUT_VALUES = ['current-residual', 'nonlinear-base', 'full-nonlinear'];
+const setPositiveResonanceOutputMode = value => {
+  const nextValue = POSITIVE_RESONANCE_OUTPUT_VALUES.includes(value) ? value : 'current-residual';
+  if (positiveResonanceOutputSelect) positiveResonanceOutputSelect.value = nextValue;
+  audioEngine.setPositiveResonanceOutputMode(nextValue);
+};
+setPositiveResonanceOutputMode(positiveResonanceOutputSelect?.value ?? 'current-residual');
+positiveResonanceOutputSelect?.addEventListener('change', event => setPositiveResonanceOutputMode(event.target.value));
+const POSITIVE_RESONANCE_LATENCY_VALUES = ['current', 'matched'];
+const setPositiveResonanceLatencyMode = value => {
+  const nextValue = POSITIVE_RESONANCE_LATENCY_VALUES.includes(value) ? value : 'current';
+  if (positiveResonanceLatencySelect) positiveResonanceLatencySelect.value = nextValue;
+  audioEngine.setPositiveResonanceLatencyMode(nextValue);
+};
+setPositiveResonanceLatencyMode(positiveResonanceLatencySelect?.value ?? 'current');
+positiveResonanceLatencySelect?.addEventListener('change', event => setPositiveResonanceLatencyMode(event.target.value));
+const POSITIVE_RESONANCE_CURVE_VALUES = ['current', 'early', 'aggressive'];
+const setPositiveResonanceCurve = value => {
+  const nextValue = POSITIVE_RESONANCE_CURVE_VALUES.includes(value) ? value : 'current';
+  if (positiveResonanceCurveSelect) positiveResonanceCurveSelect.value = nextValue;
+  audioEngine.setPositiveResonanceCurve(nextValue);
+};
+setPositiveResonanceCurve(positiveResonanceCurveSelect?.value ?? 'current');
+positiveResonanceCurveSelect?.addEventListener('change', event => setPositiveResonanceCurve(event.target.value));
 const syncAudioParameters = () => {
   audioEngine.setInputGainDb(state.inputGain);
   audioEngine.setDryWet(state.dryWet);

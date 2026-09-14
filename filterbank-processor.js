@@ -27,6 +27,11 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     this.positiveResonanceDriveTarget = this.positiveResonanceDrive;
     this.positiveResonanceAuditionGain = this.readPositiveOption(processorOptions.positiveResonanceAuditionGain, 0.1);
     this.positiveResonanceAuditionGainTarget = this.positiveResonanceAuditionGain;
+    this.positiveResonanceOutputMode = this.readPositiveResonanceOutputMode(processorOptions.positiveResonanceOutputMode);
+    this.positiveResonanceOutputModeTarget = this.positiveResonanceOutputMode;
+    this.positiveResonanceLatencyMode = this.readPositiveResonanceLatencyMode(processorOptions.positiveResonanceLatencyMode);
+    this.positiveResonanceLatencyModeTarget = this.positiveResonanceLatencyMode;
+    this.positiveResonanceCurve = this.readPositiveResonanceCurve(processorOptions.positiveResonanceCurve);
     this.feedbackAllNormalization = this.readPositiveOption(processorOptions.feedbackAllNormalization, 1 / Math.sqrt(this.bandCount));
     this.bandGainSmoothingCoefficient = this.smoothingCoefficient(processorOptions.smoothingTime, 0.015);
     this.feedbackGateSmoothingCoefficient = this.smoothingCoefficient(processorOptions.feedbackGateSmoothingTime, 0.008);
@@ -43,6 +48,13 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       processorOptions.resonatorDampingFloorSmoothingTime,
       0.015
     );
+    this.devModeSmoothingCoefficient = this.smoothingCoefficient(0.015, 0.015);
+    this.positiveResonanceOutputWeights = new Float64Array(3);
+    this.positiveResonanceOutputTargets = new Float64Array(3);
+    this.positiveResonanceLatencyWeights = new Float64Array(2);
+    this.positiveResonanceLatencyTargets = new Float64Array(2);
+    this.setPositiveResonanceOutputMode(this.positiveResonanceOutputMode, true);
+    this.setPositiveResonanceLatencyMode(this.positiveResonanceLatencyMode, true);
     this.disposed = false;
     this.bandControls = {
       left: this.readControls(processorOptions.bandGainLeft),
@@ -131,16 +143,36 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   readResonatorDampingFloor(value) {
     const numericValue = Number(value);
     return numericValue === 0.1 || numericValue === 0.05 || numericValue === 0.02
-      || numericValue === 0 || numericValue === -0.02
+      || numericValue === 0 || numericValue === -0.02 || numericValue === -0.05 || numericValue === -0.10
       ? numericValue
       : 0.1;
   }
 
   readDiagnosticDrive(value, fallback = 4) {
     const numericValue = Number(value);
-    return numericValue === 1 || numericValue === 2 || numericValue === 4 || numericValue === 8 || numericValue === 16
+    return numericValue === 1 || numericValue === 2 || numericValue === 4 || numericValue === 8 || numericValue === 16 || numericValue === 24 || numericValue === 32
       ? numericValue
       : fallback;
+  }
+
+  readPositiveResonanceOutputMode(value) {
+    return value === 'nonlinear-base' || value === 'full-nonlinear' ? value : 'current-residual';
+  }
+
+  readPositiveResonanceLatencyMode(value) {
+    return value === 'matched' ? 'matched' : 'current';
+  }
+
+  readPositiveResonanceCurve(value) {
+    return value === 'early' || value === 'aggressive' ? value : 'current';
+  }
+
+  outputModeIndex(mode) {
+    return mode === 'nonlinear-base' ? 1 : mode === 'full-nonlinear' ? 2 : 0;
+  }
+
+  latencyModeIndex(mode) {
+    return mode === 'matched' ? 1 : 0;
   }
 
   smoothingCoefficient(value, fallback) {
@@ -175,7 +207,13 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
 
   getResonatorMagnitudeTarget(localGate) {
     if (localGate <= 1e-12 || this.resonanceTarget <= 0) return 0;
-    return Math.min(1, localGate * this.resonanceTarget);
+    const resonance = this.resonanceTarget;
+    const curvedResonance = this.positiveResonanceCurve === 'early'
+      ? Math.sqrt(resonance)
+      : this.positiveResonanceCurve === 'aggressive'
+        ? Math.cbrt(resonance)
+        : resonance;
+    return Math.min(1, localGate * curvedResonance);
   }
 
   getResonatorDampingScale(magnitude) {
@@ -316,6 +354,30 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     if (immediate) this.resonatorDampingFloor = this.resonatorDampingFloorTarget;
   }
 
+  setPositiveResonanceOutputMode(value, immediate = false) {
+    this.positiveResonanceOutputModeTarget = this.readPositiveResonanceOutputMode(value);
+    const selected = this.outputModeIndex(this.positiveResonanceOutputModeTarget);
+    for (let index = 0; index < 3; index += 1) {
+      this.positiveResonanceOutputTargets[index] = index === selected ? 1 : 0;
+      if (immediate) this.positiveResonanceOutputWeights[index] = this.positiveResonanceOutputTargets[index];
+    }
+    if (immediate) this.positiveResonanceOutputMode = this.positiveResonanceOutputModeTarget;
+  }
+
+  setPositiveResonanceLatencyMode(value, immediate = false) {
+    this.positiveResonanceLatencyModeTarget = this.readPositiveResonanceLatencyMode(value);
+    const selected = this.latencyModeIndex(this.positiveResonanceLatencyModeTarget);
+    for (let index = 0; index < 2; index += 1) {
+      this.positiveResonanceLatencyTargets[index] = index === selected ? 1 : 0;
+      if (immediate) this.positiveResonanceLatencyWeights[index] = this.positiveResonanceLatencyTargets[index];
+    }
+    if (immediate) this.positiveResonanceLatencyMode = this.positiveResonanceLatencyModeTarget;
+  }
+
+  setPositiveResonanceCurve(value) {
+    this.positiveResonanceCurve = this.readPositiveResonanceCurve(value);
+  }
+
   applyState(data) {
     const leftControls = this.readControls(data.bandGainLeft);
     const rightControls = this.readControls(data.bandGainRight);
@@ -339,6 +401,9 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     if (data.positiveResonanceDampingFloor !== undefined) {
       this.setPositiveResonanceDampingFloor(data.positiveResonanceDampingFloor, true);
     }
+    if (data.positiveResonanceOutputMode !== undefined) this.setPositiveResonanceOutputMode(data.positiveResonanceOutputMode, true);
+    if (data.positiveResonanceLatencyMode !== undefined) this.setPositiveResonanceLatencyMode(data.positiveResonanceLatencyMode, true);
+    if (data.positiveResonanceCurve !== undefined) this.setPositiveResonanceCurve(data.positiveResonanceCurve);
     this.initializeResonatorMagnitudes();
   }
 
@@ -370,6 +435,18 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     }
     if (data.type === 'set-positive-resonance-damping-floor') {
       this.setPositiveResonanceDampingFloor(data.value);
+      return;
+    }
+    if (data.type === 'set-positive-resonance-output-mode') {
+      this.setPositiveResonanceOutputMode(data.value);
+      return;
+    }
+    if (data.type === 'set-positive-resonance-latency-mode') {
+      this.setPositiveResonanceLatencyMode(data.value);
+      return;
+    }
+    if (data.type === 'set-positive-resonance-curve') {
+      this.setPositiveResonanceCurve(data.value);
       return;
     }
     if (data.type === 'apply-state') {
@@ -428,6 +505,7 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       const resonanceResidual = resonatorBandOutput - bandOutput;
       let nonlinearResonatorBandOutput = 0;
       let nonlinearResidual = 0;
+      let nonlinearBaseResidual = 0;
       const useAudibleNonlinearResidual = this.enableNonlinearPositiveResonator
         && (resonatorMagnitude > 1e-12 || resonatorAuditionGate > 1e-12);
       if (nonlinearResonatorFilters && (this.collectResonatorDiagnostics || resonatorMagnitude > 1e-12 || resonatorAuditionGate > 1e-12)) {
@@ -439,11 +517,27 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
           resonatorMagnitude > 1e-12
         );
         nonlinearResidual = nonlinearFilter.residual;
+        nonlinearBaseResidual = nonlinearResonatorBandOutput - nonlinearFilter.baseBand;
       }
       bandOutputs[band] = bandOutput;
       resonatorBandOutputs[band] = resonatorBandOutput;
       resonanceResiduals[band] = Number.isFinite(resonanceResidual) ? resonanceResidual : 0;
-      const audibleResidual = useAudibleNonlinearResidual ? nonlinearResidual : resonanceResiduals[band];
+      // CURRENT and NONLINEAR-BASE each subtract two signals which traversed
+      // the same 2x FIR chain. FULL keeps the resonant bandpass energy. In
+      // MATCHED mode FULL is reconstructed as native base BP plus the
+      // latency-matched nonlinear delta; this avoids delaying the global wet
+      // path while preserving a directly comparable band contribution.
+      const currentResidual = useAudibleNonlinearResidual ? nonlinearResidual : resonanceResiduals[band];
+      const baseResidual = useAudibleNonlinearResidual ? nonlinearBaseResidual : resonanceResiduals[band];
+      const fullCurrent = useAudibleNonlinearResidual ? nonlinearResonatorBandOutput : resonatorBandOutput;
+      const fullMatched = useAudibleNonlinearResidual
+        ? bandOutput + nonlinearBaseResidual
+        : resonatorBandOutput;
+      const fullOutput = this.positiveResonanceLatencyWeights[0] * fullCurrent
+        + this.positiveResonanceLatencyWeights[1] * fullMatched;
+      const audibleResidual = this.positiveResonanceOutputWeights[0] * currentResidual
+        + this.positiveResonanceOutputWeights[1] * baseResidual
+        + this.positiveResonanceOutputWeights[2] * fullOutput;
       mainOutput += resonatorAuditionGate * this.positiveResonanceAuditionGain * audibleResidual;
       if (this.collectResonatorDiagnostics) {
         const diagnostics = this.resonatorDiagnostics[channel];
@@ -538,6 +632,9 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       diagnostics.nonlinearDriveTarget = this.positiveResonanceDriveTarget;
       diagnostics.resonatorDampingFloor = this.resonatorDampingFloor;
       diagnostics.resonatorDampingFloorTarget = this.resonatorDampingFloorTarget;
+      diagnostics.positiveResonanceOutputMode = this.positiveResonanceOutputMode;
+      diagnostics.positiveResonanceLatencyMode = this.positiveResonanceLatencyMode;
+      diagnostics.positiveResonanceCurve = this.positiveResonanceCurve;
       diagnostics.finite = diagnostics.finite
         && Number.isFinite(source)
         && Number.isFinite(wetOutput);
@@ -566,6 +663,24 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
         + this.resonatorDampingFloorSmoothingCoefficient * (
           this.resonatorDampingFloor - this.resonatorDampingFloorTarget
         );
+      for (let index = 0; index < 3; index += 1) {
+        this.positiveResonanceOutputWeights[index] = this.positiveResonanceOutputTargets[index]
+          + this.devModeSmoothingCoefficient * (
+            this.positiveResonanceOutputWeights[index] - this.positiveResonanceOutputTargets[index]
+          );
+      }
+      for (let index = 0; index < 2; index += 1) {
+        this.positiveResonanceLatencyWeights[index] = this.positiveResonanceLatencyTargets[index]
+          + this.devModeSmoothingCoefficient * (
+            this.positiveResonanceLatencyWeights[index] - this.positiveResonanceLatencyTargets[index]
+          );
+      }
+      if (this.positiveResonanceOutputWeights[this.outputModeIndex(this.positiveResonanceOutputModeTarget)] > 0.999999) {
+        this.positiveResonanceOutputMode = this.positiveResonanceOutputModeTarget;
+      }
+      if (this.positiveResonanceLatencyWeights[this.latencyModeIndex(this.positiveResonanceLatencyModeTarget)] > 0.999999) {
+        this.positiveResonanceLatencyMode = this.positiveResonanceLatencyModeTarget;
+      }
       if (leftOutput) leftOutput[frame] = this.processChannelFrame(inputChannels[0]?.[frame], 'left');
       if (rightOutput) rightOutput[frame] = this.processChannelFrame(inputChannels[1]?.[frame], 'right');
     }

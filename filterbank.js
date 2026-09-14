@@ -20,6 +20,9 @@
   const POSITIVE_RESONANCE_DRIVE_SMOOTHING_SECONDS = 0.015;
   const POSITIVE_RESONANCE_DAMPING_FLOOR = 0.10;
   const POSITIVE_RESONANCE_DAMPING_FLOOR_SMOOTHING_SECONDS = 0.015;
+  const POSITIVE_RESONANCE_OUTPUT_MODE = 'current-residual';
+  const POSITIVE_RESONANCE_LATENCY_MODE = 'current';
+  const POSITIVE_RESONANCE_CURVE = 'current';
   const FEEDBACK_ALL_NORMALIZATION = 1 / Math.sqrt(BAND_COUNT);
   const PROCESSOR_NAME = 'resonant-filterbank-processor';
   const workletModuleLoads = new WeakMap();
@@ -48,17 +51,21 @@
   };
   const normalizePositiveResonanceDrive = value => {
     const numericValue = Number(value);
-    return numericValue === 1 || numericValue === 2 || numericValue === 4 || numericValue === 8 || numericValue === 16
+    return numericValue === 1 || numericValue === 2 || numericValue === 4 || numericValue === 8 || numericValue === 16 || numericValue === 24 || numericValue === 32
       ? numericValue
       : POSITIVE_RESONANCE_DRIVE;
   };
   const normalizePositiveResonanceDampingFloor = value => {
     const numericValue = Number(value);
     return numericValue === 0.10 || numericValue === 0.05 || numericValue === 0.02
-      || numericValue === 0 || numericValue === -0.02
+      || numericValue === 0 || numericValue === -0.02 || numericValue === -0.05 || numericValue === -0.10
       ? numericValue
       : POSITIVE_RESONANCE_DAMPING_FLOOR;
   };
+  const normalizePositiveResonanceOutputMode = value => value === 'nonlinear-base' || value === 'full-nonlinear'
+    ? value : POSITIVE_RESONANCE_OUTPUT_MODE;
+  const normalizePositiveResonanceLatencyMode = value => value === 'matched' ? value : POSITIVE_RESONANCE_LATENCY_MODE;
+  const normalizePositiveResonanceCurve = value => value === 'early' || value === 'aggressive' ? value : POSITIVE_RESONANCE_CURVE;
   const normalizeChannel = channel => {
     if (channel === 'left' || channel === 'L') return 'left';
     if (channel === 'right' || channel === 'R') return 'right';
@@ -113,6 +120,9 @@
       this.positiveResonanceAuditionGain = normalizePositiveResonanceAuditionGain(initialState?.positiveResonanceAuditionGain);
       this.positiveResonanceDrive = normalizePositiveResonanceDrive(initialState?.positiveResonanceDrive);
       this.positiveResonanceDampingFloor = normalizePositiveResonanceDampingFloor(initialState?.positiveResonanceDampingFloor);
+      this.positiveResonanceOutputMode = normalizePositiveResonanceOutputMode(initialState?.positiveResonanceOutputMode);
+      this.positiveResonanceLatencyMode = normalizePositiveResonanceLatencyMode(initialState?.positiveResonanceLatencyMode);
+      this.positiveResonanceCurve = normalizePositiveResonanceCurve(initialState?.positiveResonanceCurve);
       this.inputNode = audioContext.createGain();
       this.outputNode = audioContext.createGain();
       this.inputNode.gain.value = 1;
@@ -147,7 +157,10 @@
           positiveResonanceAuditionGainSmoothingTime: POSITIVE_RESONANCE_AUDITION_GAIN_SMOOTHING_SECONDS,
           enableNonlinearPositiveResonator: true,
           positiveResonanceDrive: this.positiveResonanceDrive,
-          positiveResonanceDriveSmoothingTime: POSITIVE_RESONANCE_DRIVE_SMOOTHING_SECONDS
+          positiveResonanceDriveSmoothingTime: POSITIVE_RESONANCE_DRIVE_SMOOTHING_SECONDS,
+          positiveResonanceOutputMode: this.positiveResonanceOutputMode,
+          positiveResonanceLatencyMode: this.positiveResonanceLatencyMode,
+          positiveResonanceCurve: this.positiveResonanceCurve
         }
       });
       this.inputNode.connect(this.workletNode);
@@ -239,6 +252,30 @@
       return nextValue;
     }
 
+    setPositiveResonanceOutputMode(value) {
+      if (this.disposed) return;
+      const nextValue = normalizePositiveResonanceOutputMode(value);
+      this.positiveResonanceOutputMode = nextValue;
+      this.workletNode.port.postMessage({ type: 'set-positive-resonance-output-mode', value: nextValue });
+      return nextValue;
+    }
+
+    setPositiveResonanceLatencyMode(value) {
+      if (this.disposed) return;
+      const nextValue = normalizePositiveResonanceLatencyMode(value);
+      this.positiveResonanceLatencyMode = nextValue;
+      this.workletNode.port.postMessage({ type: 'set-positive-resonance-latency-mode', value: nextValue });
+      return nextValue;
+    }
+
+    setPositiveResonanceCurve(value) {
+      if (this.disposed) return;
+      const nextValue = normalizePositiveResonanceCurve(value);
+      this.positiveResonanceCurve = nextValue;
+      this.workletNode.port.postMessage({ type: 'set-positive-resonance-curve', value: nextValue });
+      return nextValue;
+    }
+
     applyState(snapshot) {
       if (this.disposed) return;
       this.bandGainLeft = readBandControls(snapshot, 'bandGainLeft');
@@ -251,6 +288,9 @@
       this.positiveResonanceAuditionGain = normalizePositiveResonanceAuditionGain(snapshot?.positiveResonanceAuditionGain ?? this.positiveResonanceAuditionGain);
       this.positiveResonanceDrive = normalizePositiveResonanceDrive(snapshot?.positiveResonanceDrive ?? this.positiveResonanceDrive);
       this.positiveResonanceDampingFloor = normalizePositiveResonanceDampingFloor(snapshot?.positiveResonanceDampingFloor ?? this.positiveResonanceDampingFloor);
+      this.positiveResonanceOutputMode = normalizePositiveResonanceOutputMode(snapshot?.positiveResonanceOutputMode ?? this.positiveResonanceOutputMode);
+      this.positiveResonanceLatencyMode = normalizePositiveResonanceLatencyMode(snapshot?.positiveResonanceLatencyMode ?? this.positiveResonanceLatencyMode);
+      this.positiveResonanceCurve = normalizePositiveResonanceCurve(snapshot?.positiveResonanceCurve ?? this.positiveResonanceCurve);
       this.workletNode.port.postMessage({
         type: 'apply-state',
         bandGainLeft: [...this.bandGainLeft],
@@ -262,7 +302,10 @@
         resonance: this.resonance,
         positiveResonanceAuditionGain: this.positiveResonanceAuditionGain,
         positiveResonanceDrive: this.positiveResonanceDrive,
-        positiveResonanceDampingFloor: this.positiveResonanceDampingFloor
+        positiveResonanceDampingFloor: this.positiveResonanceDampingFloor,
+        positiveResonanceOutputMode: this.positiveResonanceOutputMode,
+        positiveResonanceLatencyMode: this.positiveResonanceLatencyMode,
+        positiveResonanceCurve: this.positiveResonanceCurve
       });
     }
 
@@ -294,6 +337,9 @@
   Filterbank.POSITIVE_RESONANCE_DRIVE = POSITIVE_RESONANCE_DRIVE;
   Filterbank.POSITIVE_RESONANCE_DRIVE_SMOOTHING_SECONDS = POSITIVE_RESONANCE_DRIVE_SMOOTHING_SECONDS;
   Filterbank.POSITIVE_RESONANCE_DAMPING_FLOOR = POSITIVE_RESONANCE_DAMPING_FLOOR;
+  Filterbank.POSITIVE_RESONANCE_OUTPUT_MODE = POSITIVE_RESONANCE_OUTPUT_MODE;
+  Filterbank.POSITIVE_RESONANCE_LATENCY_MODE = POSITIVE_RESONANCE_LATENCY_MODE;
+  Filterbank.POSITIVE_RESONANCE_CURVE = POSITIVE_RESONANCE_CURVE;
   Filterbank.POSITIVE_RESONANCE_DAMPING_FLOOR_SMOOTHING_SECONDS = POSITIVE_RESONANCE_DAMPING_FLOOR_SMOOTHING_SECONDS;
   Filterbank.FEEDBACK_ALL_NORMALIZATION = FEEDBACK_ALL_NORMALIZATION;
   Filterbank.PROCESSOR_NAME = PROCESSOR_NAME;

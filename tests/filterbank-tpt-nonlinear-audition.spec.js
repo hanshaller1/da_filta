@@ -30,6 +30,11 @@ test('the audible positive local path uses the 2x nonlinear residual and accepts
       index,
       resonance,
       drive,
+      auditionGain = 0.2,
+      dampingFloor = 0.1,
+      outputMode = 'current-residual',
+      latencyMode = 'current',
+      curve = 'current',
       gate = true,
       leftOnly = false
     }) => {
@@ -71,12 +76,15 @@ test('the audible positive local path uses the 2x nonlinear residual and accepts
           feedbackAllNormalization: 1 / Math.sqrt(bandCount),
           maxFeedbackGain: 1.25,
           maxAuditionGain: 0.25,
-          resonatorDampingFloor: 0.1,
-          positiveResonanceAuditionGain: 0.2,
+          resonatorDampingFloor: dampingFloor,
+          positiveResonanceAuditionGain: auditionGain,
           positiveResonanceAuditionGainSmoothingTime: 0.015,
           enableNonlinearPositiveResonator: true,
           positiveResonanceDrive: drive,
           positiveResonanceDriveSmoothingTime: 0.015,
+          positiveResonanceOutputMode: outputMode,
+          positiveResonanceLatencyMode: latencyMode,
+          positiveResonanceCurve: curve,
           collectResonatorDiagnostics: true
         }
       });
@@ -161,7 +169,19 @@ test('the audible positive local path uses the 2x nonlinear residual and accepts
     const gateOff = await render({ sampleRate: 48000, index: 4, resonance: 1, drive: 8, gate: false });
     const leftOnly = await render({ sampleRate: 48000, index: 4, resonance: 1, drive: 4, leftOnly: true });
     const low = await render({ sampleRate: 48000, index: 0, resonance: 1, drive: 4 });
-    return { measurements, neutral, gateOff, leftOnly, low };
+    const labModes = {
+      current: await render({ sampleRate: 44100, index: 4, resonance: 1, drive: 4 }),
+      nonlinearBase: await render({ sampleRate: 44100, index: 4, resonance: 1, drive: 4, outputMode: 'nonlinear-base' }),
+      fullCurrent: await render({ sampleRate: 44100, index: 4, resonance: 1, drive: 4, outputMode: 'full-nonlinear' }),
+      fullMatched: await render({ sampleRate: 44100, index: 4, resonance: 1, drive: 4, outputMode: 'full-nonlinear', latencyMode: 'matched' }),
+      early: await render({ sampleRate: 44100, index: 4, resonance: 0.5, drive: 4, curve: 'early' }),
+      aggressive: await render({ sampleRate: 44100, index: 4, resonance: 0.5, drive: 4, curve: 'aggressive' })
+    };
+    const labExtreme = await render({
+      sampleRate: 48000, index: 4, resonance: 1, drive: 32,
+      auditionGain: 4, dampingFloor: -0.1, outputMode: 'full-nonlinear'
+    });
+    return { measurements, neutral, gateOff, leftOnly, low, labModes, labExtreme };
   });
 
   for (const sampleRate of [44100, 48000]) {
@@ -189,6 +209,19 @@ test('the audible positive local path uses the 2x nonlinear residual and accepts
   expect(report.low.finite).toBeTruthy();
   expect(report.low.diagnostics.nonlinearFallbackCounts[0]).toBe(0);
   expect(report.low.diagnostics.nonlinearNonFiniteStateResets[0]).toBe(0);
+  for (const [name, measurement] of Object.entries(report.labModes)) {
+    expect(measurement.finite, `${name} must remain finite`).toBeTruthy();
+    expect(measurement.diagnostics.nonlinearFallbackCounts[4], `${name} fallbacks`).toBe(0);
+  }
+  // No loudness normalization is applied in the LAB. Full-band modes must be
+  // audibly different, but are not required to have a larger RMS value.
+  expect(report.labModes.fullCurrent.residualRms).not.toBeCloseTo(report.labModes.current.residualRms, 8);
+  expect(report.labModes.fullMatched.residualRms).not.toBeCloseTo(report.labModes.current.residualRms, 8);
+  expect(report.labModes.early.residualRms).toBeGreaterThan(1e-8);
+  expect(report.labModes.aggressive.residualRms).toBeGreaterThan(1e-8);
+  expect(report.labExtreme.finite).toBeTruthy();
+  expect(report.labExtreme.diagnostics.nonlinearSolverIterationMaximum[4]).toBeLessThanOrEqual(4);
+  expect(report.labExtreme.diagnostics.nonlinearNonFiniteStateResets[4]).toBe(0);
   expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
   await page.close({ runBeforeUnload: false });

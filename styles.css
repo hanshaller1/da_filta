@@ -108,6 +108,11 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
 .dev-audition-control { display: flex; align-items: center; gap: 6px; color: var(--muted-text); font-size: 11px; letter-spacing: .7px; }
 .dev-audition-control span::before { content: 'CAL '; color: var(--secondary-text); }
 .dev-audition-control select { width: 62px; height: 24px; padding: 0 5px; border: 1px dashed var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 600 12px 'Trebuchet MS', Arial, sans-serif; }
+.dev-lab-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 10px; max-width: 930px; padding: 4px 7px; border: 1px dashed var(--button-border); border-radius: 4px; }
+.dev-lab-controls > b { color: var(--secondary-text); font-size: 10px; letter-spacing: 1px; }
+.dev-lab-control { display: flex; align-items: center; gap: 6px; color: var(--muted-text); font-size: 11px; letter-spacing: .7px; }
+.dev-lab-control select { width: 82px; height: 24px; padding: 0 5px; border: 1px dashed var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 600 12px 'Trebuchet MS', Arial, sans-serif; }
+.dev-lab-control-wide select { width: 142px; }
 .fb-all-control { display: flex; align-items: center; gap: 8px; color: var(--muted-text); font-size: 13px; }
 .fb-all-toggle { min-width: 43px; height: 24px; padding: 0 7px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 600 12px 'Trebuchet MS', Arial, sans-serif; cursor: pointer; }
 .chart-grid { min-height: 0; width: 100%; }

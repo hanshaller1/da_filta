@@ -122,7 +122,7 @@ export class LinearTptSvf {
      */
     processPositiveStateFeedback(input, dampingScale, drive) {
       const sample = Number.isFinite(input) ? input : 0;
-      const normalizedDamping = Number.isFinite(dampingScale) && dampingScale >= -0.02
+      const normalizedDamping = Number.isFinite(dampingScale) && dampingScale >= -0.10
         ? dampingScale
         : 1;
       const normalizedDrive = Number.isFinite(drive) && drive > 0 ? drive : 0;
@@ -276,10 +276,16 @@ export class OversampledPositiveTptResonator {
     this.latencyNativeSamples = 7;
     this.inputInterpolator = new FixedHalfBandFir();
     this.referenceDecimator = new FixedHalfBandFir();
+    this.baseReferenceDecimator = new FixedHalfBandFir();
     this.nonlinearDecimator = new FixedHalfBandFir();
     this.linearReferenceFilter = new LinearTptSvf(this.oversampledSampleRate, frequency, q);
+    // This unit-Q reference follows the same 2x FIR path as the nonlinear
+    // resonator. It is intentionally separate from the resonant linear
+    // reference used by the current residual mode.
+    this.baseReferenceFilter = new LinearTptSvf(this.oversampledSampleRate, frequency, q);
     this.nonlinearFilter = new LinearTptSvf(this.oversampledSampleRate, frequency, q);
     this.linearBand = 0;
+    this.baseBand = 0;
     this.nonlinearBand = 0;
     this.residual = 0;
   }
@@ -287,10 +293,13 @@ export class OversampledPositiveTptResonator {
   reset() {
     this.inputInterpolator.reset();
     this.referenceDecimator.reset();
+    this.baseReferenceDecimator.reset();
     this.nonlinearDecimator.reset();
     this.linearReferenceFilter.reset();
+    this.baseReferenceFilter.reset();
     this.nonlinearFilter.reset();
     this.linearBand = 0;
+    this.baseBand = 0;
     this.nonlinearBand = 0;
     this.residual = 0;
   }
@@ -304,6 +313,7 @@ export class OversampledPositiveTptResonator {
     // the nonlinear resonator below receives the requested damping scale.
     const linearReferenceDampingScale = Math.max(0, requestedDampingScale);
     this.linearReferenceFilter.setDampingScale(linearReferenceDampingScale);
+    this.baseReferenceFilter.setDampingScale(1);
     if (!useNonlinearStateFeedback) this.nonlinearFilter.setDampingScale(linearReferenceDampingScale);
 
     // Zero-stuffing uses a factor-of-two impulse before the unity-DC FIR.
@@ -312,15 +322,17 @@ export class OversampledPositiveTptResonator {
     for (let phase = 0; phase < 2; phase += 1) {
       const interpolatedInput = this.inputInterpolator.process(phase === 0 ? 2 * sample : 0);
       const referenceBand = this.linearReferenceFilter.process(interpolatedInput);
+      const baseReferenceBand = this.baseReferenceFilter.process(interpolatedInput);
       const nonlinearBand = useNonlinearStateFeedback
         ? this.nonlinearFilter.processPositiveStateFeedback(interpolatedInput, requestedDampingScale, drive)
         : this.nonlinearFilter.process(interpolatedInput);
       this.linearBand = this.referenceDecimator.process(referenceBand);
+      this.baseBand = this.baseReferenceDecimator.process(baseReferenceBand);
       this.nonlinearBand = this.nonlinearDecimator.process(nonlinearBand);
     }
 
     this.residual = this.nonlinearBand - this.linearBand;
-    if (!Number.isFinite(this.linearBand + this.nonlinearBand + this.residual)) {
+    if (!Number.isFinite(this.linearBand + this.baseBand + this.nonlinearBand + this.residual)) {
       this.reset();
       return 0;
     }

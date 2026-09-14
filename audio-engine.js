@@ -16,6 +16,9 @@
       this.positiveResonanceAuditionGain = window.Filterbank?.POSITIVE_RESONANCE_AUDITION_GAIN ?? 0.1;
       this.positiveResonanceDrive = window.Filterbank?.POSITIVE_RESONANCE_DRIVE ?? 1;
       this.positiveResonanceDampingFloor = window.Filterbank?.POSITIVE_RESONANCE_DAMPING_FLOOR ?? 0.1;
+      this.positiveResonanceOutputMode = window.Filterbank?.POSITIVE_RESONANCE_OUTPUT_MODE ?? 'current-residual';
+      this.positiveResonanceLatencyMode = window.Filterbank?.POSITIVE_RESONANCE_LATENCY_MODE ?? 'current';
+      this.positiveResonanceCurve = window.Filterbank?.POSITIVE_RESONANCE_CURVE ?? 'current';
       this.dryWet = 50;
       this.volumeDb = -6;
       this.context = null;
@@ -85,7 +88,7 @@
 
     setPositiveResonanceDrive(value) {
       const numericValue = Number(value);
-      this.positiveResonanceDrive = numericValue === 1 || numericValue === 2 || numericValue === 4 || numericValue === 8 || numericValue === 16
+      this.positiveResonanceDrive = numericValue === 1 || numericValue === 2 || numericValue === 4 || numericValue === 8 || numericValue === 16 || numericValue === 24 || numericValue === 32
         ? numericValue
         : (window.Filterbank?.POSITIVE_RESONANCE_DRIVE ?? 1);
       this.filterbank?.setPositiveResonanceDrive(this.positiveResonanceDrive);
@@ -95,11 +98,29 @@
     setPositiveResonanceDampingFloor(value) {
       const numericValue = Number(value);
       this.positiveResonanceDampingFloor = numericValue === 0.10 || numericValue === 0.05 || numericValue === 0.02
-        || numericValue === 0 || numericValue === -0.02
+        || numericValue === 0 || numericValue === -0.02 || numericValue === -0.05 || numericValue === -0.10
         ? numericValue
         : (window.Filterbank?.POSITIVE_RESONANCE_DAMPING_FLOOR ?? 0.1);
       this.filterbank?.setPositiveResonanceDampingFloor(this.positiveResonanceDampingFloor);
       return this.positiveResonanceDampingFloor;
+    }
+
+    setPositiveResonanceOutputMode(value) {
+      this.positiveResonanceOutputMode = value === 'nonlinear-base' || value === 'full-nonlinear' ? value : 'current-residual';
+      this.filterbank?.setPositiveResonanceOutputMode(this.positiveResonanceOutputMode);
+      return this.positiveResonanceOutputMode;
+    }
+
+    setPositiveResonanceLatencyMode(value) {
+      this.positiveResonanceLatencyMode = value === 'matched' ? value : 'current';
+      this.filterbank?.setPositiveResonanceLatencyMode(this.positiveResonanceLatencyMode);
+      return this.positiveResonanceLatencyMode;
+    }
+
+    setPositiveResonanceCurve(value) {
+      this.positiveResonanceCurve = value === 'early' || value === 'aggressive' ? value : 'current';
+      this.filterbank?.setPositiveResonanceCurve(this.positiveResonanceCurve);
+      return this.positiveResonanceCurve;
     }
 
     setBandBaseGain(channel, index, value) {
@@ -141,7 +162,10 @@
         resonance: this.resonance,
         positiveResonanceAuditionGain: this.positiveResonanceAuditionGain,
         positiveResonanceDrive: this.positiveResonanceDrive,
-        positiveResonanceDampingFloor: this.positiveResonanceDampingFloor
+        positiveResonanceDampingFloor: this.positiveResonanceDampingFloor,
+        positiveResonanceOutputMode: this.positiveResonanceOutputMode,
+        positiveResonanceLatencyMode: this.positiveResonanceLatencyMode,
+        positiveResonanceCurve: this.positiveResonanceCurve
       };
     }
 
@@ -157,6 +181,9 @@
       this.setResonance(snapshot?.resonance);
       this.setPositiveResonanceDrive(snapshot?.positiveResonanceDrive ?? this.positiveResonanceDrive);
       this.setPositiveResonanceDampingFloor(snapshot?.positiveResonanceDampingFloor ?? this.positiveResonanceDampingFloor);
+      this.setPositiveResonanceOutputMode(snapshot?.positiveResonanceOutputMode ?? this.positiveResonanceOutputMode);
+      this.setPositiveResonanceLatencyMode(snapshot?.positiveResonanceLatencyMode ?? this.positiveResonanceLatencyMode);
+      this.setPositiveResonanceCurve(snapshot?.positiveResonanceCurve ?? this.positiveResonanceCurve);
       if (this.filterbank) this.filterbank.applyState(this.getFilterbankState());
     }
 
