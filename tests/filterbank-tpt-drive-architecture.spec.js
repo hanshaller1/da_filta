@@ -286,7 +286,7 @@ test('diagnostic nonlinear TPT resonance architectures preserve small-signal tun
             sampleRate, frequency, q, resonance, amplitude: 0.05, drive: 0, mode: 'linear'
           });
           feedbackDrive[sampleRate][frequency][resonance] = {};
-          for (const drive of [1, 2, 4]) {
+          for (const drive of [1, 2, 4, 8]) {
             feedbackDrive[sampleRate][frequency][resonance][drive] = analyzeSine({
               sampleRate, frequency, q, resonance, amplitude: 0.05, drive, mode: 'feedback'
             });
@@ -430,7 +430,7 @@ test('diagnostic nonlinear TPT resonance architectures preserve small-signal tun
       expect(levels['0.75'].rms).toBeLessThan(levels['1'].rms);
       expect(levels['1'].thd).toBeLessThan(1e-6);
       for (const resonance of ['0.25', '0.5', '0.75', '1']) {
-        for (const drive of ['1', '2', '4']) {
+        for (const drive of ['1', '2', '4', '8']) {
           expect(report.feedbackDrive[sampleRate][frequency][resonance][drive].finite).toBe(true);
         }
       }
@@ -485,7 +485,7 @@ test('diagnostic nonlinear TPT resonance architectures preserve small-signal tun
           , solverMax: report.feedbackDrive[sampleRate][frequency][resonance]['4'].solverMaximumIterations
           , solverFailures: report.feedbackDrive[sampleRate][frequency][resonance]['4'].solverFailures
         }])),
-        driveSweepAtMaximum: Object.fromEntries(['1', '2', '4'].map(drive => [drive, {
+        driveSweepAtMaximum: Object.fromEntries(['1', '2', '4', '8'].map(drive => [drive, {
           rms: report.feedbackDrive[sampleRate][frequency]['1'][drive].rms,
           thd: report.feedbackDrive[sampleRate][frequency]['1'][drive].thd,
           h3: report.feedbackDrive[sampleRate][frequency]['1'][drive].h3
