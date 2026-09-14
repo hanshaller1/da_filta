@@ -36,9 +36,10 @@ test('theme selector switches all themes and persists without resetting UI state
   const fader = page.locator('.band-fader').nth(0);
   const fb = page.locator('[data-feedback-band]').nth(0);
   const mod = page.locator('[data-mod-band]').nth(0);
-  const themes = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'soft-neutral', 'pro-console'];
+  const themes = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'pro-console'];
 
-  await expect(themeSelect.locator('option')).toHaveCount(7);
+  await expect(themeSelect.locator('option')).toHaveCount(6);
+  await expect(themeSelect.locator('option[value="soft-neutral"]')).toHaveCount(0);
   await expect(themeSelect).toHaveValue('current');
   await expect(page.locator('body')).toHaveAttribute('data-theme', 'current');
   await fader.fill('40');
@@ -59,6 +60,11 @@ test('theme selector switches all themes and persists without resetting UI state
   await expect(page.locator('[data-theme-select]')).toHaveValue('pro-console');
 
   await page.evaluate(() => window.localStorage.setItem('resonant-filterbank-theme', 'invalid-theme'));
+  await page.reload({ waitUntil: 'networkidle' });
+  await expect(page.locator('body')).toHaveAttribute('data-theme', 'current');
+  await expect(page.locator('[data-theme-select]')).toHaveValue('current');
+
+  await page.evaluate(() => window.localStorage.setItem('resonant-filterbank-theme', 'soft-neutral'));
   await page.reload({ waitUntil: 'networkidle' });
   await expect(page.locator('body')).toHaveAttribute('data-theme', 'current');
   await expect(page.locator('[data-theme-select]')).toHaveValue('current');

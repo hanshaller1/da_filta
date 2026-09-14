@@ -5,6 +5,7 @@ const {
   BAND_GAIN_MAX,
   BAND_GAIN_NEUTRAL,
   GLOBAL_CONTROL_DEFINITIONS,
+  controlToBandGainDb,
   createInitialState,
   setBandBaseGain: setStateBandBaseGain
 } = window.ResonantState;
@@ -55,6 +56,41 @@ inlineDevLabControls?.querySelectorAll(':scope > .dev-audition-control, :scope >
   devLabGroups.get(groupForDevControl(control))?.append(control);
 });
 inlineDevLabControls?.remove();
+const analyzerHeader = document.querySelector('.analyzer-header');
+const analyzerStatus = document.querySelector('.analyzer-status');
+const analyzerTitle = analyzerHeader?.querySelector('strong');
+if (analyzerHeader && analyzerStatus && analyzerTitle) {
+  const titleStatus = document.createElement('div');
+  titleStatus.className = 'analyzer-title-status';
+  titleStatus.append(analyzerTitle, analyzerStatus);
+  analyzerHeader.prepend(titleStatus);
+}
+const analyzerHeaderControls = analyzerHeader?.querySelector('.analyzer-header-controls');
+const analyzerLegend = document.querySelector('.analyzer > .legend');
+if (analyzerHeaderControls && analyzerLegend) analyzerHeaderControls.prepend(analyzerLegend);
+const analyzer = document.querySelector('.analyzer');
+const analyzerAxisX = document.querySelector('.chart-grid .axis-x');
+if (analyzer && analyzerAxisX) {
+  const analyzerFooter = document.createElement('div');
+  analyzerFooter.className = 'analyzer-footer';
+  analyzerFooter.append(analyzerAxisX);
+  analyzer.append(analyzerFooter);
+}
+const filterbankWorkspace = document.querySelector('.fb-workspace');
+const responseCollapseButton = document.createElement('button');
+responseCollapseButton.type = 'button';
+responseCollapseButton.className = 'response-collapse-toggle';
+const setFilterbankResponseCollapsed = collapsed => {
+  filterbankWorkspace?.classList.toggle('is-collapsed', collapsed);
+  responseCollapseButton.setAttribute('aria-expanded', String(!collapsed));
+  responseCollapseButton.setAttribute('aria-label', collapsed ? 'Filterbank response ausklappen' : 'Filterbank response einklappen');
+  responseCollapseButton.textContent = collapsed ? '▾' : '▴';
+};
+if (analyzerHeaderControls && filterbankWorkspace) {
+  setFilterbankResponseCollapsed(false);
+  analyzerHeaderControls.append(responseCollapseButton);
+  responseCollapseButton.addEventListener('click', () => setFilterbankResponseCollapsed(!filterbankWorkspace.classList.contains('is-collapsed')));
+}
 devLabToggle?.addEventListener('click', () => {
   const open = Boolean(devLabPanel?.hidden);
   if (devLabPanel) devLabPanel.hidden = !open;
@@ -111,8 +147,189 @@ const feedbackAllLevelSelect = addDevLabSelector('DEV FB ALL LEVEL', 'data-feedb
   ['eightieth', '1 / 80']
 ]);
 const inputPreampStageSelect = addDevLabSelector('DEV INPUT STAGE', 'data-input-preamp-stage', [['linear', 'LINEAR'], ['preamp', 'PREAMP']]);
+
+const DEV_LAB_HELP = {
+  'data-input-preamp-stage': {
+    title: 'DEV INPUT STAGE', what: 'Wählt zwischen reiner linearer Eingangsverstärkung und der implementierten nichtlinearen Preamp-Stufe.',
+    scope: 'Wirkt nach dem Input Gain und vor der Dry/Wet-Verzweigung.',
+    values: [['LINEAR', 'Input Gain arbeitet als reine lineare Verstärkung.'], ['PREAMP', 'Fügt die implementierte, symmetrische Soft-Knee-Preamp-/Saturation-Färbung hinzu.']],
+    default: 'LINEAR', note: 'Experimenteller DEV-Wert; kein Limiter, kein separater Drive-Regler und keine Loudness Compensation. Keine bestätigte Erica-Emulation.'
+  },
+  'data-reference-level': {
+    title: 'DEV REFERENCE', what: 'Steuert den Anteil des Unity-Reference-Pfads im Wet-Signal.',
+    scope: 'Nur im Wet Model REFERENCE + DELTA; Band-Gains werden nicht direkt verändert. Im FILTERBANK SUM-Wet-Modell wirkungslos.',
+    values: [['100 %', 'Voller Unity-Reference-Anteil.'], ['75 %', 'Reference-Anteil 0,75.'], ['50 %', 'Reference-Anteil 0,50.'], ['25 %', 'Reference-Anteil 0,25.'], ['0 % / BANDS ONLY', 'Kein Unity-Reference-Anteil; im REFERENCE + DELTA-Modell bleibt der Band-/Delta-Anteil.']],
+    default: '100 %', note: 'Experimenteller Wet-Model-Vergleich; keine Hardwarebehauptung.'
+  },
+  'data-band-boost-db': {
+    title: 'DEV BAND BOOST', what: 'Legt den maximalen positiven dB-Bereich der Band-Gain-Fader fest.',
+    scope: 'Wirkt auf die positive Hälfte jedes Band-Faders; Zwischenwerte werden linear im dB-Bereich abgebildet.',
+    values: [['+12 dB', 'Fader +100 = +12 dB.'], ['+18 dB', 'Fader +100 = +18 dB.'], ['+24 dB', 'Fader +100 = +24 dB.']],
+    default: '+12 dB', note: 'Experimenteller Kalibrierwert; kein bestätigter Erica-Hardwarewert.'
+  },
+  'data-band-cut-db': {
+    title: 'DEV BAND CUT', what: 'Legt den maximalen negativen dB-Bereich der Band-Gain-Fader fest.',
+    scope: 'Wirkt unabhängig vom Boost auf die negative Hälfte der Band-Fader; bei -60 dB sind -100 = -60 dB, -50 = -30 dB und 0 = 0 dB.',
+    values: [['-12 dB', 'Fader -100 = -12 dB.'], ['-24 dB', 'Fader -100 = -24 dB.'], ['-36 dB', 'Fader -100 = -36 dB.'], ['-48 dB', 'Fader -100 = -48 dB.'], ['-60 dB', 'Fader -100 = -60 dB.']],
+    default: '-12 dB', note: 'Experimenteller Kalibrierwert; kein bestätigter Erica-Hardwarewert.'
+  },
+  'data-wet-model': {
+    title: 'DEV WET MODEL', what: 'Wählt die experimentelle Bildung des Wet-Ausgangs.',
+    scope: 'Wirkt im Wet-Pfad vor der Ausgabe; beeinflusst nicht die trockene Referenz direkt.',
+    values: [['REFERENCE + DELTA', 'Unity-Reference plus Summe der durch Band-Gain erzeugten Delta-Beiträge.'], ['FILTERBANK SUM', 'Summe der tatsächlichen Bandpfade ohne direkten Unity-Reference-Pfad.']],
+    default: 'REFERENCE + DELTA', note: 'Experimenteller Architekturvergleich, keine bestätigte interne Hardwaretopologie.'
+  },
+  'data-feedback-topology': {
+    title: 'DEV FB TOPOLOGY', what: 'Wählt die Topologie des positiven lokalen Feedbacks.',
+    scope: 'Wirkt bei aktivem lokalem Feedback und positiver Resonance; COMMON BUS führt lokale Taps an den gemeinsamen Filterbank-Eingang zurück.',
+    values: [['ISOLATED TPT', 'Ältere separate Resonator-/TPT-Architektur.'], ['COMMON BUS', 'Ausgewählte lokale Taps werden gemeinsam zurückgeführt und regen erneut alle Base-Bänder an.']],
+    default: 'ISOLATED TPT', note: 'Experimenteller Reverse-Engineering-Hörvergleich; COMMON BUS ist der aktuelle lokale Entwicklungspfad. Keine Schaltung wird als bewiesen behauptet.'
+  },
+  'data-feedback-tap': {
+    title: 'DEV FB TAP', what: 'Legt fest, ob der lokale COMMON-BUS-Tap Band-Ausgänge vor oder nach Band-Gain verwendet.',
+    scope: 'Nur lokaler COMMON-BUS-Feedback-Tap; bei ISOLATED TPT und ohne lokalen Common Bus wirkungslos.',
+    values: [['PRE GAIN', 'Verwendet den unverstärkten Base-Bandpass-Ausgang.'], ['POST GAIN', 'Verwendet den mit (1 + deltaGain) gewichteten Band-Ausgang; Boost/Cut verändert dadurch zusätzlich den lokalen Loop-Tap.']],
+    default: 'PRE GAIN', note: 'Experimenteller DEV-Wert; keine Änderung an Band-Gain selbst.'
+  },
+  'data-common-bus-saturation-mode': {
+    title: 'DEV FB SAT', what: 'Wählt die Sättigungskennlinie der Common-Bus-Returns.',
+    scope: 'Nur positive COMMON-BUS-Returns: lokaler Common Return und MAIN/FB-ALL-Return werden jeweils mit dieser Kennlinie gesättigt.',
+    values: [['CURRENT', 'Bestehende tanh()-Kennlinie.'], ['CONSTANT CEILING', 'Verwendet ceiling * tanh((drive * x) / ceiling).']],
+    default: 'CURRENT', note: 'Experimenteller DEV-Wert; im LEGACY-FB-ALL-Pfad nicht die Legacy-Sättigung ersetzen.'
+  },
+  'data-common-bus-drive': {
+    title: 'DEV FB DRIVE', what: 'Bestimmt den Drive-Faktor der CONSTANT-CEILING-Common-Bus-Kennlinie.',
+    scope: 'Relevant für positive COMMON-BUS-Returns nur bei CONSTANT CEILING; im CURRENT-Modus wird dieser Wert nicht verwendet.',
+    values: [['0.5', 'Niedrigere Ansteuerung der Kennlinie.'], ['1', 'Neutrale Ansteuerung.'], ['2', 'Doppelte Ansteuerung.'], ['4', 'Vierfache Ansteuerung.'], ['8', 'Achtfache Ansteuerung.'], ['16', 'Sechzehnfache Ansteuerung.']],
+    default: '1', note: 'Experimenteller DEV-Wert; kein unabhängiger Gain-Regler.'
+  },
+  'data-common-bus-ceiling': {
+    title: 'DEV FB CEILING', what: 'Bestimmt die Ceiling-Amplitude der CONSTANT-CEILING-Kennlinie.',
+    scope: 'Relevant für positive COMMON-BUS-Returns nur bei CONSTANT CEILING; im CURRENT-Modus wird dieser Wert nicht verwendet.',
+    values: [['0.25', 'Return-Ceiling 0,25.'], ['0.50', 'Return-Ceiling 0,50.'], ['1.00', 'Return-Ceiling 1,00.'], ['2.00', 'Return-Ceiling 2,00.'], ['4.00', 'Return-Ceiling 4,00.']],
+    default: '1.00', note: 'Experimenteller DEV-Wert; wirkt zusammen mit der Formel ceiling * tanh((drive * x) / ceiling).'
+  },
+  'data-feedback-all-engine': {
+    title: 'DEV FB ALL ENGINE', what: 'Wählt den MAIN-/FB-ALL-Feedbackpfad.',
+    scope: 'LEGACY verwendet den bisherigen Legacy-FB-ALL-Pfad. COMMON BUS bildet einen eigenen MAIN-Return aus der Summe der Base-Band-Ausgänge.',
+    values: [['LEGACY', 'Bisheriger Legacy-FB-ALL-Pfad.'], ['COMMON BUS', 'Eigener MAIN-Common-Bus-Return; lokaler Common Return und MAIN-Return werden getrennt gebildet und gesättigt, dann gemeinsam an den Filterbank-Eingang geführt.']],
+    default: 'LEGACY', note: 'Experimenteller Architekturvergleich; keine bestätigte Erica-Schaltung.'
+  },
+  'data-feedback-all-source': {
+    title: 'DEV FB ALL SOURCE', what: 'Wählt die Quelle der MAIN-/FB-ALL-Summe.',
+    scope: 'Nur COMMON-BUS FB ALL / MAIN; die Auswahl erfolgt nach Bildung der jeweiligen MAIN-Summe und vor Level, Resonance-Gain und Saturation.',
+    values: [['PRE GAIN SUM', 'Summe der Base-Band-Ausgänge vor Band-Gain.'], ['POST GAIN SUM', 'Summe der mit (1 + deltaGain) gewichteten Band-Ausgänge; Boost/Cut beeinflusst dadurch zusätzlich die MAIN-Schleife.']],
+    default: 'POST GAIN SUM', note: 'Bei LEGACY wirkungslos; experimenteller MAIN-Tap-Vergleich.'
+  },
+  'data-feedback-all-level': {
+    title: 'DEV FB ALL LEVEL', what: 'Skaliert die gebildete MAIN-Tap-Summe.',
+    scope: 'Ausschließlich COMMON-BUS-MAIN: MAIN-Tap-Summe → Level → feedbackGain (1.25 * resonance²) → bestehende Saturation → mainCommonReturn. LEGACY ignoriert den Wert.',
+    values: [['RAW', 'Faktor 1,0.'], ['1 / SQRT(10)', 'Faktor 1 / sqrt(10) ≈ 0,316227766.'], ['1 / 10', 'Faktor 0,1.'], ['1 / 20', 'Faktor 0,05.'], ['1 / 40', 'Faktor 0,025.'], ['1 / 80', 'Faktor 0,0125.']],
+    default: 'RAW', note: 'Experimentelle feste COMMON-BUS-MAIN-Kalibrierung; keine automatische Normalisierung und keine finale Klangentscheidung.'
+  },
+  'data-positive-resonance-audition': {
+    title: 'CAL DEV RES AUD', what: 'Bestimmt den zusätzlichen Audition-Anteil der positiven lokalen Resonance.',
+    scope: 'Nur im positiven lokalen Pfad außerhalb des COMMON-BUS-Modus; wird mit dem hörbaren Residualanteil addiert.',
+    values: [['0.10', 'Audition-Gain 0,10.'], ['0.20', 'Audition-Gain 0,20.'], ['0.30', 'Audition-Gain 0,30.'], ['0.40', 'Audition-Gain 0,40.'], ['0.60', 'Audition-Gain 0,60.'], ['0.80', 'Audition-Gain 0,80.'], ['1.00', 'Audition-Gain 1,00.'], ['1.50', 'Audition-Gain 1,50.'], ['2.00', 'Audition-Gain 2,00.'], ['4.00', 'Audition-Gain 4,00.']],
+    default: '0.10', note: 'Experimenteller Hörtestwert; im aktuellen COMMON-BUS-Core wirkungslos.'
+  },
+  'data-positive-resonance-drive': {
+    title: 'CAL DEV RES DRIVE', what: 'Bestimmt den Drive der positiven nichtlinearen TPT-Resonator-Saturation.',
+    scope: 'Nur im positiven lokalen TPT-/nichtlinearen Resonatorpfad; im COMMON-BUS-Modus werden diese Resonator-Auditionpfade nicht verwendet.',
+    values: [['1', 'Drive 1.'], ['2', 'Drive 2.'], ['4', 'Drive 4.'], ['8', 'Drive 8.'], ['16', 'Drive 16.'], ['24', 'Drive 24.'], ['32', 'Drive 32.']],
+    default: '1', note: 'Experimenteller Resonator-LAB-Wert; kein FB-ALL- oder Common-Bus-Drive.'
+  },
+  'data-positive-resonance-damping-floor': {
+    title: 'CAL DEV RES FLOOR', what: 'Bestimmt die Restdämpfung des positiven lokalen Resonators bei voller Resonance.',
+    scope: 'Nur im positiven lokalen Resonatorpfad; steuert dessen Damping-Skala, nicht den COMMON-BUS-MAIN-Return.',
+    values: [['0.10', 'Restdämpfung 0,10.'], ['0.05', 'Restdämpfung 0,05.'], ['0.02', 'Restdämpfung 0,02.'], ['0.00', 'Keine positive Restdämpfung.'], ['-0.02', 'Negative Grenz-/Selbstoszillationsanalyse.'], ['-0.05', 'Stärker negative Grenz-/Selbstoszillationsanalyse.'], ['-0.10', 'Am stärksten negative Grenz-/Selbstoszillationsanalyse.']],
+    default: '0.10', note: 'Experimenteller Resonator-LAB-Wert; negative Werte dienen Analyse und sind keine finalen Hardwarewerte.'
+  },
+  'data-positive-resonance-output': {
+    title: 'DEV RES OUTPUT', what: 'Wählt den hörbaren positiven Resonator-Ausgang bzw. Residualtyp.',
+    scope: 'Nur im positiven lokalen Resonatorpfad; im aktuellen COMMON-BUS-Core ohne positive lokale Resonator-Audition wirkungslos.',
+    values: [['CURRENT RESIDUAL', 'Aktuelles Resonator-Signal minus linearer Base-/Referenzpfad.'], ['NONLINEAR - BASE', 'Nichtlinearer Resonatorausgang minus dessen Base-Anteil.'], ['FULL NONLINEAR', 'Vollständiger nichtlinearer Resonatorausgang; im MATCHED-Modus latenzangepasst rekonstruiert.']],
+    default: 'CURRENT RESIDUAL', note: 'Experimenteller TPT-/Residualvergleich.'
+  },
+  'data-positive-resonance-latency': {
+    title: 'DEV RES LATENCY', what: 'Wählt die Latenzvariante des positiven Resonator-Auditionsignals.',
+    scope: 'Nur im positiven lokalen Resonatorpfad; der aktuelle COMMON-BUS-MAIN-Pfad verwendet diese Auswahl nicht.',
+    values: [['CURRENT', 'Aktuelle, direkt aus dem gewählten Resonatorpfad kommende Latenz.'], ['MATCHED', 'Latenzangepasste Variante für den direkten Vergleich mit dem Base-Pfad.']],
+    default: 'CURRENT', note: 'Experimenteller TPT-/Residualvergleich.'
+  },
+  'data-positive-resonance-curve': {
+    title: 'DEV RES CURVE', what: 'Formt die Kennlinie, mit der positive Resonance auf die lokale Resonator-Magnitude abgebildet wird.',
+    scope: 'Nur positive lokale Resonance; COMMON BUS deaktiviert den lokalen Resonatorpfad, daher dort wirkungslos.',
+    values: [['CURRENT', 'Lineare Resonance-Abbildung.'], ['EARLY', 'Früherer Anstieg über sqrt(resonance).'], ['AGGRESSIVE', 'Früherer/stärkerer Anstieg über cbrt(resonance).']],
+    default: 'CURRENT', note: 'Experimenteller Resonator-LAB-Wert.'
+  },
+  'data-positive-resonance-engine': {
+    title: 'DEV RES ENGINE', what: 'Wählt die Engine des positiven lokalen Resonators.',
+    scope: 'Nur positive lokale Resonance außerhalb des COMMON-BUS-Modus; negative Resonance und FB ALL bleiben im Legacy-Pfad.',
+    values: [['TPT', 'Nichtlinearer positiver TPT-Resonatorpfad mit dem aktuellen Residual-/Audition-Modell.'], ['PHASE 2', 'Ältere positive Phase-2-Resonator-/Prototyplösung.']],
+    default: 'TPT', note: 'Experimenteller Engine-Vergleich; im aktuellen COMMON-BUS-Core wirkungslos.'
+  }
+};
+
+const devLabTooltip = document.createElement('div');
+devLabTooltip.className = 'dev-lab-tooltip';
+devLabTooltip.id = 'dev-lab-tooltip';
+devLabTooltip.setAttribute('role', 'tooltip');
+devLabTooltip.hidden = true;
+document.body.append(devLabTooltip);
+let activeDevLabControl = null;
+const renderDevLabHelp = help => {
+  devLabTooltip.replaceChildren();
+  const heading = document.createElement('h3'); heading.textContent = help.title; devLabTooltip.append(heading);
+  [['Erklärung', help.what], ['Signalweg / Scope', help.scope]].forEach(([label, value]) => {
+    const paragraph = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = `${label}: `; paragraph.append(strong, value); devLabTooltip.append(paragraph);
+  });
+  const valuesHeading = document.createElement('strong'); valuesHeading.textContent = 'Werte:'; devLabTooltip.append(valuesHeading);
+  const values = document.createElement('ul');
+  help.values.forEach(([name, description]) => { const item = document.createElement('li'); const value = document.createElement('strong'); value.textContent = `${name} — `; item.append(value, description); values.append(item); });
+  devLabTooltip.append(values);
+  [['Default', help.default], ['Hinweis', help.note]].forEach(([label, value]) => { const paragraph = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = `${label}: `; paragraph.append(strong, value); devLabTooltip.append(paragraph); });
+};
+const positionDevLabTooltip = () => {
+  if (!activeDevLabControl) return;
+  const anchor = activeDevLabControl.getBoundingClientRect();
+  const width = Math.min(420, Math.max(280, window.innerWidth - 24));
+  devLabTooltip.style.width = `${width}px`;
+  devLabTooltip.style.maxHeight = `${Math.max(160, window.innerHeight - 24)}px`;
+  const tooltipHeight = devLabTooltip.getBoundingClientRect().height;
+  let left = anchor.right + 10;
+  if (left + width > window.innerWidth - 12) left = anchor.left - width - 10;
+  left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+  let top = anchor.top;
+  if (top + tooltipHeight > window.innerHeight - 12) top = window.innerHeight - tooltipHeight - 12;
+  top = Math.max(12, top);
+  devLabTooltip.style.left = `${left}px`;
+  devLabTooltip.style.top = `${top}px`;
+};
+const hideDevLabTooltip = control => {
+  if (control && activeDevLabControl !== control) return;
+  activeDevLabControl = null;
+  devLabTooltip.hidden = true;
+};
+const showDevLabTooltip = control => {
+  const select = control.querySelector('select');
+  const help = select && DEV_LAB_HELP[select.getAttributeNames().find(name => name.startsWith('data-'))];
+  if (!help) return;
+  activeDevLabControl = control;
+  renderDevLabHelp(help);
+  devLabTooltip.hidden = false;
+  positionDevLabTooltip();
+  select.setAttribute('aria-describedby', devLabTooltip.id);
+};
+document.querySelectorAll('.dev-lab-panel .dev-lab-control, .dev-lab-panel .dev-audition-control').forEach(control => {
+  control.addEventListener('mouseenter', () => showDevLabTooltip(control));
+  control.addEventListener('mouseleave', () => { if (!control.contains(document.activeElement)) hideDevLabTooltip(control); });
+  control.addEventListener('focusin', () => showDevLabTooltip(control));
+  control.addEventListener('focusout', event => { if (!control.contains(event.relatedTarget)) hideDevLabTooltip(control); });
+});
+window.addEventListener('resize', positionDevLabTooltip);
 const THEME_STORAGE_KEY = 'resonant-filterbank-theme';
-const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'soft-neutral', 'pro-console'];
+const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'pro-console'];
 const themeSelect = document.querySelector('[data-theme-select]');
 const readStoredTheme = () => {
   try { return window.localStorage.getItem(THEME_STORAGE_KEY); } catch { return null; }
@@ -126,7 +343,7 @@ const applyTheme = value => {
 applyTheme(readStoredTheme());
 themeSelect?.addEventListener('change', event => applyTheme(event.target.value));
 const bands = document.querySelector('.bands');
-bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><div class="band-title">BAND ${index+1}</div><div class="band-actions"><button class="band-action" type="button" data-feedback-band="${index}">FB</button><button class="band-action" type="button" data-mod-band="${index}">MOD</button></div><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
+bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><div class="band-actions"><button class="band-action" type="button" data-feedback-band="${index}">FB</button><button class="band-action" type="button" data-mod-band="${index}">MOD</button></div><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
 const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume') return `${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
 
 const bars = document.querySelector('.bars');
@@ -147,9 +364,19 @@ const updateAnalyzerBand = index => {
   renderAnalyzerBar(leftBar, state.bandGainLeft[index]);
   renderAnalyzerBar(rightBar, state.bandGainRight[index]);
 };
+const getBandBoostDb = () => Number(bandBoostSelect?.value ?? 12);
+const getBandCutDb = () => Number(bandCutSelect?.value ?? 12);
+const formatBandSliderValue = value => {
+  const gainDb = controlToBandGainDb(value, getBandBoostDb(), getBandCutDb());
+  const normalizedGainDb = Math.abs(gainDb) < 1e-9 ? 0 : gainDb;
+  return `${normalizedGainDb > 0 ? '+' : ''}${normalizedGainDb.toFixed(1)} dB`;
+};
+const renderBandSliderValues = () => faders.forEach((_, index) => renderBand(index));
 const renderBand = index => {
   const slider = faders[index];
   slider.value = String(state.bandGainLeft[index]);
+  const valueDisplay = document.querySelector(`[data-band-value="${index}"]`);
+  if (valueDisplay) valueDisplay.textContent = formatBandSliderValue(state.bandGainLeft[index]);
   updateAnalyzerBand(index);
 };
 const setBandBaseGain = (channel, index, value) => {
@@ -227,6 +454,8 @@ const startAudioButton = document.querySelector('[data-audio-start]');
 const stopAudioButton = document.querySelector('[data-audio-stop]');
 const audioStatus = document.querySelector('[data-audio-status]');
 const audioMessage = document.querySelector('[data-audio-message]');
+let hasManualInputSelection = false;
+const findElektronInput = devices => devices.find(device => /elektron/i.test(device.label ?? ''));
 const renderDevices = (select, devices, emptyLabel) => {
   const selectedValue = select.value;
   select.replaceChildren();
@@ -243,8 +472,11 @@ const renderDevices = (select, devices, emptyLabel) => {
     option.textContent = device.label || `Audio-Gerät ${index + 1}`;
     select.append(option);
   });
-  if ([...select.options].some(option => option.value === selectedValue)) select.value = selectedValue;
+  const preferredElektronInput = select === inputDeviceSelect && !hasManualInputSelection ? findElektronInput(devices) : null;
+  if (preferredElektronInput) select.value = preferredElektronInput.deviceId;
+  else if ([...select.options].some(option => option.value === selectedValue)) select.value = selectedValue;
 };
+inputDeviceSelect?.addEventListener('change', () => { hasManualInputSelection = true; });
 const updateAudioStatus = (status, message = '') => {
   state.audioStatus = status;
   state.audioError = message;
@@ -316,8 +548,8 @@ const bindDevLabSelect = (select, apply, fallback) => {
 };
 bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
-bindDevLabSelect(bandBoostSelect, value => audioEngine.setBandBoostDb(value), '12');
-bindDevLabSelect(bandCutSelect, value => audioEngine.setBandCutDb(value), '12');
+bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); renderBandSliderValues(); }, '12');
+bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); renderBandSliderValues(); }, '12');
 bindDevLabSelect(feedbackTopologySelect, value => audioEngine.setFeedbackTopology(value), 'isolated-tpt');
 bindDevLabSelect(feedbackTapSelect, value => audioEngine.setFeedbackTap(value), 'pre-gain');
 bindDevLabSelect(wetModelSelect, value => audioEngine.setWetModel(value), 'reference-delta');

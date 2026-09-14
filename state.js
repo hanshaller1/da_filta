@@ -30,6 +30,14 @@
     if (!Number.isFinite(numericValue)) return BAND_GAIN_NEUTRAL;
     return Math.min(BAND_GAIN_MAX, Math.max(BAND_GAIN_MIN, numericValue));
   };
+  const controlToBandGainDb = (control, maxBandBoostDb = 12, maxBandCutDb = 12) => {
+    const normalizedControl = clampBandGain(control) / BAND_GAIN_MAX;
+    const boostDb = Number(maxBandBoostDb);
+    const cutDb = Number(maxBandCutDb);
+    const safeBoostDb = Number.isFinite(boostDb) ? boostDb : 12;
+    const safeCutDb = Number.isFinite(cutDb) ? cutDb : 12;
+    return normalizedControl >= 0 ? safeBoostDb * normalizedControl : safeCutDb * normalizedControl;
+  };
   const getBandGainArray = (targetState, channel) => {
     if (channel === 'left') return targetState.bandGainLeft;
     if (channel === 'right') return targetState.bandGainRight;
@@ -71,6 +79,7 @@
     BAND_GAIN_NEUTRAL,
     GLOBAL_CONTROL_DEFINITIONS,
     clampBandGain,
+    controlToBandGainDb,
     createInitialState,
     setBandBaseGain
   });
