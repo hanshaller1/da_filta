@@ -1,5 +1,7 @@
 import { LinearTptSvf, OversampledPositiveTptResonator } from './tpt-svf.js';
 
+const COMMON_BUS_RESONANCE_EPSILON = 1e-12;
+
 class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
@@ -336,6 +338,10 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       nonlinearConvergenceErrorMaximum: Array(this.bandCount).fill(0),
       nonlinearFallbackCounts: Array(this.bandCount).fill(0),
       nonlinearNonFiniteStateResets: Array(this.bandCount).fill(0),
+      commonFeedbackReturn: 0,
+      commonFeedbackReturnPeak: 0,
+      resonanceTarget: 0,
+      smoothedResonance: 0,
       sampleCount: 0
     };
   }
@@ -572,7 +578,12 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     const source = Number.isFinite(input) ? input : 0;
     const feedbackAllGate = this.feedbackAllGateTargets[channel] + this.feedbackGateSmoothingCoefficient * (this.feedbackAllGates[channel] - this.feedbackAllGateTargets[channel]);
     this.feedbackAllGates[channel] = feedbackAllGate;
-    const commonBusActive = this.feedbackTopology === 'common-bus' && this.resonanceTarget > 0 && this.resonance > 0;
+    // A positive common-bus loop follows the already smoothed resonance
+    // state on its way to zero. A negative target still leaves the positive
+    // topology immediately, preserving the legacy negative-path handoff.
+    const commonBusActive = this.feedbackTopology === 'common-bus'
+      && this.resonanceTarget >= 0
+      && this.resonance > COMMON_BUS_RESONANCE_EPSILON;
     const commonReturn = commonBusActive && Number.isFinite(this.commonFeedbackReturns[channel]) ? this.commonFeedbackReturns[channel] : 0;
     let mainOutput = this.wetModel === 'reference-delta' ? source * this.referenceLevel : 0;
     let filterbankSum = 0;
@@ -766,6 +777,13 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       diagnostics.positiveResonanceOutputMode = this.positiveResonanceOutputMode;
       diagnostics.positiveResonanceLatencyMode = this.positiveResonanceLatencyMode;
       diagnostics.positiveResonanceCurve = this.positiveResonanceCurve;
+      diagnostics.commonFeedbackReturn = this.commonFeedbackReturns[channel];
+      diagnostics.commonFeedbackReturnPeak = Math.max(
+        diagnostics.commonFeedbackReturnPeak,
+        Math.abs(this.commonFeedbackReturns[channel])
+      );
+      diagnostics.resonanceTarget = this.resonanceTarget;
+      diagnostics.smoothedResonance = this.resonance;
       diagnostics.finite = diagnostics.finite
         && Number.isFinite(source)
         && Number.isFinite(wetOutput);
