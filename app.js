@@ -52,6 +52,9 @@ const bandCutSelect = addDevLabSelector('DEV BAND CUT', 'data-band-cut-db', [['1
 const feedbackTopologySelect = addDevLabSelector('DEV FB TOPOLOGY', 'data-feedback-topology', [['isolated-tpt', 'ISOLATED TPT'], ['common-bus', 'COMMON BUS']]);
 const feedbackTapSelect = addDevLabSelector('DEV FB TAP', 'data-feedback-tap', [['pre-gain', 'PRE GAIN'], ['post-gain', 'POST GAIN']]);
 const wetModelSelect = addDevLabSelector('DEV WET MODEL', 'data-wet-model', [['reference-delta', 'REFERENCE + DELTA'], ['filterbank-sum', 'FILTERBANK SUM']]);
+const commonBusSatSelect = addDevLabSelector('DEV FB SAT', 'data-common-bus-saturation-mode', [['current', 'CURRENT'], ['constant-ceiling', 'CONSTANT CEILING']]);
+const commonBusDriveSelect = addDevLabSelector('DEV FB DRIVE', 'data-common-bus-drive', [['0.5', '0.5'], ['1', '1'], ['2', '2'], ['4', '4'], ['8', '8'], ['16', '16']]);
+const commonBusCeilingSelect = addDevLabSelector('DEV FB CEILING', 'data-common-bus-ceiling', [['0.25', '0.25'], ['0.5', '0.50'], ['1', '1.00'], ['2', '2.00'], ['4', '4.00']]);
 const THEME_STORAGE_KEY = 'resonant-filterbank-theme';
 const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'soft-neutral', 'pro-console'];
 const themeSelect = document.querySelector('[data-theme-select]');
@@ -262,6 +265,9 @@ bindDevLabSelect(bandCutSelect, value => audioEngine.setBandCutDb(value), '12');
 bindDevLabSelect(feedbackTopologySelect, value => audioEngine.setFeedbackTopology(value), 'isolated-tpt');
 bindDevLabSelect(feedbackTapSelect, value => audioEngine.setFeedbackTap(value), 'pre-gain');
 bindDevLabSelect(wetModelSelect, value => audioEngine.setWetModel(value), 'reference-delta');
+bindDevLabSelect(commonBusSatSelect, value => audioEngine.setCommonBusSaturationMode(value), 'current');
+bindDevLabSelect(commonBusDriveSelect, value => audioEngine.setCommonBusDrive(value), '1');
+bindDevLabSelect(commonBusCeilingSelect, value => audioEngine.setCommonBusCeiling(value), '1');
 const syncAudioParameters = () => {
   audioEngine.setInputGainDb(state.inputGain);
   audioEngine.setDryWet(state.dryWet);

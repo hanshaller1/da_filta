@@ -24,6 +24,7 @@
       this.maxBandCutDb = 12;
       this.positiveResonanceEngine = 'tpt';
       this.feedbackTopology = 'isolated-tpt'; this.feedbackTap = 'pre-gain'; this.wetModel = 'reference-delta';
+      this.commonBusSaturationMode = 'current'; this.commonBusDrive = 1; this.commonBusCeiling = 1;
       this.dryWet = 50;
       this.volumeDb = -6;
       this.context = null;
@@ -135,6 +136,9 @@
     setFeedbackTopology(value) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : 'isolated-tpt'; this.filterbank?.setFeedbackTopology(this.feedbackTopology); return this.feedbackTopology; }
     setFeedbackTap(value) { this.feedbackTap = value === 'post-gain' ? 'post-gain' : 'pre-gain'; this.filterbank?.setFeedbackTap(this.feedbackTap); return this.feedbackTap; }
     setWetModel(value) { this.wetModel = value === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta'; this.filterbank?.setWetModel(this.wetModel); return this.wetModel; }
+    setCommonBusSaturationMode(value) { this.commonBusSaturationMode = value === 'constant-ceiling' ? 'constant-ceiling' : 'current'; this.filterbank?.setCommonBusSaturationMode(this.commonBusSaturationMode); return this.commonBusSaturationMode; }
+    setCommonBusDrive(value) { this.commonBusDrive = [0.5, 1, 2, 4, 8, 16].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setCommonBusDrive(this.commonBusDrive); return this.commonBusDrive; }
+    setCommonBusCeiling(value) { this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setCommonBusCeiling(this.commonBusCeiling); return this.commonBusCeiling; }
 
     setBandBaseGain(channel, index, value) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
@@ -181,6 +185,7 @@
         positiveResonanceCurve: this.positiveResonanceCurve
         , referenceLevel: this.referenceLevel, maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb, positiveResonanceEngine: this.positiveResonanceEngine
         , feedbackTopology: this.feedbackTopology, feedbackTap: this.feedbackTap, wetModel: this.wetModel
+        , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
       };
     }
 

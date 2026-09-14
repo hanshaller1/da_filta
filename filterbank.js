@@ -137,6 +137,9 @@
       this.feedbackTopology = initialState?.feedbackTopology === 'common-bus' ? 'common-bus' : 'isolated-tpt';
       this.feedbackTap = initialState?.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
       this.wetModel = initialState?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
+      this.commonBusSaturationMode = initialState?.commonBusSaturationMode === 'constant-ceiling' ? 'constant-ceiling' : 'current';
+      this.commonBusDrive = [0.5, 1, 2, 4, 8, 16].includes(Number(initialState?.commonBusDrive)) ? Number(initialState.commonBusDrive) : 1;
+      this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(initialState?.commonBusCeiling)) ? Number(initialState.commonBusCeiling) : 1;
       this.inputNode = audioContext.createGain();
       this.outputNode = audioContext.createGain();
       this.inputNode.gain.value = 1;
@@ -164,6 +167,7 @@
           referenceLevel: this.referenceLevel,
           positiveResonanceEngine: this.positiveResonanceEngine,
           feedbackTopology: this.feedbackTopology, feedbackTap: this.feedbackTap, wetModel: this.wetModel,
+          commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling,
           smoothingTime: PARAMETER_SMOOTHING_SECONDS,
           feedbackGateSmoothingTime: FEEDBACK_GATE_SMOOTHING_SECONDS,
           resonanceSmoothingTime: RESONANCE_SMOOTHING_SECONDS,
@@ -302,6 +306,9 @@
     setFeedbackTopology(value) { if (!this.disposed) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : 'isolated-tpt'; this.workletNode.port.postMessage({ type: 'set-feedback-topology', value: this.feedbackTopology }); } return this.feedbackTopology; }
     setFeedbackTap(value) { if (!this.disposed) { this.feedbackTap = value === 'post-gain' ? 'post-gain' : 'pre-gain'; this.workletNode.port.postMessage({ type: 'set-feedback-tap', value: this.feedbackTap }); } return this.feedbackTap; }
     setWetModel(value) { if (!this.disposed) { this.wetModel = value === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta'; this.workletNode.port.postMessage({ type: 'set-wet-model', value: this.wetModel }); } return this.wetModel; }
+    setCommonBusSaturationMode(value) { if (!this.disposed) { this.commonBusSaturationMode = value === 'constant-ceiling' ? 'constant-ceiling' : 'current'; this.workletNode.port.postMessage({ type: 'set-common-bus-saturation-mode', value: this.commonBusSaturationMode }); } return this.commonBusSaturationMode; }
+    setCommonBusDrive(value) { if (!this.disposed) { this.commonBusDrive = [0.5, 1, 2, 4, 8, 16].includes(Number(value)) ? Number(value) : 1; this.workletNode.port.postMessage({ type: 'set-common-bus-drive', value: this.commonBusDrive }); } return this.commonBusDrive; }
+    setCommonBusCeiling(value) { if (!this.disposed) { this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; this.workletNode.port.postMessage({ type: 'set-common-bus-ceiling', value: this.commonBusCeiling }); } return this.commonBusCeiling; }
 
     applyState(snapshot) {
       if (this.disposed) return;
@@ -342,6 +349,7 @@
         positiveResonanceCurve: this.positiveResonanceCurve
         , referenceLevel: this.referenceLevel, maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb, positiveResonanceEngine: this.positiveResonanceEngine
         , feedbackTopology: this.feedbackTopology, feedbackTap: this.feedbackTap, wetModel: this.wetModel
+        , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
       });
     }
 

@@ -17,6 +17,11 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     this.feedbackTopology = processorOptions.feedbackTopology === 'common-bus' ? 'common-bus' : 'isolated-tpt';
     this.feedbackTap = processorOptions.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
     this.wetModel = processorOptions.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
+    this.commonBusSaturationMode = processorOptions.commonBusSaturationMode === 'constant-ceiling' ? 'constant-ceiling' : 'current';
+    this.commonBusDrive = this.readCommonBusDrive(processorOptions.commonBusDrive);
+    this.commonBusDriveTarget = this.commonBusDrive;
+    this.commonBusCeiling = this.readCommonBusCeiling(processorOptions.commonBusCeiling);
+    this.commonBusCeilingTarget = this.commonBusCeiling;
     this.maxFeedbackGain = this.readPositiveOption(processorOptions.maxFeedbackGain, 1.25);
     this.maxAuditionGain = this.readPositiveOption(processorOptions.maxAuditionGain, 0.25);
     this.resonatorDampingFloor = this.readResonatorDampingFloor(processorOptions.resonatorDampingFloor);
@@ -57,6 +62,7 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       0.015
     );
     this.referenceLevelSmoothingCoefficient = this.smoothingCoefficient(0.015, 0.015);
+    this.commonBusSmoothingCoefficient = this.smoothingCoefficient(0.015, 0.015);
     this.devModeSmoothingCoefficient = this.smoothingCoefficient(0.015, 0.015);
     this.positiveResonanceOutputWeights = new Float64Array(3);
     this.positiveResonanceOutputTargets = new Float64Array(3);
@@ -169,6 +175,8 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   readPositiveResonanceEngine(value) {
     return value === 'phase2' ? 'phase2' : 'tpt';
   }
+  readCommonBusDrive(value) { return [0.5, 1, 2, 4, 8, 16].includes(Number(value)) ? Number(value) : 1; }
+  readCommonBusCeiling(value) { return [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; }
 
   readResonatorDampingFloor(value) {
     const numericValue = Number(value);
@@ -442,6 +450,9 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   setFeedbackTopology(value) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : 'isolated-tpt'; }
   setFeedbackTap(value) { this.feedbackTap = value === 'post-gain' ? 'post-gain' : 'pre-gain'; }
   setWetModel(value) { this.wetModel = value === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta'; }
+  setCommonBusSaturationMode(value) { this.commonBusSaturationMode = value === 'constant-ceiling' ? 'constant-ceiling' : 'current'; }
+  setCommonBusDrive(value, immediate = false) { this.commonBusDriveTarget = this.readCommonBusDrive(value); if (immediate) this.commonBusDrive = this.commonBusDriveTarget; }
+  setCommonBusCeiling(value, immediate = false) { this.commonBusCeilingTarget = this.readCommonBusCeiling(value); if (immediate) this.commonBusCeiling = this.commonBusCeilingTarget; }
 
   applyState(data) {
     const leftControls = this.readControls(data.bandGainLeft);
@@ -476,6 +487,9 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     if (data.feedbackTopology !== undefined) this.setFeedbackTopology(data.feedbackTopology);
     if (data.feedbackTap !== undefined) this.setFeedbackTap(data.feedbackTap);
     if (data.wetModel !== undefined) this.setWetModel(data.wetModel);
+    if (data.commonBusSaturationMode !== undefined) this.setCommonBusSaturationMode(data.commonBusSaturationMode);
+    if (data.commonBusDrive !== undefined) this.setCommonBusDrive(data.commonBusDrive, true);
+    if (data.commonBusCeiling !== undefined) this.setCommonBusCeiling(data.commonBusCeiling, true);
     this.initializeResonatorMagnitudes();
   }
 
@@ -528,6 +542,9 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-feedback-topology') { this.setFeedbackTopology(data.value); return; }
     if (data.type === 'set-feedback-tap') { this.setFeedbackTap(data.value); return; }
     if (data.type === 'set-wet-model') { this.setWetModel(data.value); return; }
+    if (data.type === 'set-common-bus-saturation-mode') { this.setCommonBusSaturationMode(data.value); return; }
+    if (data.type === 'set-common-bus-drive') { this.setCommonBusDrive(data.value); return; }
+    if (data.type === 'set-common-bus-ceiling') { this.setCommonBusCeiling(data.value); return; }
     if (data.type === 'apply-state') {
       this.applyState(data);
       return;
@@ -713,7 +730,11 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     if (commonBusActive && resonanceMagnitudeSquared > 0) {
       const feedbackGain = this.maxFeedbackGain * resonanceMagnitudeSquared;
       const drive = feedbackGain * commonTapSum;
-      this.commonFeedbackReturns[channel] = Number.isFinite(drive) ? Math.tanh(drive) : 0;
+      this.commonFeedbackReturns[channel] = Number.isFinite(drive)
+        ? (this.commonBusSaturationMode === 'constant-ceiling'
+          ? this.commonBusCeiling * Math.tanh((this.commonBusDrive * drive) / this.commonBusCeiling)
+          : Math.tanh(drive))
+        : 0;
     } else {
       this.commonFeedbackReturns[channel] = 0;
     }
@@ -739,6 +760,9 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       diagnostics.feedbackTopology = this.feedbackTopology;
       diagnostics.feedbackTap = this.feedbackTap;
       diagnostics.wetModel = this.wetModel;
+      diagnostics.commonBusSaturationMode = this.commonBusSaturationMode;
+      diagnostics.commonBusDrive = this.commonBusDrive;
+      diagnostics.commonBusCeiling = this.commonBusCeiling;
       diagnostics.positiveResonanceOutputMode = this.positiveResonanceOutputMode;
       diagnostics.positiveResonanceLatencyMode = this.positiveResonanceLatencyMode;
       diagnostics.positiveResonanceCurve = this.positiveResonanceCurve;
@@ -773,6 +797,8 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       this.referenceLevel = this.referenceLevelTarget + this.referenceLevelSmoothingCoefficient * (
         this.referenceLevel - this.referenceLevelTarget
       );
+      this.commonBusDrive = this.commonBusDriveTarget + this.commonBusSmoothingCoefficient * (this.commonBusDrive - this.commonBusDriveTarget);
+      this.commonBusCeiling = this.commonBusCeilingTarget + this.commonBusSmoothingCoefficient * (this.commonBusCeiling - this.commonBusCeilingTarget);
       for (let index = 0; index < 3; index += 1) {
         this.positiveResonanceOutputWeights[index] = this.positiveResonanceOutputTargets[index]
           + this.devModeSmoothingCoefficient * (
