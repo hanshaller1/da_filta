@@ -1,4 +1,5 @@
 :root {
+  --panel-gap: 7px;
   --bg: #031319;
   --cyan: #10eaf7;
   --text: #e7eef0;
@@ -134,3 +135,34 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
 .fb-workspace .legend { top: 76px; }
 .fader-track > .band-fader { height: 30px; }
 .fader-track > .band-fader { position: absolute; inset: 0; width: 100%; height: 100%; transform: none; transform-origin: initial; writing-mode: vertical-lr; direction: rtl; }
+
+/* Compact desktop calibration: keep the existing controls and routing unchanged. */
+.global-controls { gap: var(--panel-gap); margin-top: var(--panel-gap); }
+.mode-bar, .fb-workspace, .bands { margin-top: var(--panel-gap); }
+.app-shell { width: calc(100vw - 28px); max-width: calc(100vw - 28px); min-width: 0; }
+.console { flex: 1 1 auto; width: auto; min-width: 0; }
+.dev-lab-panel { flex: 0 1 clamp(280px, 17vw, 320px); width: clamp(280px, 17vw, 320px); min-width: 280px; height: calc(100vh - 32px); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; }
+.fb-workspace { height: clamp(300px, 34vh, 340px); }
+.bands { height: clamp(240px, 27vh, 270px); }
+.band-card { padding: 8px 5px 6px; }
+.band-actions { margin-top: 5px; margin-bottom: 5px; }
+.fader-wrap { flex-basis: 145px; height: 145px; }
+.fader-track { height: 135px; }
+.control-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; }
+.control-card .control-label { grid-column: 1 / -1; }
+.control-row { display: contents; }
+.control-row input { grid-column: 1; width: 100%; min-width: 0; margin-top: 6px; }
+.control-row output { grid-column: 2; margin-top: 6px; }
+.control-scale { grid-column: 1; width: calc(100% - 4px); margin-left: 2px; }
+.band-value { font-size: 17px; }
+.fb-workspace { height: clamp(330px, 40vh, 400px); }
+.bands { height: clamp(280px, 33vh, 340px); }
+.band-card { padding: 10px 6px 8px; }
+.fader-wrap { flex-basis: 185px; height: 185px; }
+.fader-track { height: 175px; }
+.fader-track::after { left: 29px; }
+.fb-workspace { height: clamp(300px, 34vh, 340px); }
+.bands { height: clamp(240px, 27vh, 270px); }
+.band-card { padding: 8px 5px 6px; }
+.fader-wrap { flex-basis: 145px; height: 145px; }
+.fader-track { height: 135px; }
