@@ -235,7 +235,8 @@ Die erste Filterbank-DSP-Stufe läuft in einem einzelnen Stereo-`AudioWorkletPro
 - zusätzlich existiert pro Band und Kanal ein separater linearer Resonator-TPT-Pfad mit identischen Basisparametern; sein Residual ist noch nicht hörbar aktiv
 - der Resonatorpfad liefert bei positiver lokaler Resonance hörbar ausschließlich sein Residual `BPresonant - BPbase`; ein Prototype-Audition-Gain von `0.10` begrenzt den ersten Hörtestwert
 - der alte positive lokale Phase-2-Loop ist dadurch ersetzt; negative Resonance und FB ALL verwenden übergangsweise weiterhin die Phase-2-Prototyplösung
-- neue negative Resonance-Topologien, ein neues Resonator-FB-ALL sowie Drive-/Character-Strukturen sind noch nicht implementiert
+- ein nichtlinearer positiver TPT-Resonator mit symmetrischer, kleinsignalnormalisierter `tanh`-State-Feedback-Saturation wird ausschließlich intern/diagnostisch gemessen; er ist noch nicht hörbar aktiv. Der Newton-Solver verwendet höchstens vier Iterationen. Die festen diagnostischen Drive-Werte `1`, `2`, `4` und `8` sind keine finale Classic-Kennlinie.
+- neue negative Resonance-Topologien, ein neues Resonator-FB-ALL sowie hörbare Drive-/Character-Strukturen sind noch nicht implementiert; Oversampling fehlt weiterhin, insbesondere die 11-kHz-Aliasing-Bewertung bleibt offen.
 
 Folgende Werte sind bewusste Webapp-/Prototype-Designentscheidungen und keine behaupteten Erica-Hardwarewerte:
 
