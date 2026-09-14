@@ -40,6 +40,8 @@
       this.positiveResonanceEngine = 'tpt';
       this.feedbackTopology = 'isolated-tpt'; this.feedbackTap = 'pre-gain'; this.wetModel = 'reference-delta';
       this.commonBusSaturationMode = 'current'; this.commonBusDrive = 1; this.commonBusCeiling = 1;
+      this.feedbackAllEngine = 'legacy'; this.feedbackAllSource = 'post-gain-sum';
+      this.feedbackAllLevel = 'raw';
       this.dryWet = 50;
       this.volumeDb = -6;
       this.context = null;
@@ -162,6 +164,9 @@
     setCommonBusSaturationMode(value) { this.commonBusSaturationMode = value === 'constant-ceiling' ? 'constant-ceiling' : 'current'; this.filterbank?.setCommonBusSaturationMode(this.commonBusSaturationMode); return this.commonBusSaturationMode; }
     setCommonBusDrive(value) { this.commonBusDrive = [0.5, 1, 2, 4, 8, 16].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setCommonBusDrive(this.commonBusDrive); return this.commonBusDrive; }
     setCommonBusCeiling(value) { this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setCommonBusCeiling(this.commonBusCeiling); return this.commonBusCeiling; }
+    setFeedbackAllEngine(value) { this.feedbackAllEngine = value === 'common-bus' ? 'common-bus' : 'legacy'; this.filterbank?.setFeedbackAllEngine(this.feedbackAllEngine); return this.feedbackAllEngine; }
+    setFeedbackAllSource(value) { this.feedbackAllSource = value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; this.filterbank?.setFeedbackAllSource(this.feedbackAllSource); return this.feedbackAllSource; }
+    setFeedbackAllLevel(value) { this.feedbackAllLevel = value === 'sqrt10' || value === 'tenth' ? value : 'raw'; this.filterbank?.setFeedbackAllLevel(this.feedbackAllLevel); return this.feedbackAllLevel; }
 
     setBandBaseGain(channel, index, value) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
@@ -209,6 +214,7 @@
         , referenceLevel: this.referenceLevel, maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb, positiveResonanceEngine: this.positiveResonanceEngine
         , feedbackTopology: this.feedbackTopology, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
+        , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, feedbackAllLevel: this.feedbackAllLevel
       };
     }
 
@@ -234,6 +240,9 @@
       this.setFeedbackTopology(snapshot?.feedbackTopology ?? this.feedbackTopology);
       this.setFeedbackTap(snapshot?.feedbackTap ?? this.feedbackTap);
       this.setWetModel(snapshot?.wetModel ?? this.wetModel);
+      this.setFeedbackAllEngine(snapshot?.feedbackAllEngine ?? this.feedbackAllEngine);
+      this.setFeedbackAllSource(snapshot?.feedbackAllSource ?? this.feedbackAllSource);
+      this.setFeedbackAllLevel(snapshot?.feedbackAllLevel ?? this.feedbackAllLevel);
       if (this.filterbank) this.filterbank.applyState(this.getFilterbankState());
     }
 

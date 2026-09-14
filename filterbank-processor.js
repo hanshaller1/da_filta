@@ -24,6 +24,9 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     this.commonBusDriveTarget = this.commonBusDrive;
     this.commonBusCeiling = this.readCommonBusCeiling(processorOptions.commonBusCeiling);
     this.commonBusCeilingTarget = this.commonBusCeiling;
+    this.feedbackAllEngine = this.readFeedbackAllEngine(processorOptions.feedbackAllEngine);
+    this.feedbackAllSource = this.readFeedbackAllSource(processorOptions.feedbackAllSource);
+    this.feedbackAllLevel = this.readFeedbackAllLevel(processorOptions.feedbackAllLevel);
     this.maxFeedbackGain = this.readPositiveOption(processorOptions.maxFeedbackGain, 1.25);
     this.maxAuditionGain = this.readPositiveOption(processorOptions.maxAuditionGain, 0.25);
     this.resonatorDampingFloor = this.readResonatorDampingFloor(processorOptions.resonatorDampingFloor);
@@ -103,6 +106,8 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       right: Array(this.bandCount).fill(0)
     };
     this.commonFeedbackReturns = { left: 0, right: 0 };
+    this.mainCommonFeedbackReturns = { left: 0, right: 0 };
+    this.mainCommonNonFiniteResetCounts = { left: 0, right: 0 };
     this.bandOutputs = {
       left: Array(this.bandCount).fill(0),
       right: Array(this.bandCount).fill(0)
@@ -176,6 +181,19 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
 
   readPositiveResonanceEngine(value) {
     return value === 'phase2' ? 'phase2' : 'tpt';
+  }
+  readFeedbackAllEngine(value) { return value === 'common-bus' ? 'common-bus' : 'legacy'; }
+  readFeedbackAllSource(value) { return value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; }
+  readFeedbackAllLevel(value) {
+    return ['sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth'].includes(value) ? value : 'raw';
+  }
+  feedbackAllLevelScale() {
+    return this.feedbackAllLevel === 'sqrt10' ? 1 / Math.sqrt(10)
+      : this.feedbackAllLevel === 'tenth' ? 0.1
+        : this.feedbackAllLevel === 'twentieth' ? 0.05
+          : this.feedbackAllLevel === 'fortieth' ? 0.025
+            : this.feedbackAllLevel === 'eightieth' ? 0.0125
+        : 1;
   }
   readCommonBusDrive(value) { return [0.5, 1, 2, 4, 8, 16].includes(Number(value)) ? Number(value) : 1; }
   readCommonBusCeiling(value) { return [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; }
@@ -340,6 +358,14 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       nonlinearNonFiniteStateResets: Array(this.bandCount).fill(0),
       commonFeedbackReturn: 0,
       commonFeedbackReturnPeak: 0,
+      mainCommonFeedbackReturn: 0,
+      mainCommonFeedbackReturnPeak: 0,
+      mainTapSumPeak: 0,
+      mainTapSumScaledPeak: 0,
+      mainFeedbackLevelScale: this.feedbackAllLevelScale(),
+      firstMainTapSum: null,
+      firstMainTapSumScaled: null,
+      mainCommonNonFiniteResets: 0,
       resonanceTarget: 0,
       smoothedResonance: 0,
       sampleCount: 0
@@ -453,12 +479,42 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   setPositiveResonanceEngine(value) {
     this.positiveResonanceEngine = this.readPositiveResonanceEngine(value);
   }
-  setFeedbackTopology(value) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : 'isolated-tpt'; }
+  clearMainCommonFeedbackReturns() {
+    this.mainCommonFeedbackReturns.left = 0;
+    this.mainCommonFeedbackReturns.right = 0;
+  }
+
+  clearLegacyFeedbackReturns() {
+    for (const channel of ['left', 'right']) {
+      for (let band = 0; band < this.bandCount; band += 1) this.feedbackReturns[channel][band] = 0;
+    }
+  }
+
+  applyCommonBusSaturation(drive) {
+    if (!Number.isFinite(drive)) return null;
+    return this.commonBusSaturationMode === 'constant-ceiling'
+      ? this.commonBusCeiling * Math.tanh((this.commonBusDrive * drive) / this.commonBusCeiling)
+      : Math.tanh(drive);
+  }
+
+  setFeedbackTopology(value) {
+    this.feedbackTopology = value === 'common-bus' ? 'common-bus' : 'isolated-tpt';
+    if (this.feedbackTopology !== 'common-bus') this.clearMainCommonFeedbackReturns();
+  }
   setFeedbackTap(value) { this.feedbackTap = value === 'post-gain' ? 'post-gain' : 'pre-gain'; }
   setWetModel(value) { this.wetModel = value === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta'; }
   setCommonBusSaturationMode(value) { this.commonBusSaturationMode = value === 'constant-ceiling' ? 'constant-ceiling' : 'current'; }
   setCommonBusDrive(value, immediate = false) { this.commonBusDriveTarget = this.readCommonBusDrive(value); if (immediate) this.commonBusDrive = this.commonBusDriveTarget; }
   setCommonBusCeiling(value, immediate = false) { this.commonBusCeilingTarget = this.readCommonBusCeiling(value); if (immediate) this.commonBusCeiling = this.commonBusCeilingTarget; }
+  setFeedbackAllEngine(value) {
+    const nextValue = this.readFeedbackAllEngine(value);
+    if (nextValue === this.feedbackAllEngine) return;
+    this.feedbackAllEngine = nextValue;
+    this.clearMainCommonFeedbackReturns();
+    if (nextValue === 'common-bus') this.clearLegacyFeedbackReturns();
+  }
+  setFeedbackAllSource(value) { this.feedbackAllSource = this.readFeedbackAllSource(value); }
+  setFeedbackAllLevel(value) { this.feedbackAllLevel = this.readFeedbackAllLevel(value); }
 
   applyState(data) {
     const leftControls = this.readControls(data.bandGainLeft);
@@ -496,6 +552,9 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     if (data.commonBusSaturationMode !== undefined) this.setCommonBusSaturationMode(data.commonBusSaturationMode);
     if (data.commonBusDrive !== undefined) this.setCommonBusDrive(data.commonBusDrive, true);
     if (data.commonBusCeiling !== undefined) this.setCommonBusCeiling(data.commonBusCeiling, true);
+    if (data.feedbackAllEngine !== undefined) this.setFeedbackAllEngine(data.feedbackAllEngine);
+    if (data.feedbackAllSource !== undefined) this.setFeedbackAllSource(data.feedbackAllSource);
+    if (data.feedbackAllLevel !== undefined) this.setFeedbackAllLevel(data.feedbackAllLevel);
     this.initializeResonatorMagnitudes();
   }
 
@@ -551,6 +610,9 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-common-bus-saturation-mode') { this.setCommonBusSaturationMode(data.value); return; }
     if (data.type === 'set-common-bus-drive') { this.setCommonBusDrive(data.value); return; }
     if (data.type === 'set-common-bus-ceiling') { this.setCommonBusCeiling(data.value); return; }
+    if (data.type === 'set-feedback-all-engine') { this.setFeedbackAllEngine(data.value); return; }
+    if (data.type === 'set-feedback-all-source') { this.setFeedbackAllSource(data.value); return; }
+    if (data.type === 'set-feedback-all-level') { this.setFeedbackAllLevel(data.value); return; }
     if (data.type === 'apply-state') {
       this.applyState(data);
       return;
@@ -584,14 +646,27 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     const commonBusActive = this.feedbackTopology === 'common-bus'
       && this.resonanceTarget >= 0
       && this.resonance > COMMON_BUS_RESONANCE_EPSILON;
-    const commonReturn = commonBusActive && Number.isFinite(this.commonFeedbackReturns[channel]) ? this.commonFeedbackReturns[channel] : 0;
+    const usesCommonBusMainEngine = this.feedbackTopology === 'common-bus'
+      && this.feedbackAllEngine === 'common-bus'
+      && this.resonanceTarget >= 0;
+    const mainCommonBusActive = commonBusActive
+      && usesCommonBusMainEngine
+      && feedbackAllGate > COMMON_BUS_RESONANCE_EPSILON;
+    const localCommonReturn = commonBusActive && Number.isFinite(this.commonFeedbackReturns[channel])
+      ? this.commonFeedbackReturns[channel]
+      : 0;
+    const mainCommonReturn = mainCommonBusActive && Number.isFinite(this.mainCommonFeedbackReturns[channel])
+      ? this.mainCommonFeedbackReturns[channel]
+      : 0;
     let mainOutput = this.wetModel === 'reference-delta' ? source * this.referenceLevel : 0;
     let filterbankSum = 0;
     let commonTapSum = 0;
+    let mainTapSum = 0;
     let globalTapSum = 0;
     const usesLegacyLocalResonance = (this.resonanceTarget < 0 && this.resonance < 0)
       || (!commonBusActive && this.positiveResonanceEngine === 'phase2' && this.resonanceTarget > 0 && this.resonance > 0);
-    let hasActiveLegacyFeedbackGate = feedbackAllGate > 1e-12;
+    const usesLegacyFeedbackAll = feedbackAllGate > 1e-12 && !usesCommonBusMainEngine;
+    let hasActiveLegacyFeedbackGate = usesLegacyFeedbackAll;
 
     for (let band = 0; band < this.bandCount; band += 1) {
       const localGate = feedbackGateTargets[band] + this.feedbackGateSmoothingCoefficient * (feedbackGates[band] - feedbackGateTargets[band]);
@@ -611,7 +686,7 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       resonatorAuditionGates[band] = resonatorAuditionGate;
       const previousReturn = Number.isFinite(feedbackReturns[band]) ? feedbackReturns[band] : 0;
       if (!Number.isFinite(feedbackReturns[band])) feedbackReturns[band] = 0;
-      const bandInput = source + previousReturn + commonReturn;
+      const bandInput = source + previousReturn + localCommonReturn + mainCommonReturn;
       const bandOutput = this.processBandpass(baseFilters[band], bandInput);
       const resonatorBandOutput = this.processBandpass(resonatorFilters[band], source);
       const resonanceResidual = resonatorBandOutput - bandOutput;
@@ -714,6 +789,11 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       if (commonBusActive && localGate > 1e-12) {
         commonTapSum += localGate * (this.feedbackTap === 'post-gain' ? (1 + deltaGains[band]) * bandOutput : bandOutput);
       }
+      if (mainCommonBusActive) {
+        mainTapSum += feedbackAllGate * (this.feedbackAllSource === 'post-gain-sum'
+          ? (1 + deltaGains[band]) * bandOutput
+          : bandOutput);
+      }
     }
 
     if (this.wetModel === 'filterbank-sum') mainOutput += filterbankSum;
@@ -725,11 +805,12 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       const auditionGain = this.maxAuditionGain * resonanceMagnitudeSquared;
       for (let band = 0; band < this.bandCount; band += 1) {
         const legacyLocalGate = usesLegacyLocalResonance ? feedbackGates[band] : 0;
-        const rawFeedback = legacyLocalGate * bandOutputs[band] + feedbackAllGate * globalTap;
+        const rawFeedback = legacyLocalGate * bandOutputs[band]
+          + (usesLegacyFeedbackAll ? feedbackAllGate * globalTap : 0);
         const feedbackDrive = feedbackGain * rawFeedback;
         const feedbackReturn = Number.isFinite(feedbackDrive) ? Math.tanh(feedbackDrive) : 0;
         feedbackReturns[band] = Number.isFinite(feedbackReturn) ? feedbackReturn : 0;
-        const legacyAuditionGate = Math.max(legacyLocalGate, feedbackAllGate);
+        const legacyAuditionGate = Math.max(legacyLocalGate, usesLegacyFeedbackAll ? feedbackAllGate : 0);
         mainOutput += legacyAuditionGate * auditionGain * bandOutputs[band];
       }
     } else {
@@ -741,13 +822,25 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
     if (commonBusActive && resonanceMagnitudeSquared > 0) {
       const feedbackGain = this.maxFeedbackGain * resonanceMagnitudeSquared;
       const drive = feedbackGain * commonTapSum;
-      this.commonFeedbackReturns[channel] = Number.isFinite(drive)
-        ? (this.commonBusSaturationMode === 'constant-ceiling'
-          ? this.commonBusCeiling * Math.tanh((this.commonBusDrive * drive) / this.commonBusCeiling)
-          : Math.tanh(drive))
-        : 0;
+      const feedbackReturn = this.applyCommonBusSaturation(drive);
+      this.commonFeedbackReturns[channel] = feedbackReturn === null ? 0 : feedbackReturn;
     } else {
       this.commonFeedbackReturns[channel] = 0;
+    }
+
+    if (mainCommonBusActive && resonanceMagnitudeSquared > 0) {
+      const feedbackGain = this.maxFeedbackGain * resonanceMagnitudeSquared;
+      const mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
+      const drive = feedbackGain * mainTapSumScaled;
+      const feedbackReturn = this.applyCommonBusSaturation(drive);
+      if (feedbackReturn === null) {
+        this.mainCommonFeedbackReturns[channel] = 0;
+        this.mainCommonNonFiniteResetCounts[channel] += 1;
+      } else {
+        this.mainCommonFeedbackReturns[channel] = feedbackReturn;
+      }
+    } else {
+      this.mainCommonFeedbackReturns[channel] = 0;
     }
 
     const wetOutput = Number.isFinite(mainOutput) ? mainOutput : source;
@@ -782,6 +875,20 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
         diagnostics.commonFeedbackReturnPeak,
         Math.abs(this.commonFeedbackReturns[channel])
       );
+      diagnostics.mainCommonFeedbackReturn = this.mainCommonFeedbackReturns[channel];
+      diagnostics.mainCommonFeedbackReturnPeak = Math.max(
+        diagnostics.mainCommonFeedbackReturnPeak,
+        Math.abs(this.mainCommonFeedbackReturns[channel])
+      );
+      diagnostics.mainTapSumPeak = Math.max(diagnostics.mainTapSumPeak, Math.abs(mainTapSum));
+      const mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
+      diagnostics.mainTapSumScaledPeak = Math.max(diagnostics.mainTapSumScaledPeak, Math.abs(mainTapSumScaled));
+      diagnostics.mainFeedbackLevelScale = this.feedbackAllLevelScale();
+      if (diagnostics.firstMainTapSum === null && Math.abs(mainTapSum) > 0) {
+        diagnostics.firstMainTapSum = mainTapSum;
+        diagnostics.firstMainTapSumScaled = mainTapSumScaled;
+      }
+      diagnostics.mainCommonNonFiniteResets = this.mainCommonNonFiniteResetCounts[channel];
       diagnostics.resonanceTarget = this.resonanceTarget;
       diagnostics.smoothedResonance = this.resonance;
       diagnostics.finite = diagnostics.finite

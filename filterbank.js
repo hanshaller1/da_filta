@@ -140,6 +140,11 @@
       this.commonBusSaturationMode = initialState?.commonBusSaturationMode === 'constant-ceiling' ? 'constant-ceiling' : 'current';
       this.commonBusDrive = [0.5, 1, 2, 4, 8, 16].includes(Number(initialState?.commonBusDrive)) ? Number(initialState.commonBusDrive) : 1;
       this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(initialState?.commonBusCeiling)) ? Number(initialState.commonBusCeiling) : 1;
+      this.feedbackAllEngine = initialState?.feedbackAllEngine === 'common-bus' ? 'common-bus' : 'legacy';
+      this.feedbackAllSource = initialState?.feedbackAllSource === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum';
+      this.feedbackAllLevel = initialState?.feedbackAllLevel === 'sqrt10' || initialState?.feedbackAllLevel === 'tenth'
+        ? initialState.feedbackAllLevel
+        : 'raw';
       this.inputNode = audioContext.createGain();
       this.outputNode = audioContext.createGain();
       this.inputNode.gain.value = 1;
@@ -168,6 +173,7 @@
           positiveResonanceEngine: this.positiveResonanceEngine,
           feedbackTopology: this.feedbackTopology, feedbackTap: this.feedbackTap, wetModel: this.wetModel,
           commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling,
+          feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, feedbackAllLevel: this.feedbackAllLevel,
           smoothingTime: PARAMETER_SMOOTHING_SECONDS,
           feedbackGateSmoothingTime: FEEDBACK_GATE_SMOOTHING_SECONDS,
           resonanceSmoothingTime: RESONANCE_SMOOTHING_SECONDS,
@@ -309,6 +315,9 @@
     setCommonBusSaturationMode(value) { if (!this.disposed) { this.commonBusSaturationMode = value === 'constant-ceiling' ? 'constant-ceiling' : 'current'; this.workletNode.port.postMessage({ type: 'set-common-bus-saturation-mode', value: this.commonBusSaturationMode }); } return this.commonBusSaturationMode; }
     setCommonBusDrive(value) { if (!this.disposed) { this.commonBusDrive = [0.5, 1, 2, 4, 8, 16].includes(Number(value)) ? Number(value) : 1; this.workletNode.port.postMessage({ type: 'set-common-bus-drive', value: this.commonBusDrive }); } return this.commonBusDrive; }
     setCommonBusCeiling(value) { if (!this.disposed) { this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; this.workletNode.port.postMessage({ type: 'set-common-bus-ceiling', value: this.commonBusCeiling }); } return this.commonBusCeiling; }
+    setFeedbackAllEngine(value) { if (!this.disposed) { this.feedbackAllEngine = value === 'common-bus' ? 'common-bus' : 'legacy'; this.workletNode.port.postMessage({ type: 'set-feedback-all-engine', value: this.feedbackAllEngine }); } return this.feedbackAllEngine; }
+    setFeedbackAllSource(value) { if (!this.disposed) { this.feedbackAllSource = value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; this.workletNode.port.postMessage({ type: 'set-feedback-all-source', value: this.feedbackAllSource }); } return this.feedbackAllSource; }
+    setFeedbackAllLevel(value) { if (!this.disposed) { this.feedbackAllLevel = value === 'sqrt10' || value === 'tenth' ? value : 'raw'; this.workletNode.port.postMessage({ type: 'set-feedback-all-level', value: this.feedbackAllLevel }); } return this.feedbackAllLevel; }
 
     applyState(snapshot) {
       if (this.disposed) return;
@@ -332,6 +341,11 @@
       this.feedbackTopology = snapshot?.feedbackTopology === 'common-bus' ? 'common-bus' : this.feedbackTopology;
       this.feedbackTap = snapshot?.feedbackTap === 'post-gain' ? 'post-gain' : this.feedbackTap;
       this.wetModel = snapshot?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : this.wetModel;
+      this.feedbackAllEngine = snapshot?.feedbackAllEngine === 'common-bus' ? 'common-bus' : this.feedbackAllEngine;
+      this.feedbackAllSource = snapshot?.feedbackAllSource === 'pre-gain-sum' ? 'pre-gain-sum' : this.feedbackAllSource;
+      this.feedbackAllLevel = snapshot?.feedbackAllLevel === 'sqrt10' || snapshot?.feedbackAllLevel === 'tenth'
+        ? snapshot.feedbackAllLevel
+        : this.feedbackAllLevel;
       this.workletNode.port.postMessage({
         type: 'apply-state',
         bandGainLeft: [...this.bandGainLeft],
@@ -350,6 +364,7 @@
         , referenceLevel: this.referenceLevel, maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb, positiveResonanceEngine: this.positiveResonanceEngine
         , feedbackTopology: this.feedbackTopology, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
+        , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, feedbackAllLevel: this.feedbackAllLevel
       });
     }
 

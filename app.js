@@ -55,6 +55,17 @@ const wetModelSelect = addDevLabSelector('DEV WET MODEL', 'data-wet-model', [['r
 const commonBusSatSelect = addDevLabSelector('DEV FB SAT', 'data-common-bus-saturation-mode', [['current', 'CURRENT'], ['constant-ceiling', 'CONSTANT CEILING']]);
 const commonBusDriveSelect = addDevLabSelector('DEV FB DRIVE', 'data-common-bus-drive', [['0.5', '0.5'], ['1', '1'], ['2', '2'], ['4', '4'], ['8', '8'], ['16', '16']]);
 const commonBusCeilingSelect = addDevLabSelector('DEV FB CEILING', 'data-common-bus-ceiling', [['0.25', '0.25'], ['0.5', '0.50'], ['1', '1.00'], ['2', '2.00'], ['4', '4.00']]);
+const feedbackAllEngineSelect = addDevLabSelector('DEV FB ALL ENGINE', 'data-feedback-all-engine', [['legacy', 'LEGACY'], ['common-bus', 'COMMON BUS']]);
+const feedbackAllSourceSelect = addDevLabSelector('DEV FB ALL SOURCE', 'data-feedback-all-source', [['pre-gain-sum', 'PRE GAIN SUM'], ['post-gain-sum', 'POST GAIN SUM']]);
+if (feedbackAllSourceSelect) feedbackAllSourceSelect.value = 'post-gain-sum';
+const feedbackAllLevelSelect = addDevLabSelector('DEV FB ALL LEVEL', 'data-feedback-all-level', [
+  ['raw', 'RAW'],
+  ['sqrt10', '1 / SQRT(10)'],
+  ['tenth', '1 / 10'],
+  ['twentieth', '1 / 20'],
+  ['fortieth', '1 / 40'],
+  ['eightieth', '1 / 80']
+]);
 const inputPreampStageSelect = addDevLabSelector('DEV INPUT STAGE', 'data-input-preamp-stage', [['linear', 'LINEAR'], ['preamp', 'PREAMP']]);
 const THEME_STORAGE_KEY = 'resonant-filterbank-theme';
 const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'soft-neutral', 'pro-console'];
@@ -269,6 +280,9 @@ bindDevLabSelect(wetModelSelect, value => audioEngine.setWetModel(value), 'refer
 bindDevLabSelect(commonBusSatSelect, value => audioEngine.setCommonBusSaturationMode(value), 'current');
 bindDevLabSelect(commonBusDriveSelect, value => audioEngine.setCommonBusDrive(value), '1');
 bindDevLabSelect(commonBusCeilingSelect, value => audioEngine.setCommonBusCeiling(value), '1');
+bindDevLabSelect(feedbackAllEngineSelect, value => audioEngine.setFeedbackAllEngine(value), 'legacy');
+bindDevLabSelect(feedbackAllSourceSelect, value => audioEngine.setFeedbackAllSource(value), 'post-gain-sum');
+bindDevLabSelect(feedbackAllLevelSelect, value => audioEngine.setFeedbackAllLevel(value), 'raw');
 bindDevLabSelect(inputPreampStageSelect, value => audioEngine.setInputPreampStage(value), 'linear');
 const syncAudioParameters = () => {
   audioEngine.setInputGainDb(state.inputGain);
