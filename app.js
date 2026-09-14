@@ -31,6 +31,27 @@ const addDevSelectOptions = (select, values, format = value => String(value)) =>
 addDevSelectOptions(positiveResonanceAuditionSelect, [1.50, 2.00, 4.00], value => value.toFixed(2));
 addDevSelectOptions(positiveResonanceDriveSelect, [24, 32]);
 addDevSelectOptions(positiveResonanceDampingFloorSelect, [-0.05, -0.10], value => value.toFixed(2));
+const addDevLabSelector = (label, attribute, options) => {
+  const container = document.querySelector('.dev-lab-controls');
+  if (!container) return null;
+  const control = document.createElement('label');
+  control.className = 'dev-lab-control';
+  const title = document.createElement('span');
+  title.textContent = label;
+  const select = document.createElement('select');
+  select.setAttribute(attribute, '');
+  options.forEach(([value, text]) => { const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option); });
+  control.append(title, select);
+  container.append(control);
+  return select;
+};
+const referenceLevelSelect = addDevLabSelector('DEV REFERENCE', 'data-reference-level', [['1', '100 %'], ['0.75', '75 %'], ['0.5', '50 %'], ['0.25', '25 %'], ['0', '0 % / BANDS ONLY']]);
+const resonanceEngineSelect = addDevLabSelector('DEV RES ENGINE', 'data-positive-resonance-engine', [['tpt', 'TPT'], ['phase2', 'PHASE 2']]);
+const bandBoostSelect = addDevLabSelector('DEV BAND BOOST', 'data-band-boost-db', [['12', '+12 dB'], ['18', '+18 dB'], ['24', '+24 dB']]);
+const bandCutSelect = addDevLabSelector('DEV BAND CUT', 'data-band-cut-db', [['12', '-12 dB'], ['24', '-24 dB'], ['36', '-36 dB'], ['48', '-48 dB'], ['60', '-60 dB']]);
+const feedbackTopologySelect = addDevLabSelector('DEV FB TOPOLOGY', 'data-feedback-topology', [['isolated-tpt', 'ISOLATED TPT'], ['common-bus', 'COMMON BUS']]);
+const feedbackTapSelect = addDevLabSelector('DEV FB TAP', 'data-feedback-tap', [['pre-gain', 'PRE GAIN'], ['post-gain', 'POST GAIN']]);
+const wetModelSelect = addDevLabSelector('DEV WET MODEL', 'data-wet-model', [['reference-delta', 'REFERENCE + DELTA'], ['filterbank-sum', 'FILTERBANK SUM']]);
 const THEME_STORAGE_KEY = 'resonant-filterbank-theme';
 const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'soft-neutral', 'pro-console'];
 const themeSelect = document.querySelector('[data-theme-select]');
@@ -229,6 +250,18 @@ const setPositiveResonanceCurve = value => {
 };
 setPositiveResonanceCurve(positiveResonanceCurveSelect?.value ?? 'current');
 positiveResonanceCurveSelect?.addEventListener('change', event => setPositiveResonanceCurve(event.target.value));
+const bindDevLabSelect = (select, apply, fallback) => {
+  if (!select) return;
+  apply(select.value ?? fallback);
+  select.addEventListener('change', event => apply(event.target.value));
+};
+bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
+bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
+bindDevLabSelect(bandBoostSelect, value => audioEngine.setBandBoostDb(value), '12');
+bindDevLabSelect(bandCutSelect, value => audioEngine.setBandCutDb(value), '12');
+bindDevLabSelect(feedbackTopologySelect, value => audioEngine.setFeedbackTopology(value), 'isolated-tpt');
+bindDevLabSelect(feedbackTapSelect, value => audioEngine.setFeedbackTap(value), 'pre-gain');
+bindDevLabSelect(wetModelSelect, value => audioEngine.setWetModel(value), 'reference-delta');
 const syncAudioParameters = () => {
   audioEngine.setInputGainDb(state.inputGain);
   audioEngine.setDryWet(state.dryWet);

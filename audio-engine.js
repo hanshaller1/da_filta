@@ -19,6 +19,11 @@
       this.positiveResonanceOutputMode = window.Filterbank?.POSITIVE_RESONANCE_OUTPUT_MODE ?? 'current-residual';
       this.positiveResonanceLatencyMode = window.Filterbank?.POSITIVE_RESONANCE_LATENCY_MODE ?? 'current';
       this.positiveResonanceCurve = window.Filterbank?.POSITIVE_RESONANCE_CURVE ?? 'current';
+      this.referenceLevel = 1;
+      this.maxBandBoostDb = 12;
+      this.maxBandCutDb = 12;
+      this.positiveResonanceEngine = 'tpt';
+      this.feedbackTopology = 'isolated-tpt'; this.feedbackTap = 'pre-gain'; this.wetModel = 'reference-delta';
       this.dryWet = 50;
       this.volumeDb = -6;
       this.context = null;
@@ -123,6 +128,14 @@
       return this.positiveResonanceCurve;
     }
 
+    setReferenceLevel(value) { this.referenceLevel = [1, 0.75, 0.5, 0.25, 0].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setReferenceLevel(this.referenceLevel); return this.referenceLevel; }
+    setBandBoostDb(value) { this.maxBandBoostDb = [12, 18, 24].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandBoostDb(this.maxBandBoostDb); return this.maxBandBoostDb; }
+    setBandCutDb(value) { this.maxBandCutDb = [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandCutDb(this.maxBandCutDb); return this.maxBandCutDb; }
+    setPositiveResonanceEngine(value) { this.positiveResonanceEngine = value === 'phase2' ? value : 'tpt'; this.filterbank?.setPositiveResonanceEngine(this.positiveResonanceEngine); return this.positiveResonanceEngine; }
+    setFeedbackTopology(value) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : 'isolated-tpt'; this.filterbank?.setFeedbackTopology(this.feedbackTopology); return this.feedbackTopology; }
+    setFeedbackTap(value) { this.feedbackTap = value === 'post-gain' ? 'post-gain' : 'pre-gain'; this.filterbank?.setFeedbackTap(this.feedbackTap); return this.feedbackTap; }
+    setWetModel(value) { this.wetModel = value === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta'; this.filterbank?.setWetModel(this.wetModel); return this.wetModel; }
+
     setBandBaseGain(channel, index, value) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
       const nextValue = clampBandGain(value);
@@ -166,6 +179,8 @@
         positiveResonanceOutputMode: this.positiveResonanceOutputMode,
         positiveResonanceLatencyMode: this.positiveResonanceLatencyMode,
         positiveResonanceCurve: this.positiveResonanceCurve
+        , referenceLevel: this.referenceLevel, maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb, positiveResonanceEngine: this.positiveResonanceEngine
+        , feedbackTopology: this.feedbackTopology, feedbackTap: this.feedbackTap, wetModel: this.wetModel
       };
     }
 
@@ -184,6 +199,13 @@
       this.setPositiveResonanceOutputMode(snapshot?.positiveResonanceOutputMode ?? this.positiveResonanceOutputMode);
       this.setPositiveResonanceLatencyMode(snapshot?.positiveResonanceLatencyMode ?? this.positiveResonanceLatencyMode);
       this.setPositiveResonanceCurve(snapshot?.positiveResonanceCurve ?? this.positiveResonanceCurve);
+      this.setReferenceLevel(snapshot?.referenceLevel ?? this.referenceLevel);
+      this.setBandBoostDb(snapshot?.maxBandBoostDb ?? this.maxBandBoostDb);
+      this.setBandCutDb(snapshot?.maxBandCutDb ?? this.maxBandCutDb);
+      this.setPositiveResonanceEngine(snapshot?.positiveResonanceEngine ?? this.positiveResonanceEngine);
+      this.setFeedbackTopology(snapshot?.feedbackTopology ?? this.feedbackTopology);
+      this.setFeedbackTap(snapshot?.feedbackTap ?? this.feedbackTap);
+      this.setWetModel(snapshot?.wetModel ?? this.wetModel);
       if (this.filterbank) this.filterbank.applyState(this.getFilterbankState());
     }
 

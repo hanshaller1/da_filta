@@ -18,6 +18,7 @@ test('the audible positive local path uses the 2x nonlinear residual and accepts
     const resonances = [0.5, 0.75, 1];
     const selectedBands = [4, 9];
     const zeroes = () => Array(bandCount).fill(0);
+    const oneBand = (index, value) => Array.from({ length: bandCount }, (_, current) => current === index ? value : 0);
     const gates = (index, channel = 'both') => Array.from({ length: bandCount }, (_, current) => (
       current === index && (channel === 'both' || channel === 'left')
     ));
@@ -35,6 +36,9 @@ test('the audible positive local path uses the 2x nonlinear residual and accepts
       outputMode = 'current-residual',
       latencyMode = 'current',
       curve = 'current',
+      feedbackTopology = 'isolated-tpt',
+      feedbackTap = 'pre-gain',
+      wetModel = 'reference-delta',
       gate = true,
       leftOnly = false
     }) => {
@@ -85,6 +89,9 @@ test('the audible positive local path uses the 2x nonlinear residual and accepts
           positiveResonanceOutputMode: outputMode,
           positiveResonanceLatencyMode: latencyMode,
           positiveResonanceCurve: curve,
+          feedbackTopology,
+          feedbackTap,
+          wetModel,
           collectResonatorDiagnostics: true
         }
       });
@@ -181,7 +188,9 @@ test('the audible positive local path uses the 2x nonlinear residual and accepts
       sampleRate: 48000, index: 4, resonance: 1, drive: 32,
       auditionGain: 4, dampingFloor: -0.1, outputMode: 'full-nonlinear'
     });
-    return { measurements, neutral, gateOff, leftOnly, low, labModes, labExtreme };
+    const commonPre = await render({ sampleRate: 48000, index: 4, resonance: 1, drive: 4, feedbackTopology: 'common-bus' });
+    const commonPost = await render({ sampleRate: 48000, index: 4, resonance: 1, drive: 4, feedbackTopology: 'common-bus', feedbackTap: 'post-gain', bandGainLeft: oneBand(4, 100), bandGainRight: oneBand(4, 100), wetModel: 'filterbank-sum' });
+    return { measurements, neutral, gateOff, leftOnly, low, labModes, labExtreme, commonPre, commonPost };
   });
 
   for (const sampleRate of [44100, 48000]) {
@@ -222,6 +231,8 @@ test('the audible positive local path uses the 2x nonlinear residual and accepts
   expect(report.labExtreme.finite).toBeTruthy();
   expect(report.labExtreme.diagnostics.nonlinearSolverIterationMaximum[4]).toBeLessThanOrEqual(4);
   expect(report.labExtreme.diagnostics.nonlinearNonFiniteStateResets[4]).toBe(0);
+  expect(report.commonPre.finite).toBeTruthy();
+  expect(report.commonPost.finite).toBeTruthy();
   expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
   await page.close({ runBeforeUnload: false });
