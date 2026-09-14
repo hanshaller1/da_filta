@@ -5,6 +5,20 @@
     const wet = Math.min(100, Math.max(0, Number(value))) / 100;
     return { dry: 1 - wet, wet };
   };
+  const INPUT_PREAMP_PROCESSOR_NAME = 'resonant-input-preamp-processor';
+  const inputPreampModuleLoads = new WeakMap();
+  const loadInputPreampModule = async audioContext => {
+    if (!audioContext?.audioWorklet?.addModule) throw new Error('AudioWorklet wird von diesem Browser oder AudioContext nicht unterstÃ¼tzt.');
+    const existingLoad = inputPreampModuleLoads.get(audioContext);
+    if (existingLoad) return existingLoad;
+    const moduleUrl = new URL('input-preamp-processor.js', window.location.href).href;
+    const load = audioContext.audioWorklet.addModule(moduleUrl).catch(error => {
+      inputPreampModuleLoads.delete(audioContext);
+      throw new Error(`Input-Preamp-AudioWorklet konnte nicht geladen werden: ${error?.message || error}`);
+    });
+    inputPreampModuleLoads.set(audioContext, load);
+    return load;
+  };
 
   class AudioEngine {
     constructor({ onStatusChange, onDevicesChanged }) {
@@ -12,6 +26,7 @@
       this.onDevicesChanged = onDevicesChanged;
       this.status = 'OFF';
       this.inputGainDb = 0;
+      this.inputPreampStage = 'linear';
       this.resonance = 0;
       this.positiveResonanceAuditionGain = window.Filterbank?.POSITIVE_RESONANCE_AUDITION_GAIN ?? 0.1;
       this.positiveResonanceDrive = window.Filterbank?.POSITIVE_RESONANCE_DRIVE ?? 1;
@@ -31,6 +46,7 @@
       this.stream = null;
       this.source = null;
       this.inputGainNode = null;
+      this.inputPreampNode = null;
       this.dryGainNode = null;
       this.wetGainNode = null;
       this.mixBus = null;
@@ -62,6 +78,13 @@
     setInputGainDb(value) {
       this.inputGainDb = Math.max(0, Math.min(24, Number(value)));
       this.setSmoothedParam(this.inputGainNode?.gain, dbToGain(this.inputGainDb));
+      this.inputPreampNode?.port.postMessage({ type: 'set-input-gain-db', value: this.inputGainDb });
+    }
+
+    setInputPreampStage(value) {
+      this.inputPreampStage = value === 'preamp' ? 'preamp' : 'linear';
+      this.inputPreampNode?.port.postMessage({ type: 'set-input-stage', value: this.inputPreampStage });
+      return this.inputPreampStage;
     }
 
     setDryWet(value) {
@@ -229,6 +252,8 @@
 
     applyAudioParameters(immediate = false) {
       this.setAudioParam(this.inputGainNode?.gain, dbToGain(this.inputGainDb), immediate);
+      this.inputPreampNode?.port.postMessage({ type: 'set-input-gain-db', value: this.inputGainDb });
+      this.inputPreampNode?.port.postMessage({ type: 'set-input-stage', value: this.inputPreampStage });
       const gains = dryWetGains(this.dryWet);
       this.setAudioParam(this.dryGainNode?.gain, gains.dry, immediate);
       this.setAudioParam(this.wetGainNode?.gain, gains.wet, immediate);
@@ -251,6 +276,16 @@
 
         this.source = this.context.createMediaStreamSource(this.stream);
         this.inputGainNode = this.context.createGain();
+        await loadInputPreampModule(this.context);
+        this.inputPreampNode = new AudioWorkletNode(this.context, INPUT_PREAMP_PROCESSOR_NAME, {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [2],
+          channelCount: 2,
+          channelCountMode: 'explicit',
+          channelInterpretation: 'discrete',
+          processorOptions: { inputGainDb: this.inputGainDb, stage: this.inputPreampStage }
+        });
         this.dryGainNode = this.context.createGain();
         this.wetGainNode = this.context.createGain();
         this.mixBus = this.context.createGain();
@@ -260,8 +295,9 @@
 
         // The wet branch stays structurally unchanged; Filterbank owns its DSP internally.
         this.source.connect(this.inputGainNode);
-        this.inputGainNode.connect(this.dryGainNode);
-        this.inputGainNode.connect(this.filterbank.input);
+        this.inputGainNode.connect(this.inputPreampNode);
+        this.inputPreampNode.connect(this.dryGainNode);
+        this.inputPreampNode.connect(this.filterbank.input);
         this.dryGainNode.connect(this.mixBus);
         this.filterbank.output.connect(this.wetGainNode);
         this.wetGainNode.connect(this.mixBus);
@@ -295,9 +331,10 @@
 
     async cleanup() {
       if (this.filterbank) { this.filterbank.dispose(); this.filterbank = null; }
-      [this.source, this.inputGainNode, this.dryGainNode, this.wetGainNode, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
+      [this.source, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
       this.source = null;
       this.inputGainNode = null;
+      this.inputPreampNode = null;
       this.dryGainNode = null;
       this.wetGainNode = null;
       this.mixBus = null;
