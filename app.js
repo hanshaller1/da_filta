@@ -10,8 +10,10 @@ const {
 } = window.ResonantState;
 const state = createInitialState();
 let audioEngine = null;
-const POSITIVE_RESONANCE_AUDITION_VALUES = [0.10, 0.20, 0.30, 0.40];
+const POSITIVE_RESONANCE_AUDITION_VALUES = [0.10, 0.20, 0.30, 0.40, 0.60, 0.80, 1.00];
 const positiveResonanceAuditionSelect = document.querySelector('[data-positive-resonance-audition]');
+const positiveResonanceDriveSelect = document.querySelector('[data-positive-resonance-drive]');
+const positiveResonanceDampingFloorSelect = document.querySelector('[data-positive-resonance-damping-floor]');
 const THEME_STORAGE_KEY = 'resonant-filterbank-theme';
 const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'soft-neutral', 'pro-console'];
 const themeSelect = document.querySelector('[data-theme-select]');
@@ -168,6 +170,24 @@ const setPositiveResonanceAuditionGain = value => {
 };
 setPositiveResonanceAuditionGain(positiveResonanceAuditionSelect?.value ?? 0.10);
 positiveResonanceAuditionSelect?.addEventListener('change', event => setPositiveResonanceAuditionGain(event.target.value));
+const POSITIVE_RESONANCE_DRIVE_VALUES = [1, 2, 4, 8, 16];
+const setPositiveResonanceDrive = value => {
+  const numericValue = Number(value);
+  const nextValue = POSITIVE_RESONANCE_DRIVE_VALUES.includes(numericValue) ? numericValue : 1;
+  if (positiveResonanceDriveSelect) positiveResonanceDriveSelect.value = String(nextValue);
+  audioEngine.setPositiveResonanceDrive(nextValue);
+};
+setPositiveResonanceDrive(positiveResonanceDriveSelect?.value ?? 1);
+positiveResonanceDriveSelect?.addEventListener('change', event => setPositiveResonanceDrive(event.target.value));
+const POSITIVE_RESONANCE_DAMPING_FLOOR_VALUES = [0.10, 0.05, 0.02, 0.00, -0.02];
+const setPositiveResonanceDampingFloor = value => {
+  const numericValue = Number(value);
+  const nextValue = POSITIVE_RESONANCE_DAMPING_FLOOR_VALUES.includes(numericValue) ? numericValue : 0.10;
+  if (positiveResonanceDampingFloorSelect) positiveResonanceDampingFloorSelect.value = nextValue.toFixed(2);
+  audioEngine.setPositiveResonanceDampingFloor(nextValue);
+};
+setPositiveResonanceDampingFloor(positiveResonanceDampingFloorSelect?.value ?? 0.10);
+positiveResonanceDampingFloorSelect?.addEventListener('change', event => setPositiveResonanceDampingFloor(event.target.value));
 const syncAudioParameters = () => {
   audioEngine.setInputGainDb(state.inputGain);
   audioEngine.setDryWet(state.dryWet);

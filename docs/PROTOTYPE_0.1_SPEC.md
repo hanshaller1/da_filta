@@ -232,18 +232,20 @@ Die erste Filterbank-DSP-Stufe läuft in einem einzelnen Stereo-`AudioWorkletPro
 - der lokale Feedback-Tap liegt post-Bandpass und pre-Delta-Gain; FB ALL verwendet die normierte Summe aller zehn Bandpass-Ausgänge
 - Feedback-Rückführungen verwenden `Math.tanh()` ausschließlich innerhalb der Schleife und einen separaten, positiven Audition-Pfad
 - der bipolare Resonance-Regler steuert nur Feedback-Stärke und -Polarität, nie Q oder Band-Gain
-- zusätzlich existiert pro Band und Kanal ein separater linearer Resonator-TPT-Pfad mit identischen Basisparametern; sein Residual ist noch nicht hörbar aktiv
-- der Resonatorpfad liefert bei positiver lokaler Resonance hörbar ausschließlich sein Residual `BPresonant - BPbase`; ein Prototype-Audition-Gain von `0.10` begrenzt den ersten Hörtestwert
+- zusätzlich existiert pro Band und Kanal ein separater linearer Resonator-TPT-Pfad mit identischen Basisparametern als Grundlage und Vergleichspfad; sein früheres natives Residual ist nicht mehr der hörbare positive Resonance-Anteil
+- positive lokale Resonance verwendet hörbar ausschließlich das Residual des 2×-oversampleten nichtlinearen Resonators gegen seinen phasen- und latenzgleichen linearen Referenzpfad: `BPnonlinearOversampled - BPlinearOversampledReference`; ein separater Prototype-Audition-Gain begrenzt den Hörtestwert
 - der alte positive lokale Phase-2-Loop ist dadurch ersetzt; negative Resonance und FB ALL verwenden übergangsweise weiterhin die Phase-2-Prototyplösung
-- ein nichtlinearer positiver TPT-Resonator mit symmetrischer, kleinsignalnormalisierter `tanh`-State-Feedback-Saturation wird ausschließlich intern/diagnostisch gemessen; er ist noch nicht hörbar aktiv. Dieser Diagnosepfad läuft vollständig mit 2× Sample-Rate, während die Base-Filterbank bei nativer Sample-Rate bleibt. Ein phasen- und latenzgleicher linearer 2×-Referenzpfad verhindert künstliche Residuen. Der Newton-Solver verwendet höchstens vier Iterationen. Die festen diagnostischen Drive-Werte `1`, `2`, `4` und `8` sind keine finale Classic-Kennlinie.
-- neue negative Resonance-Topologien, ein neues Resonator-FB-ALL sowie hörbare Drive-/Character-Strukturen sind noch nicht implementiert. Die 2×-Oversampling-Diagnostik zielt auf die 11-kHz-Aliasing-Reduktion; sie ist noch nicht hörbar produktiv aktiv.
+- ein nichtlinearer positiver TPT-Resonator mit symmetrischer, kleinsignalnormalisierter `tanh`-State-Feedback-Saturation läuft für hörbare positive lokale Resonance vollständig mit 2× Sample-Rate, während die Base-Filterbank bei nativer Sample-Rate bleibt. Ein phasen- und latenzgleicher linearer 2×-Referenzpfad verhindert künstliche Residuen. Der Newton-Solver verwendet höchstens vier Iterationen. Die temporär kalibrierbaren Drive-Werte `1`, `2`, `4`, `8` und `16` sind keine finale Classic-Kennlinie.
+- neue negative Resonance-Topologien und ein neues Resonator-FB-ALL sind noch nicht implementiert. Negative Resonance und FB ALL verwenden weiterhin die Legacy-Phase-2-Prototyplösung. Das 2×-Oversampling reduziert besonders am 11-kHz-Band nichtlineares Aliasing; eine finale Classic-Klangkalibrierung und Character-Profile sind noch offen.
 
 Folgende Werte sind bewusste Webapp-/Prototype-Designentscheidungen und keine behaupteten Erica-Hardwarewerte:
 
 - FB-ALL-Normalisierung: `1 / sqrt(10)`
 - maximale Feedback-Stärke: `1.25` mit quadratischer Resonance-Kennlinie
 - maximaler Audition-Anteil: `0.25`
-- positiver TPT-Resonance-Audition-Gain: `0.10` (Prototype-Hörtestwert); er befindet sich in manueller Hörkalibrierung. Der temporäre `DEV RES AUD`-Selector bietet `0.10`, `0.20`, `0.30` und `0.40`; Default nach Reload bleibt `0.10`, ein finaler Classic-Wert ist noch nicht festgelegt.
+- positiver TPT-Resonance-Audition-Gain: `0.10` (Prototype-Hörtestwert); er befindet sich in manueller Hörkalibrierung. Der temporäre `DEV RES AUD`-Selector bietet `0.10`, `0.20`, `0.30`, `0.40`, `0.60`, `0.80` und `1.00`; Default nach Reload bleibt `0.10`, ein finaler Classic-Wert ist noch nicht festgelegt.
+- positiver TPT-Resonance-Drive: temporärer `DEV RES DRIVE`-Selector mit `1`, `2`, `4`, `8` und `16`; Default nach Reload ist `1`. Er steuert ausschließlich die interne nichtlineare State-Feedback-Saturation und ist kein finales UI-Feature oder Erica-Hardwarewert.
+- positiver TPT-Resonance-Damping-Floor: temporärer `DEV RES FLOOR`-Selector mit `0.10`, `0.05`, `0.02`, `0.00` und `-0.02`; Default nach Reload ist `0.10`. Er bestimmt nur die Restdämpfung des lokalen positiven nichtlinearen Resonators bei voller Resonance. Werte `<= 0` dienen ausschließlich der Grenz- und Selbstoszillationsanalyse; sie sind weder finale Classic-Werte noch behauptete Erica-Hardwarewerte.
 - Gate-Smoothing: `8 ms`; Resonance-Smoothing: `15 ms`
 
 LFO, Envelope-Follower und Spread-DSP sind weiterhin nicht implementiert.

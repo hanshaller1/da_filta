@@ -14,6 +14,8 @@
       this.inputGainDb = 0;
       this.resonance = 0;
       this.positiveResonanceAuditionGain = window.Filterbank?.POSITIVE_RESONANCE_AUDITION_GAIN ?? 0.1;
+      this.positiveResonanceDrive = window.Filterbank?.POSITIVE_RESONANCE_DRIVE ?? 1;
+      this.positiveResonanceDampingFloor = window.Filterbank?.POSITIVE_RESONANCE_DAMPING_FLOOR ?? 0.1;
       this.dryWet = 50;
       this.volumeDb = -6;
       this.context = null;
@@ -81,6 +83,25 @@
       return this.positiveResonanceAuditionGain;
     }
 
+    setPositiveResonanceDrive(value) {
+      const numericValue = Number(value);
+      this.positiveResonanceDrive = numericValue === 1 || numericValue === 2 || numericValue === 4 || numericValue === 8 || numericValue === 16
+        ? numericValue
+        : (window.Filterbank?.POSITIVE_RESONANCE_DRIVE ?? 1);
+      this.filterbank?.setPositiveResonanceDrive(this.positiveResonanceDrive);
+      return this.positiveResonanceDrive;
+    }
+
+    setPositiveResonanceDampingFloor(value) {
+      const numericValue = Number(value);
+      this.positiveResonanceDampingFloor = numericValue === 0.10 || numericValue === 0.05 || numericValue === 0.02
+        || numericValue === 0 || numericValue === -0.02
+        ? numericValue
+        : (window.Filterbank?.POSITIVE_RESONANCE_DAMPING_FLOOR ?? 0.1);
+      this.filterbank?.setPositiveResonanceDampingFloor(this.positiveResonanceDampingFloor);
+      return this.positiveResonanceDampingFloor;
+    }
+
     setBandBaseGain(channel, index, value) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
       const nextValue = clampBandGain(value);
@@ -118,7 +139,9 @@
         feedbackAllLeft: this.feedbackAllLeft,
         feedbackAllRight: this.feedbackAllRight,
         resonance: this.resonance,
-        positiveResonanceAuditionGain: this.positiveResonanceAuditionGain
+        positiveResonanceAuditionGain: this.positiveResonanceAuditionGain,
+        positiveResonanceDrive: this.positiveResonanceDrive,
+        positiveResonanceDampingFloor: this.positiveResonanceDampingFloor
       };
     }
 
@@ -132,6 +155,8 @@
       this.feedbackAllLeft = Boolean(snapshot?.feedbackAllLeft);
       this.feedbackAllRight = Boolean(snapshot?.feedbackAllRight);
       this.setResonance(snapshot?.resonance);
+      this.setPositiveResonanceDrive(snapshot?.positiveResonanceDrive ?? this.positiveResonanceDrive);
+      this.setPositiveResonanceDampingFloor(snapshot?.positiveResonanceDampingFloor ?? this.positiveResonanceDampingFloor);
       if (this.filterbank) this.filterbank.applyState(this.getFilterbankState());
     }
 

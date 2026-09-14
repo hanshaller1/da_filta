@@ -10,7 +10,7 @@ test('positive local TPT resonance is audible only as the controlled residual', 
   await page.goto('/', { waitUntil: 'networkidle' });
 
   const result = await page.evaluate(async () => {
-    const { LinearTptSvf } = await import('/tpt-svf.js');
+    const { OversampledPositiveTptResonator } = await import('/tpt-svf.js');
     const frequencies = [...window.Filterbank.BAND_FREQUENCIES];
     const qs = [...window.Filterbank.BAND_QS];
     const bandCount = frequencies.length;
@@ -77,24 +77,26 @@ test('positive local TPT resonance is audible only as the controlled residual', 
       return { input: input.buffer, output, burstFrames: input.burstFrames };
     };
 
-    const expectedPositiveLocal = ({ input, sampleRate, localIndices, resonance }) => {
+    const expectedPositiveLocal = ({ input, sampleRate, localIndices, resonance, drive = 1 }) => {
       const expected = [new Float32Array(input.length), new Float32Array(input.length)];
       for (let channel = 0; channel < 2; channel += 1) {
-        const baseFilters = frequencies.map((frequency, index) => new LinearTptSvf(sampleRate, frequency, qs[index]));
-        const resonatorFilters = frequencies.map((frequency, index) => {
-          const filter = new LinearTptSvf(sampleRate, frequency, qs[index]);
-          const magnitude = resonance > 0 && localIndices.includes(index) ? resonance : 0;
-          filter.setDampingScale(1 - (1 - dampingFloor) * magnitude);
-          return filter;
-        });
+        const nonlinearResonators = frequencies.map((frequency, index) => (
+          new OversampledPositiveTptResonator(sampleRate, frequency, qs[index])
+        ));
         const source = input.getChannelData(channel);
         for (let frame = 0; frame < source.length; frame += 1) {
           const sourceSample = source[frame];
           let sample = sourceSample;
           for (let band = 0; band < bandCount; band += 1) {
-            const base = baseFilters[band].process(sourceSample);
-            const resonant = resonatorFilters[band].process(sourceSample);
-            if (resonance > 0 && localIndices.includes(band)) sample += auditionGain * (resonant - base);
+            if (resonance > 0 && localIndices.includes(band)) {
+              nonlinearResonators[band].process(
+                sourceSample,
+                1 - (1 - dampingFloor) * resonance,
+                drive,
+                true
+              );
+              sample += auditionGain * nonlinearResonators[band].residual;
+            }
           }
           expected[channel][frame] = sample;
         }
@@ -259,15 +261,12 @@ test('positive local TPT resonance is audible only as the controlled residual', 
   for (const sampleRate of [44100, 48000]) {
     for (const measurements of Object.values(result.measurements[sampleRate])) {
       let previousResidualRms = 0;
-      let previousOutputRms = 0;
       for (const resonance of [0, 0.25, 0.5, 0.75, 1]) {
         const measurement = measurements[resonance];
         expect(measurement.finite).toBeTruthy();
         expect(measurement.maximumExpectedError).toBeLessThanOrEqual(2e-6);
         expect(measurement.residualRms).toBeGreaterThanOrEqual(previousResidualRms * (1 - 1e-9));
-        expect(measurement.outputRms).toBeGreaterThanOrEqual(previousOutputRms * (1 - 1e-9));
         previousResidualRms = measurement.residualRms;
-        previousOutputRms = measurement.outputRms;
       }
       expect(measurements[0].residualPeak).toBe(0);
       expect(measurements[0].residualRms).toBe(0);

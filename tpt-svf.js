@@ -58,8 +58,8 @@ export class LinearTptSvf {
     }
 
     setDampingScale(value) {
-      if (!Number.isFinite(value) || value <= 0) {
-        throw new RangeError('TPT SVF requires a positive damping scale.');
+      if (!Number.isFinite(value) || value < 0) {
+        throw new RangeError('TPT SVF requires a non-negative damping scale.');
       }
 
       if (value === this.dampingScale) return this;
@@ -122,7 +122,7 @@ export class LinearTptSvf {
      */
     processPositiveStateFeedback(input, dampingScale, drive) {
       const sample = Number.isFinite(input) ? input : 0;
-      const normalizedDamping = Number.isFinite(dampingScale) && dampingScale > 0
+      const normalizedDamping = Number.isFinite(dampingScale) && dampingScale >= -0.02
         ? dampingScale
         : 1;
       const normalizedDrive = Number.isFinite(drive) && drive > 0 ? drive : 0;
@@ -131,7 +131,10 @@ export class LinearTptSvf {
       this.lastNonlinearSolverIterations = 0;
       this.lastNonlinearConvergenceError = 0;
       this.lastNonlinearUsedFallback = false;
-      this.setDampingScale(normalizedDamping);
+      // The nonlinear equation supports a small active damping range for the
+      // DEV floor probe. The linear coefficient path remains non-active so a
+      // Newton fallback stays conservative and finite.
+      this.setDampingScale(Math.max(0, normalizedDamping));
 
       // With no positive state-feedback share (or no drive), keep the exact
       // established linear TPT path. This is also the Gate-OFF / Resonance-0
@@ -258,7 +261,7 @@ class FixedHalfBandFir {
 const HALF_BAND_2X_COEFFICIENTS_LENGTH = HALF_BAND_2X_COEFFICIENTS.length;
 
 /**
- * Diagnostic-only 2x wrapper for a nonlinear positive TPT resonator.
+ * 2x wrapper for the nonlinear positive TPT resonator.
  *
  * A separate linear reference traverses the identical interpolation and
  * decimation filters. This makes `nonlinearBand - linearBand` free of FIR
@@ -295,8 +298,13 @@ export class OversampledPositiveTptResonator {
   process(input, dampingScale, drive, nonlinearEnabled) {
     const sample = Number.isFinite(input) ? input : 0;
     const useNonlinearStateFeedback = nonlinearEnabled === true;
-    this.linearReferenceFilter.setDampingScale(dampingScale);
-    this.nonlinearFilter.setDampingScale(dampingScale);
+    const requestedDampingScale = Number.isFinite(dampingScale) ? dampingScale : 1;
+    // A linear reference can be marginally stable at zero damping but cannot
+    // safely follow an active (negative) DEV floor. Clamp only that reference;
+    // the nonlinear resonator below receives the requested damping scale.
+    const linearReferenceDampingScale = Math.max(0, requestedDampingScale);
+    this.linearReferenceFilter.setDampingScale(linearReferenceDampingScale);
+    if (!useNonlinearStateFeedback) this.nonlinearFilter.setDampingScale(linearReferenceDampingScale);
 
     // Zero-stuffing uses a factor-of-two impulse before the unity-DC FIR.
     // Both high-rate phases are always processed, preserving deterministic
@@ -305,7 +313,7 @@ export class OversampledPositiveTptResonator {
       const interpolatedInput = this.inputInterpolator.process(phase === 0 ? 2 * sample : 0);
       const referenceBand = this.linearReferenceFilter.process(interpolatedInput);
       const nonlinearBand = useNonlinearStateFeedback
-        ? this.nonlinearFilter.processPositiveStateFeedback(interpolatedInput, dampingScale, drive)
+        ? this.nonlinearFilter.processPositiveStateFeedback(interpolatedInput, requestedDampingScale, drive)
         : this.nonlinearFilter.process(interpolatedInput);
       this.linearBand = this.referenceDecimator.process(referenceBand);
       this.nonlinearBand = this.nonlinearDecimator.process(nonlinearBand);
