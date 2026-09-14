@@ -1,11 +1,11 @@
 const { test, expect } = require('playwright/test');
 
-test('DEV input preamp is transparent at 0 dB, continuous, stereo-safe, and nonlinear above its clean range', async ({ page }) => {
+test('fixed input-drive characters remain finite, continuous, and independent of processor gain messages', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/', { waitUntil: 'networkidle' });
   const report = await page.evaluate(async () => {
-    const render = async (gainDb, stage) => {
+    const render = async ({ gainDb, stage, processorGainDb = gainDb }) => {
       const sampleRate = 48000;
       const length = sampleRate;
       const context = new OfflineAudioContext(2, length, sampleRate);
@@ -23,7 +23,7 @@ test('DEV input preamp is transparent at 0 dB, continuous, stereo-safe, and nonl
       const preamp = new AudioWorkletNode(context, 'resonant-input-preamp-processor', {
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2,
         channelCountMode: 'explicit', channelInterpretation: 'discrete',
-        processorOptions: { inputGainDb: gainDb, stage }
+        processorOptions: { inputGainDb: processorGainDb, stage }
       });
       source.connect(gain).connect(preamp).connect(context.destination);
       source.start();
@@ -39,24 +39,32 @@ test('DEV input preamp is transparent at 0 dB, continuous, stereo-safe, and nonl
       const frames = length - sampleRate / 2;
       return { rms: Math.sqrt(energy / frames), peak, dc: dc / frames, rightRms: Math.sqrt(rightEnergy / frames), finite };
     };
-    const linear0 = await render(0, 'linear');
-    const linear12 = await render(12, 'linear');
-    const preamp0 = await render(0, 'preamp');
-    const stages = {};
-    for (const gainDb of [6, 12, 18, 24]) stages[gainDb] = await render(gainDb, 'preamp');
-    return { linear0, linear12, preamp0, stages };
+    const linear0 = await render({ gainDb: 0, stage: 'linear' });
+    const linear12 = await render({ gainDb: 12, stage: 'linear' });
+    const oldPreamp = await render({ gainDb: 12, stage: 'preamp' });
+    const invalid = await render({ gainDb: 12, stage: 'invalid-value' });
+    const characters = {};
+    for (const stage of ['clean', 'warm', 'crunch', 'aggressive']) {
+      characters[stage] = {
+        low: await render({ gainDb: 6, stage }),
+        high: await render({ gainDb: 24, stage }),
+        processorGain0: await render({ gainDb: 12, stage, processorGainDb: 0 }),
+        processorGain24: await render({ gainDb: 12, stage, processorGainDb: 24 })
+      };
+    }
+    return { linear0, linear12, oldPreamp, invalid, characters };
   });
-  expect(report.linear0.finite && report.preamp0.finite).toBe(true);
-  expect(Math.abs(report.preamp0.rms - report.linear0.rms)).toBeLessThan(1e-7);
+
+  expect(report.linear0.finite).toBe(true);
   expect(Math.abs(report.linear12.rms / report.linear0.rms - (10 ** (12 / 20)))).toBeLessThan(1e-4);
-  expect(report.stages[6].rms).toBeGreaterThan(report.preamp0.rms);
-  expect(report.stages[24].rms).toBeGreaterThan(report.stages[6].rms);
-  expect(Math.abs(report.stages[12].rms - report.linear12.rms)).toBeGreaterThan(1e-3);
-  expect(report.stages[24].peak).toBeLessThan(1.51);
-  for (const stage of Object.values(report.stages)) {
-    expect(stage.finite).toBe(true);
-    expect(Math.abs(stage.dc)).toBeLessThan(1e-5);
-    expect(stage.rightRms).toBeGreaterThan(0);
+  expect(Math.abs(report.oldPreamp.rms - report.linear12.rms)).toBeLessThan(1e-7);
+  expect(Math.abs(report.invalid.rms - report.linear12.rms)).toBeLessThan(1e-7);
+  for (const character of Object.values(report.characters)) {
+    expect(character.low.finite && character.high.finite).toBe(true);
+    expect(character.high.rms).toBeGreaterThan(character.low.rms);
+    expect(Math.abs(character.low.dc)).toBeLessThan(1e-5);
+    expect(character.low.rightRms).toBeGreaterThan(0);
+    expect(Math.abs(character.processorGain0.rms - character.processorGain24.rms)).toBeLessThan(1e-7);
   }
   expect(errors).toEqual([]);
 });

@@ -146,14 +146,20 @@ const feedbackAllLevelSelect = addDevLabSelector('DEV FB ALL LEVEL', 'data-feedb
   ['fortieth', '1 / 40'],
   ['eightieth', '1 / 80']
 ]);
-const inputPreampStageSelect = addDevLabSelector('DEV INPUT STAGE', 'data-input-preamp-stage', [['linear', 'LINEAR'], ['preamp', 'PREAMP']]);
+const inputPreampStageSelect = addDevLabSelector('DEV INPUT STAGE', 'data-input-preamp-stage', [
+  ['linear', 'LINEAR'],
+  ['clean', 'CLEAN'],
+  ['warm', 'WARM'],
+  ['crunch', 'CRUNCH'],
+  ['aggressive', 'AGGRESSIVE']
+]);
 
 const DEV_LAB_HELP = {
   'data-input-preamp-stage': {
-    title: 'DEV INPUT STAGE', what: 'Wählt zwischen reiner linearer Eingangsverstärkung und der implementierten nichtlinearen Preamp-Stufe.',
+    title: 'DEV INPUT STAGE', what: 'Wählt zwischen reiner linearer Eingangsverstärkung und vier festen experimentellen Drive-Charakteren.',
     scope: 'Wirkt nach dem Input Gain und vor der Dry/Wet-Verzweigung.',
-    values: [['LINEAR', 'Input Gain arbeitet als reine lineare Verstärkung.'], ['PREAMP', 'Fügt die implementierte, symmetrische Soft-Knee-Preamp-/Saturation-Färbung hinzu.']],
-    default: 'LINEAR', note: 'Experimenteller DEV-Wert; kein Limiter, kein separater Drive-Regler und keine Loudness Compensation. Keine bestätigte Erica-Emulation.'
+    values: [['LINEAR', 'Input Gain arbeitet als reine lineare Verstärkung.'], ['CLEAN', 'Subtilste feste Nichtlinearität mit leichter Verdichtung bei stärkerer Ansteuerung.'], ['WARM', 'Feste weichere und dichtere Saturation.'], ['CRUNCH', 'Feste deutlich stärkere und rauere Saturation.'], ['AGGRESSIVE', 'Stärkster, bewusst destruktiver fester Charakter.']],
+    default: 'LINEAR', note: 'Input Gain bestimmt die kontinuierliche Ansteuerung; die gewählte Kennlinie bleibt fest und morpht nicht mit dem Gain. Experimenteller DEV-Wert, kein Limiter, kein separater Drive-Regler, keine Loudness Compensation und keine bestätigte Erica-Emulation.'
   },
   'data-reference-level': {
     title: 'DEV REFERENCE', what: 'Steuert den Anteil des Unity-Reference-Pfads im Wet-Signal.',

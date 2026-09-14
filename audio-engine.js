@@ -6,6 +6,7 @@
     return { dry: 1 - wet, wet };
   };
   const INPUT_PREAMP_PROCESSOR_NAME = 'resonant-input-preamp-processor';
+  const INPUT_PREAMP_STAGES = Object.freeze(['linear', 'clean', 'warm', 'crunch', 'aggressive']);
   const FEEDBACK_ALL_LEVELS = Object.freeze(['raw', 'sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth']);
   const inputPreampModuleLoads = new WeakMap();
   const loadInputPreampModule = async audioContext => {
@@ -85,7 +86,7 @@
     }
 
     setInputPreampStage(value) {
-      this.inputPreampStage = value === 'preamp' ? 'preamp' : 'linear';
+      this.inputPreampStage = INPUT_PREAMP_STAGES.includes(value) ? value : 'linear';
       this.inputPreampNode?.port.postMessage({ type: 'set-input-stage', value: this.inputPreampStage });
       return this.inputPreampStage;
     }
