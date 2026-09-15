@@ -5,12 +5,14 @@ class ResonantInputPreampProcessor extends AudioWorkletProcessor {
     this.inputGainDb = this.normalizeGainDb(initial.inputGainDb);
     this.targetInputGainDb = this.inputGainDb;
     this.stage = this.normalizeStage(initial.stage);
-    const profile = this.getStageProfile(this.stage);
-    this.stageMix = profile.mix;
-    this.targetStageMix = profile.mix;
-    this.stageDrive = profile.drive;
-    this.targetStageDrive = profile.drive;
+    this.previousStage = this.stage;
+    this.stageCrossfade = 1;
+    this.targetStageCrossfade = 1;
+    this.characterAmount = this.normalizeCharacterAmount(initial.characterAmount);
+    this.targetCharacterAmount = this.characterAmount;
     this.smoothingCoefficient = Math.exp(-1 / Math.max(1, sampleRate * 0.015));
+    this.tubePreviousInput = new Float64Array(2);
+    this.tubePreviousOutput = new Float64Array(2);
     this.port.onmessage = event => this.handleMessage(event.data);
   }
 
@@ -19,22 +21,76 @@ class ResonantInputPreampProcessor extends AudioWorkletProcessor {
     return Number.isFinite(numeric) ? Math.max(0, Math.min(24, numeric)) : 0;
   }
 
-  normalizeStage(value) {
-    return Object.prototype.hasOwnProperty.call(ResonantInputPreampProcessor.STAGE_PROFILES, value) ? value : 'linear';
+  normalizeCharacterAmount(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : 0.5;
   }
 
-  getStageProfile(stage) {
-    return ResonantInputPreampProcessor.STAGE_PROFILES[this.normalizeStage(stage)];
+  normalizeStage(value) {
+    return Object.prototype.hasOwnProperty.call(ResonantInputPreampProcessor.STAGES, value) ? value : 'linear';
   }
 
   handleMessage(message) {
     if (!message || typeof message !== 'object') return;
     if (message.type === 'set-input-gain-db') this.targetInputGainDb = this.normalizeGainDb(message.value);
+    if (message.type === 'set-character-amount') this.targetCharacterAmount = this.normalizeCharacterAmount(message.value);
     if (message.type === 'set-input-stage') {
-      this.stage = this.normalizeStage(message.value);
-      const profile = this.getStageProfile(this.stage);
-      this.targetStageMix = profile.mix;
-      this.targetStageDrive = profile.drive;
+      const nextStage = this.normalizeStage(message.value);
+      if (nextStage !== this.stage) {
+        this.previousStage = this.stage;
+        this.stage = nextStage;
+        this.stageCrossfade = 0;
+        this.targetStageCrossfade = 1;
+      }
+    }
+  }
+
+  clamp(value, minimum, maximum) {
+    return Math.min(maximum, Math.max(minimum, value));
+  }
+
+  shapeTube(sample, channel) {
+    // Bias creates even harmonics. A 10 Hz DC blocker removes waveform DC afterwards.
+    const bias = 0.18;
+    const biasedZero = Math.tanh(1.3 * bias);
+    const biased = (Math.tanh(1.3 * (sample + bias)) - biasedZero) / 1.3;
+    const previousInput = this.tubePreviousInput[channel] || 0;
+    const previousOutput = this.tubePreviousOutput[channel] || 0;
+    const dcBlocked = biased - previousInput + 0.9987 * previousOutput;
+    this.tubePreviousInput[channel] = biased;
+    this.tubePreviousOutput[channel] = dcBlocked;
+    return dcBlocked;
+  }
+
+  shape(stage, sample, channel) {
+    const limited = this.clamp(sample, -12, 12);
+    switch (stage) {
+      case 'silk':
+        // Long, symmetric and nearly transparent peak rounding.
+        return limited / Math.sqrt(1 + 0.16 * limited * limited);
+      case 'tape':
+        // Broad atan compression gives a soft, glue-like curve.
+        return Math.atan(1.45 * limited) / 1.45;
+      case 'tube':
+        return this.shapeTube(limited, channel);
+      case 'console':
+        // Firmer rational knee, weighted toward odd harmonics.
+        return limited / (1 + 0.48 * Math.abs(limited));
+      case 'crunch': {
+        const magnitude = Math.abs(limited);
+        const sign = limited < 0 ? -1 : 1;
+        // Linear core, then a distinctly harder exponential shoulder.
+        return magnitude <= 0.48
+          ? limited
+          : sign * (0.48 + 0.52 * (1 - Math.exp(-3.3 * (magnitude - 0.48))));
+      }
+      case 'destroy': {
+        const clipped = this.clamp(limited, -0.62, 0.62);
+        // Hard clipping plus bounded fold-like harmonic deformation.
+        return 0.58 * clipped + 0.42 * 0.82 * Math.sin(2.85 * limited);
+      }
+      default:
+        return sample;
     }
   }
 
@@ -45,28 +101,38 @@ class ResonantInputPreampProcessor extends AudioWorkletProcessor {
     const channels = output.length;
     const frames = output[0]?.length || 0;
     for (let frame = 0; frame < frames; frame += 1) {
+      // Metadata only: InputGainNode is the sole linear gain stage.
       this.inputGainDb = this.targetInputGainDb + this.smoothingCoefficient * (this.inputGainDb - this.targetInputGainDb);
-      this.stageMix = this.targetStageMix + this.smoothingCoefficient * (this.stageMix - this.targetStageMix);
-      this.stageDrive = this.targetStageDrive + this.smoothingCoefficient * (this.stageDrive - this.targetStageDrive);
+      this.characterAmount = this.targetCharacterAmount + this.smoothingCoefficient * (this.characterAmount - this.targetCharacterAmount);
+      this.stageCrossfade = this.targetStageCrossfade + this.smoothingCoefficient * (this.stageCrossfade - this.targetStageCrossfade);
+      if (this.stageCrossfade > 0.9999) {
+        this.previousStage = this.stage;
+        this.stageCrossfade = 1;
+      }
       for (let channel = 0; channel < channels; channel += 1) {
         const source = input[channel] || input[0];
         const destination = output[channel];
         const sample = source ? source[frame] : 0;
-        const saturated = 1.5 * Math.tanh((this.stageDrive * sample) / 1.5);
-        destination[frame] = sample + this.stageMix * (saturated - sample);
+        const oldShaped = this.shape(this.previousStage, sample, channel);
+        const newShaped = this.previousStage === this.stage
+          ? oldShaped
+          : this.shape(this.stage, sample, channel);
+        const shaped = oldShaped + this.stageCrossfade * (newShaped - oldShaped);
+        destination[frame] = sample + this.characterAmount * (shaped - sample);
       }
     }
     return true;
   }
 }
 
-ResonantInputPreampProcessor.STAGE_PROFILES = Object.freeze({
-  // Fixed anchors from the former gain-morphed curve at 6, 12, 18, and 24 dB.
-  linear: Object.freeze({ mix: 0, drive: 1 }),
-  clean: Object.freeze({ mix: 0.15625, drive: 1.4375 }),
-  warm: Object.freeze({ mix: 0.5, drive: 2.75 }),
-  crunch: Object.freeze({ mix: 0.84375, drive: 4.9375 }),
-  aggressive: Object.freeze({ mix: 1, drive: 8 })
+ResonantInputPreampProcessor.STAGES = Object.freeze({
+  linear: true,
+  silk: true,
+  tape: true,
+  tube: true,
+  console: true,
+  crunch: true,
+  destroy: true
 });
 
 registerProcessor('resonant-input-preamp-processor', ResonantInputPreampProcessor);

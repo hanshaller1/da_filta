@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('DEV INPUT STAGE survives the UI, AudioEngine, and input-preamp Worklet handoff', async ({ page }) => {
+test('DEV input stage and character amount survive UI, runtime restart, and PANIC handoff', async ({ page }) => {
   await page.addInitScript(() => {
     window.__inputStageTestState = { nodes: [] };
     const mediaDevices = navigator.mediaDevices || {};
@@ -41,15 +41,18 @@ test('DEV INPUT STAGE survives the UI, AudioEngine, and input-preamp Worklet han
   });
   await page.goto('/', { waitUntil: 'networkidle' });
   const selector = page.locator('[data-input-preamp-stage]');
-  await expect(selector.locator('option')).toHaveText(['LINEAR', 'CLEAN', 'WARM', 'CRUNCH', 'AGGRESSIVE']);
+  const character = page.locator('[data-input-character-amount]');
+  await expect(selector.locator('option')).toHaveText(['LINEAR', 'SILK', 'TAPE', 'TUBE', 'CONSOLE', 'CRUNCH', 'DESTROY']);
   await expect(selector).toHaveValue('linear');
+  await expect(character).toHaveValue('50');
+  await expect(character).toHaveAttribute('aria-disabled', 'true');
   await page.locator('[data-audio-input]').selectOption('input-1');
   await page.locator('[data-audio-output]').selectOption('output-1');
   await page.locator('[data-audio-start]').click();
   const initialStage = await page.evaluate(() => window.__inputStageTestState.nodes
     .find(node => node.name === 'resonant-input-preamp-processor').options.processorOptions.stage);
   expect(initialStage).toBe('linear');
-  for (const value of ['clean', 'warm', 'crunch', 'aggressive']) {
+  for (const value of ['silk', 'tape', 'tube', 'console', 'crunch', 'destroy']) {
     await selector.selectOption(value);
     const received = await page.evaluate(() => {
       const node = window.__inputStageTestState.nodes.find(candidate => candidate.name === 'resonant-input-preamp-processor');
@@ -57,7 +60,14 @@ test('DEV INPUT STAGE survives the UI, AudioEngine, and input-preamp Worklet han
     });
     expect(received).toBe(value);
   }
-  for (const value of ['warm', 'crunch']) {
+  await expect(character).toHaveAttribute('aria-disabled', 'false');
+  await character.fill('20');
+  const characterMessage = await page.evaluate(() => {
+    const node = window.__inputStageTestState.nodes.find(candidate => candidate.name === 'resonant-input-preamp-processor');
+    return [...node.messages].reverse().find(message => message.type === 'set-character-amount');
+  });
+  expect(characterMessage).toEqual({ type: 'set-character-amount', value: 0.2 });
+  for (const value of ['tube', 'crunch']) {
     await selector.selectOption(value);
     await page.locator('[data-control="inputGain"]').fill('24');
     const received = await page.evaluate(() => {
@@ -66,6 +76,21 @@ test('DEV INPUT STAGE survives the UI, AudioEngine, and input-preamp Worklet han
     });
     expect(received).toBe(value);
   }
+  await page.locator('[data-audio-stop]').click();
+  await page.locator('[data-audio-start]').click();
+  const restarted = await page.evaluate(() => window.__inputStageTestState.nodes
+    .filter(node => node.name === 'resonant-input-preamp-processor').at(-1).options.processorOptions);
+  expect(restarted).toMatchObject({ stage: 'crunch', characterAmount: 0.2, inputGainDb: 24 });
+  await page.locator('[data-audio-panic]').click();
+  const afterPanic = await page.evaluate(() => {
+    const node = window.__inputStageTestState.nodes.filter(candidate => candidate.name === 'resonant-input-preamp-processor').at(-1);
+    return { messages: node.messages, stage: node.options.processorOptions.stage, characterAmount: node.options.processorOptions.characterAmount };
+  });
+  expect([...afterPanic.messages].reverse().find(message => message.type === 'set-input-gain-db')?.value).toBe(0);
+  expect(afterPanic.stage).toBe('crunch');
+  expect(afterPanic.characterAmount).toBe(0.2);
+  await expect(selector).toHaveValue('crunch');
+  await expect(character).toHaveValue('20');
   const fallbacks = await page.evaluate(() => {
     const engine = new window.AudioEngine({});
     return [engine.setInputPreampStage('preamp'), engine.setInputPreampStage('invalid-value')];

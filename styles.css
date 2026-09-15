@@ -121,6 +121,13 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
 .dev-lab-group { padding: 8px 0 6px; }.dev-lab-group + .dev-lab-group { border-top: 1px solid var(--output-border); }.dev-lab-group h2 { margin: 0 0 6px; color: var(--secondary-text); font-size: 10px; font-weight: 700; letter-spacing: 1px; }.dev-lab-group > .dev-lab-control, .dev-lab-group > .dev-audition-control { justify-content: space-between; width: 100%; margin: 5px 0; }
 .dev-lab-control { display: flex; align-items: center; gap: 6px; color: var(--muted-text); font-size: 11px; letter-spacing: .7px; }
 .dev-lab-control select { width: 82px; height: 24px; padding: 0 5px; border: 1px dashed var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 600 12px 'Trebuchet MS', Arial, sans-serif; }
+.dev-lab-character-control { display: grid; grid-template-columns: 1fr; gap: 4px; padding-top: 2px; }
+.dev-character-row { display: grid; grid-template-columns: minmax(0, 1fr) 48px; align-items: center; gap: 7px; }
+.dev-character-row input { width: 100%; min-width: 0; }
+.dev-character-row output { padding: 3px 4px; border: 1px solid var(--output-border); border-radius: 3px; color: var(--strong-text); background: var(--output-background); text-align: center; font: 600 11px 'Trebuchet MS', Arial, sans-serif; }
+.dev-character-scale { display: flex; justify-content: space-between; padding-right: 55px; color: var(--secondary-text); font-size: 9px; letter-spacing: .3px; }
+.dev-lab-character-control.is-irrelevant { opacity: .48; }
+.dev-lab-character-control.is-irrelevant input { filter: grayscale(1); }
 .dev-lab-control-wide select { width: 142px; }
 .fb-all-control { display: flex; align-items: center; gap: 8px; color: var(--muted-text); font-size: 13px; }
 .fb-all-toggle { min-width: 43px; height: 24px; padding: 0 7px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 600 12px 'Trebuchet MS', Arial, sans-serif; cursor: pointer; }

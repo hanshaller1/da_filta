@@ -72,7 +72,7 @@ test('PANIC resets feedback safely while audio stays on and German-layout shortc
     await inputGain.fill('12');
     await dryWet.fill('80');
     await resonance.fill('0.8');
-    await page.locator('[data-input-preamp-stage]').selectOption('warm');
+    await page.locator('[data-input-preamp-stage]').selectOption('tube');
     await page.locator('[data-feedback-topology]').selectOption('common-bus');
     await page.locator('[data-feedback-all-engine]').selectOption(feedbackAllEngine);
     await page.locator('[data-feedback-band="0"]').click();
@@ -87,7 +87,7 @@ test('PANIC resets feedback safely while audio stays on and German-layout shortc
     await expect(page.locator('[data-feedback-band].active')).toHaveCount(0);
     await expect(page.locator('.fb-all-toggle')).toHaveText('OFF');
     await expect(page.locator('.fb-all-toggle')).not.toHaveClass(/active/);
-    await expect(page.locator('[data-input-preamp-stage]')).toHaveValue('warm');
+    await expect(page.locator('[data-input-preamp-stage]')).toHaveValue('tube');
   };
 
   const preserved = await page.evaluate(() => ({

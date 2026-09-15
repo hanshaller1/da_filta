@@ -1,70 +1,69 @@
 const { test, expect } = require('playwright/test');
 
-test('fixed input-drive characters remain finite, continuous, and independent of processor gain messages', async ({ page }) => {
+test('input stage keeps gain and character independent while preserving distinct stable curves', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/', { waitUntil: 'networkidle' });
   const report = await page.evaluate(async () => {
-    const render = async ({ gainDb, stage, processorGainDb = gainDb }) => {
+    const render = async ({ gainDb = 0, stage = 'linear', characterAmount = 1, processorGainDb = gainDb }) => {
       const sampleRate = 48000;
       const length = sampleRate;
-      const context = new OfflineAudioContext(2, length, sampleRate);
+      const context = new OfflineAudioContext(1, length, sampleRate);
       await context.audioWorklet.addModule(new URL('/input-preamp-processor.js', location.href));
-      const input = context.createBuffer(2, length, sampleRate);
-      for (let channel = 0; channel < 2; channel += 1) {
-        const samples = input.getChannelData(channel);
-        const amplitude = channel === 0 ? 0.22 : 0.11;
-        for (let index = 0; index < length; index += 1) samples[index] = amplitude * Math.sin((2 * Math.PI * 480 * index) / sampleRate);
-      }
-      const source = context.createBufferSource();
-      source.buffer = input;
-      const gain = context.createGain();
-      gain.gain.value = 10 ** (gainDb / 20);
+      const input = context.createBuffer(1, length, sampleRate);
+      const sourceData = input.getChannelData(0);
+      for (let index = 0; index < length; index += 1) sourceData[index] = 0.72 * Math.sin((2 * Math.PI * 480 * index) / sampleRate);
+      const source = context.createBufferSource(); source.buffer = input;
+      const gain = context.createGain(); gain.gain.value = 10 ** (gainDb / 20);
       const preamp = new AudioWorkletNode(context, 'resonant-input-preamp-processor', {
-        numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2,
-        channelCountMode: 'explicit', channelInterpretation: 'discrete',
-        processorOptions: { inputGainDb: processorGainDb, stage }
+        numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+        processorOptions: { inputGainDb: processorGainDb, stage, characterAmount }
       });
-      source.connect(gain).connect(preamp).connect(context.destination);
-      source.start();
+      source.connect(gain).connect(preamp).connect(context.destination); source.start();
       const rendered = await context.startRendering();
       const output = rendered.getChannelData(0);
-      const right = rendered.getChannelData(1);
-      let peak = 0; let energy = 0; let dc = 0; let rightEnergy = 0; let finite = true;
+      let rms = 0; let dc = 0; let finite = true; let peak = 0;
       for (let index = sampleRate / 2; index < length; index += 1) {
-        const sample = output[index]; const rightSample = right[index];
-        peak = Math.max(peak, Math.abs(sample)); energy += sample * sample; dc += sample;
-        rightEnergy += rightSample * rightSample; finite = finite && Number.isFinite(sample) && Number.isFinite(rightSample);
+        const sample = output[index]; rms += sample * sample; dc += sample; peak = Math.max(peak, Math.abs(sample)); finite &&= Number.isFinite(sample);
       }
-      const frames = length - sampleRate / 2;
-      return { rms: Math.sqrt(energy / frames), peak, dc: dc / frames, rightRms: Math.sqrt(rightEnergy / frames), finite };
+      const start = sampleRate / 2; const frames = length - start;
+      return { output: Array.from(output.slice(start)), rms: Math.sqrt(rms / frames), dc: dc / frames, peak, finite };
     };
-    const linear0 = await render({ gainDb: 0, stage: 'linear' });
-    const linear12 = await render({ gainDb: 12, stage: 'linear' });
-    const oldPreamp = await render({ gainDb: 12, stage: 'preamp' });
-    const invalid = await render({ gainDb: 12, stage: 'invalid-value' });
-    const characters = {};
-    for (const stage of ['clean', 'warm', 'crunch', 'aggressive']) {
-      characters[stage] = {
-        low: await render({ gainDb: 6, stage }),
-        high: await render({ gainDb: 24, stage }),
-        processorGain0: await render({ gainDb: 12, stage, processorGainDb: 0 }),
-        processorGain24: await render({ gainDb: 12, stage, processorGainDb: 24 })
-      };
-    }
-    return { linear0, linear12, oldPreamp, invalid, characters };
+    const maxDifference = (left, right) => left.output.reduce((maximum, value, index) => Math.max(maximum, Math.abs(value - right.output[index])), 0);
+    const linear0 = await render({ characterAmount: 0 });
+    const linear50 = await render({ characterAmount: 0.5 });
+    const linear100 = await render({ characterAmount: 1 });
+    const gain12 = await render({ gainDb: 12, characterAmount: 0 });
+    const silk0 = await render({ stage: 'silk', characterAmount: 0 });
+    const silk50 = await render({ stage: 'silk', characterAmount: 0.5 });
+    const silk100 = await render({ stage: 'silk', characterAmount: 1 });
+    const stages = {};
+    for (const stage of ['silk', 'tape', 'tube', 'console', 'crunch', 'destroy']) stages[stage] = await render({ stage, characterAmount: 1 });
+    const processorGain0 = await render({ gainDb: 12, stage: 'console', characterAmount: 1, processorGainDb: 0 });
+    const processorGain24 = await render({ gainDb: 12, stage: 'console', characterAmount: 1, processorGainDb: 24 });
+    const destroyHigh = await render({ gainDb: 24, stage: 'destroy', characterAmount: 1 });
+    const lowCharacterHighGain = await render({ gainDb: 24, stage: 'crunch', characterAmount: 0.1 });
+    return {
+      linearDifferences: [maxDifference(linear0, linear50), maxDifference(linear0, linear100)],
+      gainRatio: gain12.rms / linear0.rms,
+      silkZeroDifference: maxDifference(linear0, silk0),
+      silkMidpointError: silk50.output.reduce((maximum, value, index) => Math.max(maximum, Math.abs(value - (linear0.output[index] + 0.5 * (silk100.output[index] - linear0.output[index])))), 0),
+      pairDifferences: Object.values(stages).map((stage, index, values) => values.slice(index + 1).map(other => maxDifference(stage, other))),
+      tubeDc: stages.tube.dc,
+      processorGainDifference: maxDifference(processorGain0, processorGain24),
+      destroyHigh, lowCharacterHighGain
+    };
   });
 
-  expect(report.linear0.finite).toBe(true);
-  expect(Math.abs(report.linear12.rms / report.linear0.rms - (10 ** (12 / 20)))).toBeLessThan(1e-4);
-  expect(Math.abs(report.oldPreamp.rms - report.linear12.rms)).toBeLessThan(1e-7);
-  expect(Math.abs(report.invalid.rms - report.linear12.rms)).toBeLessThan(1e-7);
-  for (const character of Object.values(report.characters)) {
-    expect(character.low.finite && character.high.finite).toBe(true);
-    expect(character.high.rms).toBeGreaterThan(character.low.rms);
-    expect(Math.abs(character.low.dc)).toBeLessThan(1e-5);
-    expect(character.low.rightRms).toBeGreaterThan(0);
-    expect(Math.abs(character.processorGain0.rms - character.processorGain24.rms)).toBeLessThan(1e-7);
-  }
+  expect(report.linearDifferences).toEqual([0, 0]);
+  expect(report.gainRatio).toBeCloseTo(10 ** (12 / 20), 5);
+  expect(report.silkZeroDifference).toBe(0);
+  expect(report.silkMidpointError).toBeLessThan(1e-7);
+  expect(report.pairDifferences.flat()).toEqual(expect.arrayContaining([expect.any(Number)]));
+  for (const difference of report.pairDifferences.flat()) expect(difference).toBeGreaterThan(1e-4);
+  expect(Math.abs(report.tubeDc)).toBeLessThan(2e-3);
+  expect(report.processorGainDifference).toBeLessThan(1e-7);
+  expect(report.destroyHigh.finite).toBe(true);
+  expect(report.lowCharacterHighGain.finite).toBe(true);
   expect(errors).toEqual([]);
 });

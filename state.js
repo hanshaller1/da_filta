@@ -18,6 +18,7 @@
   const BAND_GAIN_NEUTRAL = 0;
   const GLOBAL_CONTROL_DEFINITIONS = Object.freeze({
     inputGain: Object.freeze({ min: 0, max: 24, step: 0.5, defaultValue: 0 }),
+    inputCharacterAmount: Object.freeze({ min: 0, max: 100, step: 1, defaultValue: 50 }),
     resonance: Object.freeze({ min: -1, max: 1, step: 0.01, defaultValue: 0 }),
     dryWet: Object.freeze({ min: 0, max: 100, step: 1, defaultValue: 50 }),
     spread: Object.freeze({ min: -1, max: 1, step: 0.01, defaultValue: 0 }),
@@ -49,6 +50,7 @@
     spreadMode: 'CLASSIC',
     channelSelection: 'LR',
     inputGain: GLOBAL_CONTROL_DEFINITIONS.inputGain.defaultValue,
+    inputCharacterAmount: GLOBAL_CONTROL_DEFINITIONS.inputCharacterAmount.defaultValue,
     resonance: GLOBAL_CONTROL_DEFINITIONS.resonance.defaultValue,
     dryWet: GLOBAL_CONTROL_DEFINITIONS.dryWet.defaultValue,
     spread: GLOBAL_CONTROL_DEFINITIONS.spread.defaultValue,

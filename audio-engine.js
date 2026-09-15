@@ -6,7 +6,7 @@
     return { dry: 1 - wet, wet };
   };
   const INPUT_PREAMP_PROCESSOR_NAME = 'resonant-input-preamp-processor';
-  const INPUT_PREAMP_STAGES = Object.freeze(['linear', 'clean', 'warm', 'crunch', 'aggressive']);
+  const INPUT_PREAMP_STAGES = Object.freeze(['linear', 'silk', 'tape', 'tube', 'console', 'crunch', 'destroy']);
   const FEEDBACK_ALL_LEVELS = Object.freeze(['raw', 'sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth']);
   const inputPreampModuleLoads = new WeakMap();
   const loadInputPreampModule = async audioContext => {
@@ -29,6 +29,7 @@
       this.status = 'OFF';
       this.inputGainDb = 0;
       this.inputPreampStage = 'linear';
+      this.inputCharacterAmount = 50;
       this.resonance = 0;
       this.positiveResonanceAuditionGain = window.Filterbank?.POSITIVE_RESONANCE_AUDITION_GAIN ?? 0.1;
       this.positiveResonanceDrive = window.Filterbank?.POSITIVE_RESONANCE_DRIVE ?? 1;
@@ -89,6 +90,13 @@
       this.inputPreampStage = INPUT_PREAMP_STAGES.includes(value) ? value : 'linear';
       this.inputPreampNode?.port.postMessage({ type: 'set-input-stage', value: this.inputPreampStage });
       return this.inputPreampStage;
+    }
+
+    setInputCharacterAmount(value) {
+      const numeric = Number(value);
+      this.inputCharacterAmount = Number.isFinite(numeric) ? Math.max(0, Math.min(100, numeric)) : 50;
+      this.inputPreampNode?.port.postMessage({ type: 'set-character-amount', value: this.inputCharacterAmount / 100 });
+      return this.inputCharacterAmount;
     }
 
     setDryWet(value, smoothingTime = 0.015) {
@@ -276,6 +284,7 @@
       this.setAudioParam(this.inputGainNode?.gain, dbToGain(this.inputGainDb), immediate);
       this.inputPreampNode?.port.postMessage({ type: 'set-input-gain-db', value: this.inputGainDb });
       this.inputPreampNode?.port.postMessage({ type: 'set-input-stage', value: this.inputPreampStage });
+      this.inputPreampNode?.port.postMessage({ type: 'set-character-amount', value: this.inputCharacterAmount / 100 });
       const gains = dryWetGains(this.dryWet);
       this.setAudioParam(this.dryGainNode?.gain, gains.dry, immediate);
       this.setAudioParam(this.wetGainNode?.gain, gains.wet, immediate);
@@ -306,7 +315,7 @@
           channelCount: 2,
           channelCountMode: 'explicit',
           channelInterpretation: 'discrete',
-          processorOptions: { inputGainDb: this.inputGainDb, stage: this.inputPreampStage }
+          processorOptions: { inputGainDb: this.inputGainDb, stage: this.inputPreampStage, characterAmount: this.inputCharacterAmount / 100 }
         });
         this.dryGainNode = this.context.createGain();
         this.wetGainNode = this.context.createGain();

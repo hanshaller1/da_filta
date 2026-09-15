@@ -149,18 +149,52 @@ const feedbackAllLevelSelect = addDevLabSelector('DEV FB ALL LEVEL', 'data-feedb
 ]);
 const inputPreampStageSelect = addDevLabSelector('DEV INPUT STAGE', 'data-input-preamp-stage', [
   ['linear', 'LINEAR'],
-  ['clean', 'CLEAN'],
-  ['warm', 'WARM'],
+  ['silk', 'SILK'],
+  ['tape', 'TAPE'],
+  ['tube', 'TUBE'],
+  ['console', 'CONSOLE'],
   ['crunch', 'CRUNCH'],
-  ['aggressive', 'AGGRESSIVE']
+  ['destroy', 'DESTROY']
 ]);
+const addDevLabCharacterSlider = () => {
+  const container = devLabGroups.get('input');
+  if (!container) return null;
+  const control = document.createElement('label');
+  control.className = 'dev-lab-control dev-lab-character-control';
+  const title = document.createElement('span');
+  title.textContent = 'DEV CHARACTER';
+  const row = document.createElement('span');
+  row.className = 'dev-character-row';
+  const slider = document.createElement('input');
+  slider.type = 'range'; slider.min = '0'; slider.max = '100'; slider.step = '1';
+  slider.value = String(state.inputCharacterAmount);
+  slider.setAttribute('data-input-character-amount', '');
+  slider.setAttribute('aria-label', 'DEV Character Amount');
+  const output = document.createElement('output');
+  output.setAttribute('data-input-character-output', '');
+  output.textContent = `${state.inputCharacterAmount} %`;
+  row.append(slider, output);
+  const scale = document.createElement('span');
+  scale.className = 'dev-character-scale';
+  scale.innerHTML = '<span>0 %</span><span>50 %</span><span>100 %</span>';
+  control.append(title, row, scale);
+  container.append(control);
+  return slider;
+};
+const inputCharacterAmountSlider = addDevLabCharacterSlider();
 
 const DEV_LAB_HELP = {
   'data-input-preamp-stage': {
-    title: 'DEV INPUT STAGE', what: 'Wählt zwischen reiner linearer Eingangsverstärkung und vier festen experimentellen Drive-Charakteren.',
+    title: 'DEV INPUT STAGE', what: 'Wählt die feste nichtlineare Kennlinie beziehungsweise Klangcharakteristik.',
     scope: 'Wirkt nach dem Input Gain und vor der Dry/Wet-Verzweigung.',
-    values: [['LINEAR', 'Input Gain arbeitet als reine lineare Verstärkung.'], ['CLEAN', 'Subtilste feste Nichtlinearität mit leichter Verdichtung bei stärkerer Ansteuerung.'], ['WARM', 'Feste weichere und dichtere Saturation.'], ['CRUNCH', 'Feste deutlich stärkere und rauere Saturation.'], ['AGGRESSIVE', 'Stärkster, bewusst destruktiver fester Charakter.']],
-    default: 'LINEAR', note: 'Input Gain bestimmt die kontinuierliche Ansteuerung; die gewählte Kennlinie bleibt fest und morpht nicht mit dem Gain. Experimenteller DEV-Wert, kein Limiter, kein separater Drive-Regler, keine Loudness Compensation und keine bestätigte Erica-Emulation.'
+    values: [['LINEAR', 'Vollständig linear; Character ist klanglich wirkungslos.'], ['SILK', 'Sehr subtiler, symmetrischer Peak-Rounding-Charakter.'], ['TAPE', 'Weiche, runde Saturation mit sanfter Verdichtung.'], ['TUBE', 'Warme asymmetrische Sättigung mit kompensiertem DC-Anteil.'], ['CONSOLE', 'Direkter, punchiger Charakter mit definierterem Knee.'], ['CRUNCH', 'Härtere, deutlich hörbare Verzerrung.'], ['DESTROY', 'Hartes, experimentelles Clipping/Fold-Verhalten.']],
+    default: 'LINEAR', note: 'Input Gain = Ansteuerung. DEV CHARACTER = Charakteranteil. Die Kennlinie bleibt fest und verändert sich nicht automatisch mit dem Gain; keine Loudness Compensation.'
+  },
+  'data-input-character-amount': {
+    title: 'DEV CHARACTER', what: 'Bestimmt unabhängig vom Input Gain, wie stark der gewählte Stage-Charakter dem linearen Signal aufgeprägt wird.',
+    scope: 'Wirkt nach dem Input Gain im Input-Stage-Worklet und vor der Dry/Wet-Verzweigung.',
+    values: [['0 %', 'Exakt linearer Ausgang; Input Gain bleibt aktiv.'], ['50 %', 'Hälftige Mischung aus linearer Eingangsspur und voller Stage-Kennlinie.'], ['100 %', 'Voller Charakter der gewählten Stage.']],
+    default: '50 %', note: 'Input Gain = Ansteuerung, Character = Charakteranteil. Der Regler fügt keinen linearen Gain hinzu; bei LINEAR ist er klanglich wirkungslos.'
   },
   'data-reference-level': {
     title: 'DEV REFERENCE', what: 'Steuert den Anteil des Unity-Reference-Pfads im Wet-Signal.',
@@ -319,14 +353,14 @@ const hideDevLabTooltip = control => {
   devLabTooltip.hidden = true;
 };
 const showDevLabTooltip = control => {
-  const select = control.querySelector('select');
-  const help = select && DEV_LAB_HELP[select.getAttributeNames().find(name => name.startsWith('data-'))];
+  const input = control.querySelector('select, input');
+  const help = input && DEV_LAB_HELP[input.getAttributeNames().find(name => name.startsWith('data-'))];
   if (!help) return;
   activeDevLabControl = control;
   renderDevLabHelp(help);
   devLabTooltip.hidden = false;
   positionDevLabTooltip();
-  select.setAttribute('aria-describedby', devLabTooltip.id);
+  input.setAttribute('aria-describedby', devLabTooltip.id);
 };
 document.querySelectorAll('.dev-lab-panel .dev-lab-control, .dev-lab-panel .dev-audition-control').forEach(control => {
   control.addEventListener('mouseenter', () => showDevLabTooltip(control));
@@ -601,7 +635,29 @@ bindDevLabSelect(commonBusCeilingSelect, value => audioEngine.setCommonBusCeilin
 bindDevLabSelect(feedbackAllEngineSelect, value => audioEngine.setFeedbackAllEngine(value), 'legacy');
 bindDevLabSelect(feedbackAllSourceSelect, value => audioEngine.setFeedbackAllSource(value), 'post-gain-sum');
 bindDevLabSelect(feedbackAllLevelSelect, value => audioEngine.setFeedbackAllLevel(value), 'raw');
-bindDevLabSelect(inputPreampStageSelect, value => audioEngine.setInputPreampStage(value), 'linear');
+const updateInputCharacterRelevance = () => {
+  const control = inputCharacterAmountSlider?.closest('.dev-lab-character-control');
+  const irrelevant = inputPreampStageSelect?.value === 'linear';
+  control?.classList.toggle('is-irrelevant', irrelevant);
+  inputCharacterAmountSlider?.setAttribute('aria-disabled', String(irrelevant));
+};
+bindDevLabSelect(inputPreampStageSelect, value => {
+  const stage = audioEngine.setInputPreampStage(value);
+  if (inputPreampStageSelect) inputPreampStageSelect.value = stage;
+  updateInputCharacterRelevance();
+}, 'linear');
+const setInputCharacterAmount = value => {
+  const definition = GLOBAL_CONTROL_DEFINITIONS.inputCharacterAmount;
+  const numeric = Number(value);
+  const amount = Number.isFinite(numeric) ? Math.max(definition.min, Math.min(definition.max, Math.round(numeric))) : definition.defaultValue;
+  state.inputCharacterAmount = amount;
+  if (inputCharacterAmountSlider) inputCharacterAmountSlider.value = String(amount);
+  const output = document.querySelector('[data-input-character-output]');
+  if (output) output.textContent = `${amount} %`;
+  audioEngine.setInputCharacterAmount(amount);
+};
+setInputCharacterAmount(state.inputCharacterAmount);
+inputCharacterAmountSlider?.addEventListener('input', event => setInputCharacterAmount(event.target.value));
 const syncAudioParameters = () => {
   audioEngine.setInputGainDb(state.inputGain);
   audioEngine.setDryWet(state.dryWet);
