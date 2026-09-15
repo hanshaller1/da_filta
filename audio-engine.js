@@ -23,9 +23,10 @@
   };
 
   class AudioEngine {
-    constructor({ onStatusChange, onDevicesChanged }) {
+    constructor({ onStatusChange, onDevicesChanged, onDiagnostics }) {
       this.onStatusChange = onStatusChange;
       this.onDevicesChanged = onDevicesChanged;
+      this.onDiagnostics = onDiagnostics;
       this.status = 'OFF';
       this.inputGainDb = 0;
       this.inputPreampStage = 'linear';
@@ -236,6 +237,7 @@
         , feedbackTopology: this.feedbackTopology, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
         , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, feedbackAllLevel: this.feedbackAllLevel
+        , onDiagnostics: this.onDiagnostics
       };
     }
 

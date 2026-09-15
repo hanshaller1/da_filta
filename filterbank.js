@@ -145,6 +145,7 @@
       this.feedbackAllEngine = initialState?.feedbackAllEngine === 'common-bus' ? 'common-bus' : 'legacy';
       this.feedbackAllSource = initialState?.feedbackAllSource === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum';
       this.feedbackAllLevel = normalizeFeedbackAllLevel(initialState?.feedbackAllLevel);
+      this.onDiagnostics = typeof initialState?.onDiagnostics === 'function' ? initialState.onDiagnostics : null;
       this.inputNode = audioContext.createGain();
       this.outputNode = audioContext.createGain();
       this.inputNode.gain.value = 1;
@@ -190,8 +191,12 @@
           positiveResonanceOutputMode: this.positiveResonanceOutputMode,
           positiveResonanceLatencyMode: this.positiveResonanceLatencyMode,
           positiveResonanceCurve: this.positiveResonanceCurve
+          , collectResonatorDiagnostics: true
         }
       });
+      this.workletNode.port.onmessage = event => {
+        if (event.data?.type === 'resonator-diagnostics') this.onDiagnostics?.(event.data);
+      };
       this.inputNode.connect(this.workletNode);
       this.workletNode.connect(this.outputNode);
     }

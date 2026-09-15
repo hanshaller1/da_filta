@@ -1,6 +1,7 @@
 import { LinearTptSvf, OversampledPositiveTptResonator } from './tpt-svf.js';
 
 const COMMON_BUS_RESONANCE_EPSILON = 1e-12;
+const DIAGNOSTICS_UPDATE_HZ = 15;
 
 class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -143,6 +144,8 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       right: Array(this.bandCount).fill(0)
     };
     this.collectResonatorDiagnostics = processorOptions.collectResonatorDiagnostics === true;
+    this.diagnosticsFramesUntilPublish = Math.max(1, Math.round(sampleRate / DIAGNOSTICS_UPDATE_HZ));
+    this.diagnosticsFrameCounter = 0;
     this.resonatorDiagnostics = {
       left: this.createResonatorDiagnostics(),
       right: this.createResonatorDiagnostics()
@@ -357,8 +360,15 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       nonlinearFallbackCounts: Array(this.bandCount).fill(0),
       nonlinearNonFiniteStateResets: Array(this.bandCount).fill(0),
       commonFeedbackReturn: 0,
+      commonTapSum: 0,
+      commonSaturationInput: 0,
+      commonSaturationOutput: 0,
       commonFeedbackReturnPeak: 0,
       mainCommonFeedbackReturn: 0,
+      mainTapSum: 0,
+      mainTapSumScaled: 0,
+      mainSaturationInput: 0,
+      mainSaturationOutput: 0,
       mainCommonFeedbackReturnPeak: 0,
       mainTapSumPeak: 0,
       mainTapSumScaledPeak: 0,
@@ -378,6 +388,8 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       left: { ...this.resonatorDiagnostics.left },
       right: { ...this.resonatorDiagnostics.right }
     });
+    this.resonatorDiagnostics.left = this.createResonatorDiagnostics();
+    this.resonatorDiagnostics.right = this.createResonatorDiagnostics();
   }
 
   processBandpass(filter, input) {
@@ -896,11 +908,20 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       diagnostics.positiveResonanceLatencyMode = this.positiveResonanceLatencyMode;
       diagnostics.positiveResonanceCurve = this.positiveResonanceCurve;
       diagnostics.commonFeedbackReturn = this.commonFeedbackReturns[channel];
+      diagnostics.commonTapSum = commonTapSum;
+      diagnostics.commonSaturationInput = commonBusActive && resonanceMagnitudeSquared > 0
+        ? this.maxFeedbackGain * resonanceMagnitudeSquared * commonTapSum : 0;
+      diagnostics.commonSaturationOutput = this.commonFeedbackReturns[channel];
       diagnostics.commonFeedbackReturnPeak = Math.max(
         diagnostics.commonFeedbackReturnPeak,
         Math.abs(this.commonFeedbackReturns[channel])
       );
       diagnostics.mainCommonFeedbackReturn = this.mainCommonFeedbackReturns[channel];
+      diagnostics.mainTapSum = mainTapSum;
+      diagnostics.mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
+      diagnostics.mainSaturationInput = mainCommonBusActive && resonanceMagnitudeSquared > 0
+        ? this.maxFeedbackGain * resonanceMagnitudeSquared * diagnostics.mainTapSumScaled : 0;
+      diagnostics.mainSaturationOutput = this.mainCommonFeedbackReturns[channel];
       diagnostics.mainCommonFeedbackReturnPeak = Math.max(
         diagnostics.mainCommonFeedbackReturnPeak,
         Math.abs(this.mainCommonFeedbackReturns[channel])
@@ -970,7 +991,13 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       if (leftOutput) leftOutput[frame] = this.processChannelFrame(inputChannels[0]?.[frame], 'left');
       if (rightOutput) rightOutput[frame] = this.processChannelFrame(inputChannels[1]?.[frame], 'right');
     }
-    if (this.collectResonatorDiagnostics) this.publishResonatorDiagnostics();
+    if (this.collectResonatorDiagnostics) {
+      this.diagnosticsFrameCounter += frameCount;
+      if (this.diagnosticsFrameCounter >= this.diagnosticsFramesUntilPublish) {
+        this.diagnosticsFrameCounter %= this.diagnosticsFramesUntilPublish;
+        this.publishResonatorDiagnostics();
+      }
+    }
     return !this.disposed;
   }
 }

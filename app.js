@@ -92,6 +92,99 @@ if (analyzerHeaderControls && filterbankWorkspace) {
   analyzerHeaderControls.append(responseCollapseButton);
   responseCollapseButton.addEventListener('click', () => setFilterbankResponseCollapsed(!filterbankWorkspace.classList.contains('is-collapsed')));
 }
+
+// This panel is deliberately a UI-only consumer of the existing worklet
+// diagnostics. It never sends a message back into the audio graph.
+const responseModeControl = document.createElement('div');
+responseModeControl.className = 'response-mode-control';
+responseModeControl.setAttribute('role', 'group');
+responseModeControl.setAttribute('aria-label', 'Filterbank Response Ansicht');
+const normalResponseButton = document.createElement('button');
+const devResponseButton = document.createElement('button');
+normalResponseButton.type = devResponseButton.type = 'button';
+normalResponseButton.textContent = 'NORMAL'; devResponseButton.textContent = 'DEV LAB';
+normalResponseButton.dataset.responseMode = 'normal'; devResponseButton.dataset.responseMode = 'dev-lab';
+responseModeControl.append(normalResponseButton, devResponseButton);
+const responseChart = filterbankWorkspace?.querySelector('.chart-grid');
+const responseLegend = filterbankWorkspace?.querySelector('.legend');
+const responseLab = document.createElement('section');
+responseLab.className = 'response-dev-lab';
+responseLab.hidden = true;
+responseLab.setAttribute('aria-label', 'Filterbank DSP Telemetrie');
+responseLab.innerHTML = `
+  <div class="response-dev-toolbar"><span data-dev-lab-audio>NO AUDIO</span><button type="button" data-dev-lab-freeze aria-pressed="false">FREEZE</button><button type="button" data-dev-lab-reset>RESET METRICS</button></div>
+  <div class="response-dev-summary" data-dev-lab-summary></div>
+  <div class="response-dev-traces"><figure><figcaption>COMMON RETURN <i>L</i> <i>R</i></figcaption><canvas data-dev-lab-trace="common"></canvas></figure><figure><figcaption>MAIN RETURN <i>L</i> <i>R</i></figcaption><canvas data-dev-lab-trace="main"></canvas></figure><figure><figcaption>RESONANCE <i>TARGET</i> <i>SMOOTHED</i></figcaption><canvas data-dev-lab-trace="resonance"></canvas></figure></div>
+  <div class="response-dev-bottom"><div class="response-dev-bands" data-dev-lab-bands></div><div class="response-dev-band-detail" data-dev-lab-band-detail></div></div>`;
+responseChart?.after(responseLab);
+analyzerHeaderControls?.prepend(responseModeControl);
+
+const devLabTelemetry = (() => {
+  const maxHistory = 150; // 10 seconds at the 15 Hz worklet publish rate.
+  const histories = { common: [], main: [], resonance: [] };
+  let latest = null;
+  let frozen = false;
+  let responseMode = 'normal';
+  let resetBaseline = { left: 0, right: 0 };
+  const freezeButton = responseLab.querySelector('[data-dev-lab-freeze]');
+  const resetButton = responseLab.querySelector('[data-dev-lab-reset]');
+  const summary = responseLab.querySelector('[data-dev-lab-summary]');
+  const bands = responseLab.querySelector('[data-dev-lab-bands]');
+  const detail = responseLab.querySelector('[data-dev-lab-band-detail]');
+  const audioLabel = responseLab.querySelector('[data-dev-lab-audio]');
+  const finite = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+  const number = value => Math.abs(finite(value)) >= 10 ? finite(value).toFixed(2) : finite(value).toFixed(4);
+  const push = (history, value) => { history.push(value); if (history.length > maxHistory) history.shift(); };
+  const dominantBand = packet => {
+    const left = packet?.left?.bandEnergy || []; const right = packet?.right?.bandEnergy || [];
+    let index = 0; let energy = -1; let total = 0;
+    for (let band = 0; band < BAND_COUNT; band += 1) { const value = finite(left[band]) + finite(right[band]); total += value; if (value > energy) { energy = value; index = band; } }
+    return { index, energy: Math.max(0, energy), dominance: total > 0 ? Math.max(0, energy) / total : 0 };
+  };
+  const reset = () => {
+    histories.common.length = histories.main.length = histories.resonance.length = 0;
+    resetBaseline = { left: finite(latest?.left?.mainCommonNonFiniteResets), right: finite(latest?.right?.mainCommonNonFiniteResets) };
+    latest = null; render();
+  };
+  const renderTrace = (canvas, history, keys, range = 1) => {
+    const rect = canvas.getBoundingClientRect(); const width = Math.max(1, Math.floor(rect.width)); const height = Math.max(1, Math.floor(rect.height));
+    if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+    const context = canvas.getContext('2d'); context.clearRect(0, 0, width, height); context.strokeStyle = 'rgba(127,150,160,.28)'; context.lineWidth = 1;
+    context.beginPath(); context.moveTo(0, height / 2); context.lineTo(width, height / 2); context.stroke();
+    const max = Math.max(range, ...history.flatMap(item => keys.map(key => Math.abs(finite(item[key])))));
+    keys.forEach((key, keyIndex) => { context.strokeStyle = keyIndex ? getComputedStyle(document.documentElement).getPropertyValue('--secondary-text') : getComputedStyle(document.documentElement).getPropertyValue('--cyan'); context.lineWidth = 1.5; context.beginPath(); history.forEach((item, index) => { const x = history.length < 2 ? 0 : index * width / (maxHistory - 1); const y = height / 2 - finite(item[key]) / max * (height * .44); if (index === 0) context.moveTo(x, y); else context.lineTo(x, y); }); context.stroke(); });
+  };
+  const render = () => {
+    if (responseMode !== 'dev-lab' || filterbankWorkspace?.classList.contains('is-collapsed')) return;
+    if (!latest) { summary.textContent = 'NO AUDIO — keine Telemetrie verfügbar'; bands.replaceChildren(); detail.textContent = ''; return; }
+    const { left, right } = latest; const dominant = dominantBand(latest); const frequencies = BAND_DEFINITIONS.map(band => band.frequency);
+    const items = [
+      ['RES TARGET', number(left.resonanceTarget)], ['RES SMOOTHED', number(left.smoothedResonance)], ['TOPOLOGY', left.feedbackTopology], ['TAP', left.feedbackTap], ['WET', left.wetModel], ['SAT', left.commonBusSaturationMode], ['DRIVE', number(left.commonBusDrive)], ['CEILING', number(left.commonBusCeiling)],
+      ['LOCAL RET L/R', `${number(left.commonFeedbackReturn)} / ${number(right.commonFeedbackReturn)}`], ['LOCAL TAP L/R', `${number(left.commonTapSum)} / ${number(right.commonTapSum)}`], ['MAIN RET L/R', `${number(left.mainCommonFeedbackReturn)} / ${number(right.mainCommonFeedbackReturn)}`], ['MAIN TAP L/R', `${number(left.mainTapSum)} / ${number(right.mainTapSum)}`], ['MAIN SCALED L/R', `${number(left.mainTapSumScaled)} / ${number(right.mainTapSumScaled)}`], ['FB ALL SCALE', number(left.mainFeedbackLevelScale)],
+      ['SOURCE PK L/R', `${number(left.sourcePeak)} / ${number(right.sourcePeak)}`], ['WET PK L/R', `${number(left.wetPeak)} / ${number(right.wetPeak)}`], ['LOCAL SAT IN/OUT L', `${number(left.commonSaturationInput)} / ${number(left.commonSaturationOutput)}`], ['LOCAL SAT IN/OUT R', `${number(right.commonSaturationInput)} / ${number(right.commonSaturationOutput)}`], ['MAIN SAT IN/OUT L', `${number(left.mainSaturationInput)} / ${number(left.mainSaturationOutput)}`], ['MAIN SAT IN/OUT R', `${number(right.mainSaturationInput)} / ${number(right.mainSaturationOutput)}`], ['MAIN RESETS L/R', `${Math.max(0, finite(left.mainCommonNonFiniteResets) - resetBaseline.left)} / ${Math.max(0, finite(right.mainCommonNonFiniteResets) - resetBaseline.right)}`]
+    ];
+    summary.replaceChildren(...items.map(([label, value]) => { const item = document.createElement('div'); item.innerHTML = `<span>${label}</span><b>${value ?? '—'}</b>`; return item; }));
+    detail.innerHTML = `<strong>DOMINANT BAND</strong><b>${frequencies[dominant.index]} Hz</b><span>DOMINANCE ${(dominant.dominance * 100).toFixed(0)} %</span>`;
+    bands.replaceChildren(...frequencies.map((frequency, index) => { const energy = finite(left.bandEnergy?.[index]) + finite(right.bandEnergy?.[index]); const maxEnergy = Math.max(1e-12, dominant.energy); const row = document.createElement('div'); const gain = Math.max(controlToBandGainDb(audioEngine?.bandGainLeft?.[index] ?? 0, audioEngine?.maxBandBoostDb, audioEngine?.maxBandCutDb), controlToBandGainDb(audioEngine?.bandGainRight?.[index] ?? 0, audioEngine?.maxBandBoostDb, audioEngine?.maxBandCutDb)); row.className = index === dominant.index ? 'is-dominant' : ''; row.innerHTML = `<span>${frequency >= 1000 ? `${(frequency / 1000).toFixed(1)} kHz` : `${frequency} Hz`}</span><i><b style="width:${Math.min(100, energy / maxEnergy * 100)}%"></b></i><em>${number(Math.max(finite(left.bandPeak?.[index]), finite(right.bandPeak?.[index])))}</em><small>${left.localGates?.[index] > .5 || right.localGates?.[index] > .5 ? 'FB ON' : 'FB OFF'} · ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} dB</small>`; return row; }));
+    renderTrace(responseLab.querySelector('[data-dev-lab-trace="common"]'), histories.common, ['left', 'right']);
+    renderTrace(responseLab.querySelector('[data-dev-lab-trace="main"]'), histories.main, ['left', 'right']);
+    renderTrace(responseLab.querySelector('[data-dev-lab-trace="resonance"]'), histories.resonance, ['target', 'smoothed'], 1);
+  };
+  const receive = packet => {
+    if (!packet?.left || !packet?.right || frozen) return;
+    latest = packet; audioLabel.textContent = 'LIVE · 15 Hz';
+    push(histories.common, { left: packet.left.commonFeedbackReturn, right: packet.right.commonFeedbackReturn });
+    push(histories.main, { left: packet.left.mainCommonFeedbackReturn, right: packet.right.mainCommonFeedbackReturn });
+    push(histories.resonance, { target: packet.left.resonanceTarget, smoothed: packet.left.smoothedResonance }); render();
+  };
+  const setMode = mode => { responseMode = mode; const dev = mode === 'dev-lab'; responseLab.hidden = !dev; responseChart.hidden = dev; if (responseLegend) responseLegend.hidden = dev; normalResponseButton.classList.toggle('active', !dev); devResponseButton.classList.toggle('active', dev); normalResponseButton.setAttribute('aria-pressed', String(!dev)); devResponseButton.setAttribute('aria-pressed', String(dev)); render(); };
+  normalResponseButton.addEventListener('click', () => setMode('normal')); devResponseButton.addEventListener('click', () => setMode('dev-lab'));
+  freezeButton.addEventListener('click', () => { frozen = !frozen; freezeButton.textContent = frozen ? 'LIVE' : 'FREEZE'; freezeButton.setAttribute('aria-pressed', String(frozen)); });
+  resetButton.addEventListener('click', reset);
+  responseCollapseButton.addEventListener('click', () => requestAnimationFrame(render));
+  setMode('normal');
+  return { receive, reset, render, setAudioOff: () => { if (!frozen) { latest = null; audioLabel.textContent = 'NO AUDIO'; render(); } } };
+})();
 devLabToggle?.addEventListener('click', () => {
   const open = Boolean(devLabPanel?.hidden);
   if (devLabPanel) devLabPanel.hidden = !open;
@@ -561,10 +654,12 @@ const updateAudioStatus = (status, message = '') => {
   audioStatus.dataset.status = status;
   startAudioButton.disabled = status === 'STARTING' || status === 'ON';
   stopAudioButton.disabled = status !== 'ON';
+  if (status !== 'ON') devLabTelemetry.setAudioOff();
 };
 audioEngine = new AudioEngine({
   onStatusChange: updateAudioStatus,
-  onDevicesChanged: devices => { renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät'); renderDevices(outputDeviceSelect, devices.outputs, 'Standardausgabe'); }
+  onDevicesChanged: devices => { renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät'); renderDevices(outputDeviceSelect, devices.outputs, 'Standardausgabe'); },
+  onDiagnostics: packet => devLabTelemetry.receive(packet)
 });
 audioEngine.applyState(state);
 const setPositiveResonanceAuditionGain = value => {
