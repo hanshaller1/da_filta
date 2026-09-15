@@ -10,6 +10,7 @@ test('FILTERBANK RESPONSE keeps NORMAL intact and DEV LAB is a passive, collapsi
   const workspace = page.locator('.fb-workspace');
   const bars = page.locator('.fb-workspace .chart-grid .bars');
   const panel = page.locator('.response-dev-lab');
+  const footer = page.locator('.fb-workspace .analyzer-footer');
   await expect(normal).toHaveAttribute('aria-pressed', 'true');
   await expect(bars).toBeVisible();
   await expect(panel).toBeHidden();
@@ -25,6 +26,14 @@ test('FILTERBANK RESPONSE keeps NORMAL intact and DEV LAB is a passive, collapsi
   await expect(panel).toContainText('NO AUDIO');
   await expect(panel.locator('[data-dev-lab-freeze]')).toBeVisible();
   await expect(panel.locator('[data-dev-lab-reset]')).toBeVisible();
+  await expect(footer).toBeHidden();
+  expect(await panel.evaluate(node => {
+    const analyzer = node.closest('.analyzer').getBoundingClientRect();
+    const panelRect = node.getBoundingClientRect();
+    // The remaining seven pixels are the DEV-LAB body's own bottom padding,
+    // not a retained analyzer footer.
+    return Math.abs(panelRect.bottom - analyzer.bottom) <= 8;
+  })).toBeTruthy();
   await panel.locator('[data-dev-lab-freeze]').click();
   await expect(panel.locator('[data-dev-lab-freeze]')).toHaveText('LIVE');
   await panel.locator('[data-dev-lab-reset]').click();
@@ -38,12 +47,14 @@ test('FILTERBANK RESPONSE keeps NORMAL intact and DEV LAB is a passive, collapsi
 
   await page.locator('.response-collapse-toggle').click();
   await expect(workspace).toHaveClass(/is-collapsed/);
+  await expect(footer).toBeHidden();
   await page.locator('.response-collapse-toggle').click();
   await expect(panel).toBeVisible();
   await expect(panel.locator('[data-dev-lab-freeze]')).toHaveText('LIVE');
   await normal.click();
   await expect(bars).toBeVisible();
   await expect(panel).toBeHidden();
+  await expect(footer).toBeVisible();
   expect(errors).toEqual([]);
 });
 

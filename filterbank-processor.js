@@ -331,6 +331,10 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       sourceEnergy: 0,
       wetPeak: 0,
       wetEnergy: 0,
+      // Passive diagnostics only: these values are aggregated at the existing
+      // 15 Hz publish cadence and never feed back into the signal path.
+      wetDcSum: 0,
+      saturationActiveFrames: 0,
       positiveResonanceAuditionGain: 0,
       positiveResonanceAuditionGainTarget: 0,
       baseBandPeak: Array(this.bandCount).fill(0),
@@ -888,6 +892,7 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       diagnostics.sourceEnergy += source * source;
       diagnostics.wetPeak = Math.max(diagnostics.wetPeak, Math.abs(wetOutput));
       diagnostics.wetEnergy += wetOutput * wetOutput;
+      diagnostics.wetDcSum += wetOutput;
       diagnostics.positiveResonanceAuditionGain = this.positiveResonanceAuditionGain;
       diagnostics.positiveResonanceAuditionGainTarget = this.positiveResonanceAuditionGainTarget;
       diagnostics.nonlinearDrive = this.positiveResonanceDrive;
@@ -922,6 +927,11 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
       diagnostics.mainSaturationInput = mainCommonBusActive && resonanceMagnitudeSquared > 0
         ? this.maxFeedbackGain * resonanceMagnitudeSquared * diagnostics.mainTapSumScaled : 0;
       diagnostics.mainSaturationOutput = this.mainCommonFeedbackReturns[channel];
+      const localSatDelta = Math.abs(diagnostics.commonSaturationInput - diagnostics.commonSaturationOutput);
+      const mainSatDelta = Math.abs(diagnostics.mainSaturationInput - diagnostics.mainSaturationOutput);
+      const localSatReference = Math.max(1e-6, Math.abs(diagnostics.commonSaturationInput) * 0.001);
+      const mainSatReference = Math.max(1e-6, Math.abs(diagnostics.mainSaturationInput) * 0.001);
+      if (localSatDelta > localSatReference || mainSatDelta > mainSatReference) diagnostics.saturationActiveFrames += 1;
       diagnostics.mainCommonFeedbackReturnPeak = Math.max(
         diagnostics.mainCommonFeedbackReturnPeak,
         Math.abs(this.mainCommonFeedbackReturns[channel])

@@ -55,6 +55,11 @@
       this.inputPreampNode = null;
       this.dryGainNode = null;
       this.wetGainNode = null;
+      // Passive visual-analysis sidechain. It is deliberately not routed back
+      // into the audible graph.
+      this.spectrumSplitterNode = null;
+      this.spectrumAnalyserLeft = null;
+      this.spectrumAnalyserRight = null;
       this.mixBus = null;
       this.volumeGainNode = null;
       this.destination = null;
@@ -321,6 +326,17 @@
         });
         this.dryGainNode = this.context.createGain();
         this.wetGainNode = this.context.createGain();
+        if (typeof this.context.createChannelSplitter === 'function' && typeof this.context.createAnalyser === 'function') {
+          this.spectrumSplitterNode = this.context.createChannelSplitter(2);
+          this.spectrumAnalyserLeft = this.context.createAnalyser();
+          this.spectrumAnalyserRight = this.context.createAnalyser();
+          [this.spectrumAnalyserLeft, this.spectrumAnalyserRight].forEach(analyser => {
+            analyser.fftSize = 2048;
+            analyser.smoothingTimeConstant = 0.75;
+            analyser.minDecibels = -90;
+            analyser.maxDecibels = 0;
+          });
+        }
         this.mixBus = this.context.createGain();
         this.volumeGainNode = this.context.createGain();
         this.destination = this.context.createMediaStreamDestination();
@@ -333,6 +349,13 @@
         this.inputPreampNode.connect(this.filterbank.input);
         this.dryGainNode.connect(this.mixBus);
         this.filterbank.output.connect(this.wetGainNode);
+        // Tap the actual stereo Filterbank output before dry/wet and master
+        // volume. The splitter/analyser branch has no connection to audio out.
+        if (this.spectrumSplitterNode && this.spectrumAnalyserLeft && this.spectrumAnalyserRight) {
+          this.filterbank.output.connect(this.spectrumSplitterNode);
+          this.spectrumSplitterNode.connect(this.spectrumAnalyserLeft, 0);
+          this.spectrumSplitterNode.connect(this.spectrumAnalyserRight, 1);
+        }
         this.wetGainNode.connect(this.mixBus);
         this.mixBus.connect(this.volumeGainNode);
         this.volumeGainNode.connect(this.destination);
@@ -364,12 +387,15 @@
 
     async cleanup() {
       if (this.filterbank) { this.filterbank.dispose(); this.filterbank = null; }
-      [this.source, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
+      [this.source, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
       this.source = null;
       this.inputGainNode = null;
       this.inputPreampNode = null;
       this.dryGainNode = null;
       this.wetGainNode = null;
+      this.spectrumSplitterNode = null;
+      this.spectrumAnalyserLeft = null;
+      this.spectrumAnalyserRight = null;
       this.mixBus = null;
       this.volumeGainNode = null;
       if (this.stream) { this.stream.getTracks().forEach(track => track.stop()); this.stream = null; }

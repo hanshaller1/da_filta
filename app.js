@@ -107,17 +107,171 @@ normalResponseButton.dataset.responseMode = 'normal'; devResponseButton.dataset.
 responseModeControl.append(normalResponseButton, devResponseButton);
 const responseChart = filterbankWorkspace?.querySelector('.chart-grid');
 const responseLegend = filterbankWorkspace?.querySelector('.legend');
+
+// The spectrum is a UI-only view over the AudioEngine's passive wet-output
+// AnalyserNodes. It never controls, reconnects, or otherwise alters audio.
+const spectrumForegroundControl = document.createElement('div');
+spectrumForegroundControl.className = 'spectrum-foreground-control';
+spectrumForegroundControl.setAttribute('role', 'group');
+spectrumForegroundControl.setAttribute('aria-label', 'Visualisierung im Vordergrund');
+const spectrumBarsButton = document.createElement('button');
+const spectrumCurveButton = document.createElement('button');
+spectrumBarsButton.type = spectrumCurveButton.type = 'button';
+spectrumBarsButton.setAttribute('aria-label', 'Filterbank-Balken in den Vordergrund');
+spectrumCurveButton.setAttribute('aria-label', 'Spectrum in den Vordergrund');
+spectrumBarsButton.innerHTML = '<svg viewBox="0 0 20 16" aria-hidden="true" focusable="false"><rect x="1" y="8" width="3" height="7"/><rect x="6" y="3" width="3" height="12"/><rect x="11" y="6" width="3" height="9"/><rect x="16" y="1" width="3" height="14"/></svg>';
+spectrumCurveButton.innerHTML = '<svg viewBox="0 0 20 16" aria-hidden="true" focusable="false"><path d="M1 12 C3 11,3 5,6 8 S9 13,11 5 S14 10,16 4 S18 7,19 3"/></svg>';
+spectrumForegroundControl.append(spectrumBarsButton, spectrumCurveButton);
+analyzerHeaderControls?.prepend(spectrumForegroundControl);
+
+const spectrumRenderer = (() => {
+  if (!responseChart) return { setVisible() {}, refresh() {} };
+  const canvas = document.createElement('canvas');
+  canvas.className = 'filterbank-spectrum';
+  canvas.setAttribute('aria-hidden', 'true');
+  responseChart.insertBefore(canvas, responseChart.querySelector('.bars'));
+  const context = canvas.getContext('2d');
+  const minFrequency = 20;
+  const maxFrequency = 20000;
+  const minDecibels = -90;
+  const maxDecibels = 0;
+  const logFrequencyRange = Math.log(maxFrequency / minFrequency);
+  let visible = true;
+  let foreground = 'bars';
+  let animationFrame = 0;
+  let leftAnalyser = null;
+  let rightAnalyser = null;
+  let leftBins = null;
+  let rightBins = null;
+  let cssWidth = 0;
+  let cssHeight = 0;
+  let palette = null;
+  const frequencyToX = (frequency, width) => Math.log(Math.max(minFrequency, Math.min(maxFrequency, frequency)) / minFrequency) / logFrequencyRange * width;
+  const decibelsToY = (decibels, height) => (maxDecibels - Math.max(minDecibels, Math.min(maxDecibels, decibels))) / (maxDecibels - minDecibels) * height;
+  const shouldRender = () => visible && !filterbankWorkspace?.classList.contains('is-collapsed');
+  const updateButtons = () => {
+    const barsFront = foreground === 'bars';
+    spectrumBarsButton.classList.toggle('active', barsFront);
+    spectrumCurveButton.classList.toggle('active', !barsFront);
+    spectrumBarsButton.setAttribute('aria-pressed', String(barsFront));
+    spectrumCurveButton.setAttribute('aria-pressed', String(!barsFront));
+    responseChart.classList.toggle('spectrum-foreground', !barsFront);
+  };
+  const resize = () => {
+    const rect = responseChart.getBoundingClientRect();
+    const width = Math.max(0, Math.floor(rect.width));
+    const height = Math.max(0, Math.floor(rect.height));
+    const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
+    if (!width || !height) return false;
+    if (cssWidth !== width || cssHeight !== height || canvas.width !== Math.round(width * pixelRatio) || canvas.height !== Math.round(height * pixelRatio)) {
+      cssWidth = width; cssHeight = height;
+      canvas.width = Math.round(width * pixelRatio); canvas.height = Math.round(height * pixelRatio);
+      canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
+    }
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    return true;
+  };
+  const colors = () => {
+    if (palette) return palette;
+    const style = getComputedStyle(document.documentElement);
+    palette = { left: style.getPropertyValue('--cyan').trim() || '#49d7eb', right: style.getPropertyValue('--secondary-text').trim() || '#e16c85' };
+    return palette;
+  };
+  const ensureBins = () => {
+    const nextLeft = audioEngine?.spectrumAnalyserLeft || null;
+    const nextRight = audioEngine?.spectrumAnalyserRight || null;
+    if (nextLeft !== leftAnalyser || nextRight !== rightAnalyser) {
+      leftAnalyser = nextLeft; rightAnalyser = nextRight;
+      leftBins = leftAnalyser ? new Float32Array(leftAnalyser.frequencyBinCount) : null;
+      rightBins = rightAnalyser ? new Float32Array(rightAnalyser.frequencyBinCount) : null;
+    }
+    return leftAnalyser && rightAnalyser && leftBins && rightBins;
+  };
+  const drawCurve = (data, analyser, color, alpha, lineWidth) => {
+    const sampleRate = analyser.context.sampleRate;
+    const binWidth = sampleRate / analyser.fftSize;
+    const start = Math.max(1, Math.ceil(minFrequency / binWidth));
+    const end = Math.min(data.length - 1, Math.floor(maxFrequency / binWidth));
+    context.globalAlpha = alpha;
+    context.strokeStyle = color;
+    context.lineWidth = lineWidth;
+    context.beginPath();
+    for (let bin = start; bin <= end; bin += 1) {
+      const x = frequencyToX(bin * binWidth, cssWidth);
+      const y = decibelsToY(Number.isFinite(data[bin]) ? data[bin] : minDecibels, cssHeight);
+      if (bin === start) context.moveTo(x, y); else context.lineTo(x, y);
+    }
+    context.stroke();
+  };
+  const draw = () => {
+    animationFrame = 0;
+    if (!shouldRender()) return;
+    if (!resize()) { schedule(); return; }
+    context.clearRect(0, 0, cssWidth, cssHeight);
+    if (ensureBins()) {
+      leftAnalyser.getFloatFrequencyData(leftBins);
+      rightAnalyser.getFloatFrequencyData(rightBins);
+      const color = colors();
+      const alpha = foreground === 'bars' ? .38 : .96;
+      const width = foreground === 'bars' ? 1 : 1.65;
+      drawCurve(leftBins, leftAnalyser, color.left, alpha, width);
+      drawCurve(rightBins, rightAnalyser, color.right, alpha, width);
+      context.globalAlpha = 1;
+    }
+    schedule();
+  };
+  const schedule = () => { if (!animationFrame && shouldRender()) animationFrame = requestAnimationFrame(draw); };
+  const refresh = () => { if (shouldRender()) schedule(); };
+  const setVisible = nextVisible => { visible = Boolean(nextVisible); if (!visible && animationFrame) { cancelAnimationFrame(animationFrame); animationFrame = 0; } else refresh(); };
+  const setForeground = nextForeground => { foreground = nextForeground === 'spectrum' ? 'spectrum' : 'bars'; updateButtons(); refresh(); };
+  spectrumBarsButton.addEventListener('click', () => setForeground('bars'));
+  spectrumCurveButton.addEventListener('click', () => setForeground('spectrum'));
+  window.addEventListener('resize', () => { palette = null; refresh(); });
+  new ResizeObserver(() => refresh()).observe(responseChart);
+  new MutationObserver(() => { palette = null; }).observe(document.body, { attributes: true, attributeFilter: ['data-theme'] });
+  updateButtons(); refresh();
+window.FilterbankSpectrum = { frequencyToX, decibelsToY };
+  return { setVisible, refresh, setForeground };
+})();
+responseCollapseButton.addEventListener('click', () => requestAnimationFrame(() => spectrumRenderer.refresh()));
 const responseLab = document.createElement('section');
 responseLab.className = 'response-dev-lab';
 responseLab.hidden = true;
 responseLab.setAttribute('aria-label', 'Filterbank DSP Telemetrie');
 responseLab.innerHTML = `
-  <div class="response-dev-toolbar"><span data-dev-lab-audio>NO AUDIO</span><button type="button" data-dev-lab-freeze aria-pressed="false">FREEZE</button><button type="button" data-dev-lab-reset>RESET METRICS</button></div>
+  <div class="response-dev-toolbar"><span data-dev-lab-audio>NO AUDIO</span><button type="button" data-dev-lab-freeze aria-pressed="false">FREEZE</button><button type="button" data-dev-lab-reset>RESET METRICS</button><button type="button" data-debug-console-toggle aria-expanded="false">DEBUG CONSOLE</button><button type="button" data-debug-mark>MARK</button><button type="button" data-debug-snapshot>SNAPSHOT</button></div>
   <div class="response-dev-summary" data-dev-lab-summary></div>
   <div class="response-dev-traces"><figure><figcaption>COMMON RETURN <i>L</i> <i>R</i></figcaption><canvas data-dev-lab-trace="common"></canvas></figure><figure><figcaption>MAIN RETURN <i>L</i> <i>R</i></figcaption><canvas data-dev-lab-trace="main"></canvas></figure><figure><figcaption>RESONANCE <i>TARGET</i> <i>SMOOTHED</i></figcaption><canvas data-dev-lab-trace="resonance"></canvas></figure></div>
   <div class="response-dev-bottom"><div class="response-dev-bands" data-dev-lab-bands></div><div class="response-dev-band-detail" data-dev-lab-band-detail></div></div>`;
 responseChart?.after(responseLab);
 analyzerHeaderControls?.prepend(responseModeControl);
+
+// Deliberately outside FILTERBANK RESPONSE: this is a non-modal diagnostic
+// overlay, so opening it cannot change the response panel's geometry.
+const debugConsoleOverlay = document.createElement('section');
+debugConsoleOverlay.className = 'response-debug-console';
+debugConsoleOverlay.dataset.debugConsole = '';
+debugConsoleOverlay.hidden = true;
+debugConsoleOverlay.setAttribute('aria-label', 'Strukturiertes DSP Event Log');
+debugConsoleOverlay.innerHTML = '<div class="response-debug-console-toolbar" data-debug-console-drag-handle><strong>DEBUG CONSOLE</strong><span data-debug-copy-state></span><button type="button" data-debug-copy>COPY DEBUG REPORT</button><button type="button" data-debug-clear>CLEAR LOG</button><button type="button" data-debug-console-close aria-label="Debug Console schließen">×</button></div><div class="response-debug-log" data-debug-log role="log" aria-live="polite"></div><div class="response-debug-max" data-debug-max></div><div class="response-debug-resize-grip" data-debug-console-resize aria-label="Debug Console-Größe ändern" role="separator" aria-orientation="both"></div>';
+document.body.append(debugConsoleOverlay);
+
+// Session-only floating geometry. The panel remains fully inside the viewport.
+const debugConsoleGeometry = (() => {
+  const margin = 12; let geometry = null;
+  const normalize = value => { const maxWidth = Math.max(1, window.innerWidth - margin * 2); const maxHeight = Math.max(1, window.innerHeight - margin * 2); const width = Math.max(Math.min(500, maxWidth), Math.min(maxWidth, value.width)); const height = Math.max(Math.min(280, maxHeight), Math.min(maxHeight, value.height)); return { width, height, x: Math.max(margin, Math.min(window.innerWidth - margin - width, value.x)), y: Math.max(margin, Math.min(window.innerHeight - margin - height, value.y)) }; };
+  const apply = value => { geometry = normalize(value); Object.assign(debugConsoleOverlay.style, { width: `${geometry.width}px`, height: `${geometry.height}px`, maxWidth: `${window.innerWidth - margin * 2}px`, maxHeight: `${window.innerHeight - margin * 2}px`, left: `${geometry.x}px`, top: `${geometry.y}px`, right: 'auto', bottom: 'auto' }); };
+  const ensure = () => { if (!geometry) { const width = Math.min(780, window.innerWidth - margin * 2); const height = Math.min(440, window.innerHeight - margin * 2); apply({ width, height, x: window.innerWidth - width - 20, y: window.innerHeight - height - 20 }); } else apply(geometry); };
+  const bindPointer = (element, type) => element.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || (type === 'drag' && event.target.closest('button, input, select, textarea, a'))) return;
+    ensure(); const start = { x: geometry.x, y: geometry.y, width: geometry.width, height: geometry.height, pointerX: event.clientX, pointerY: event.clientY }; element.setPointerCapture(event.pointerId); debugConsoleOverlay.classList.add(type === 'drag' ? 'is-dragging' : 'is-resizing');
+    const move = next => apply(type === 'drag' ? { ...geometry, x: start.x + next.clientX - start.pointerX, y: start.y + next.clientY - start.pointerY } : { ...geometry, width: start.width + next.clientX - start.pointerX, height: start.height + next.clientY - start.pointerY });
+    const end = next => { if (element.hasPointerCapture(next.pointerId)) element.releasePointerCapture(next.pointerId); element.removeEventListener('pointermove', move); element.removeEventListener('pointerup', end); element.removeEventListener('pointercancel', end); debugConsoleOverlay.classList.remove('is-dragging', 'is-resizing'); };
+    element.addEventListener('pointermove', move); element.addEventListener('pointerup', end); element.addEventListener('pointercancel', end); event.preventDefault();
+  });
+  bindPointer(debugConsoleOverlay.querySelector('[data-debug-console-drag-handle]'), 'drag'); bindPointer(debugConsoleOverlay.querySelector('[data-debug-console-resize]'), 'resize'); const clampToViewport = () => { if (geometry) apply(geometry); }; window.addEventListener('resize', clampToViewport); window.visualViewport?.addEventListener('resize', clampToViewport); new ResizeObserver(clampToViewport).observe(document.documentElement);
+  return { ensure, current: () => geometry };
+})();
 
 const devLabTelemetry = (() => {
   const maxHistory = 150; // 10 seconds at the 15 Hz worklet publish rate.
@@ -126,14 +280,73 @@ const devLabTelemetry = (() => {
   let frozen = false;
   let responseMode = 'normal';
   let resetBaseline = { left: 0, right: 0 };
+  const maxEvents = 1000;
+  const events = [];
+  const snapshots = [];
+  const lastEventAt = new Map();
+  let sessionStartedAt = null;
+  let markerNumber = 0;
+  let snapshotNumber = 0;
+  let dominant = { index: null, startedAt: 0, logged: new Set() };
+  let satThreshold = 0;
+  let sessionMax = { local: 0, main: 0, saturator: 0, satActivity: 0, bandEnergy: 0, bandIndex: 0, dominantMs: 0, resets: 0 };
   const freezeButton = responseLab.querySelector('[data-dev-lab-freeze]');
   const resetButton = responseLab.querySelector('[data-dev-lab-reset]');
   const summary = responseLab.querySelector('[data-dev-lab-summary]');
   const bands = responseLab.querySelector('[data-dev-lab-bands]');
   const detail = responseLab.querySelector('[data-dev-lab-band-detail]');
   const audioLabel = responseLab.querySelector('[data-dev-lab-audio]');
+  const consoleToggle = responseLab.querySelector('[data-debug-console-toggle]');
+  const debugConsole = debugConsoleOverlay;
+  const debugLog = debugConsole.querySelector('[data-debug-log]');
+  const debugMax = debugConsole.querySelector('[data-debug-max]');
+  const copyButton = debugConsole.querySelector('[data-debug-copy]');
+  const copyState = debugConsole.querySelector('[data-debug-copy-state]');
   const finite = value => Number.isFinite(Number(value)) ? Number(value) : 0;
   const number = value => Math.abs(finite(value)) >= 10 ? finite(value).toFixed(2) : finite(value).toFixed(4);
+  const timestamp = () => {
+    const elapsed = Math.max(0, performance.now() - (sessionStartedAt ?? performance.now()));
+    const minutes = Math.floor(elapsed / 60000); const seconds = Math.floor(elapsed / 1000) % 60; const milliseconds = Math.floor(elapsed % 1000);
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+  };
+  const renderLog = () => {
+    if (responseMode !== 'dev-lab' || filterbankWorkspace?.classList.contains('is-collapsed') || debugConsole.hidden) return;
+    const pinned = debugLog.scrollHeight - debugLog.scrollTop - debugLog.clientHeight < 4;
+    debugLog.replaceChildren(...events.map(event => { const row = document.createElement('div'); row.className = `response-debug-event ${event.warning ? 'is-warning' : ''}`; row.innerHTML = `<time>${event.time}</time><span>${event.text}</span>`; return row; }));
+    if (pinned) debugLog.scrollTop = debugLog.scrollHeight;
+    debugMax.textContent = `SESSION MAX  LOCAL ${number(sessionMax.local)}  MAIN ${number(sessionMax.main)}  SAT IN ${number(sessionMax.saturator)}  SAT ACT ${(sessionMax.satActivity * 100).toFixed(0)} %  BAND ${BAND_DEFINITIONS[sessionMax.bandIndex]?.frequency ?? '—'} Hz  DOM ${(sessionMax.dominantMs / 1000).toFixed(1)} s  RESETS ${sessionMax.resets}`;
+  };
+  const appendLogRow = event => {
+    if (responseMode !== 'dev-lab' || filterbankWorkspace?.classList.contains('is-collapsed') || debugConsole.hidden) return;
+    const pinned = debugLog.scrollHeight - debugLog.scrollTop - debugLog.clientHeight < 4;
+    const row = document.createElement('div'); row.className = `response-debug-event ${event.warning ? 'is-warning' : ''}`; row.innerHTML = `<time>${event.time}</time><span>${event.text}</span>`;
+    debugLog.append(row);
+    while (debugLog.children.length > maxEvents) debugLog.firstElementChild?.remove();
+    if (pinned) debugLog.scrollTop = debugLog.scrollHeight;
+    debugMax.textContent = `SESSION MAX  LOCAL ${number(sessionMax.local)}  MAIN ${number(sessionMax.main)}  SAT IN ${number(sessionMax.saturator)}  SAT ACT ${(sessionMax.satActivity * 100).toFixed(0)} %  BAND ${BAND_DEFINITIONS[sessionMax.bandIndex]?.frequency ?? '—'} Hz  DOM ${(sessionMax.dominantMs / 1000).toFixed(1)} s  RESETS ${sessionMax.resets}`;
+  };
+  const log = (text, options = {}) => {
+    if (!sessionStartedAt && !options.force) return;
+    const key = options.key || text; const now = performance.now();
+    if (options.throttle && now - (lastEventAt.get(key) || -Infinity) < options.throttle) return;
+    lastEventAt.set(key, now); events.push({ time: timestamp(), text, warning: Boolean(options.warning) });
+    if (events.length > maxEvents) events.splice(0, events.length - maxEvents);
+    appendLogRow(events[events.length - 1]);
+  };
+  const resetSessionMax = () => { sessionMax = { local: 0, main: 0, saturator: 0, satActivity: 0, bandEnergy: 0, bandIndex: 0, dominantMs: 0, resets: 0 }; satThreshold = 0; dominant = { index: null, startedAt: performance.now(), logged: new Set() }; };
+  const startSession = context => {
+    sessionStartedAt = performance.now(); markerNumber = 0; snapshotNumber = 0; events.length = 0; snapshots.length = 0; lastEventAt.clear(); if (!debugConsole.hidden) debugLog.replaceChildren(); resetSessionMax();
+    const state = audioEngine || {}; log(`AUDIO START · SR ${Math.round(context?.sampleRate || 0)} Hz · ${context?.state || 'running'} · TOPOLOGY ${state.feedbackTopology || '—'} · TAP ${state.feedbackTap || '—'} · WET ${state.wetModel || '—'} · SAT ${state.commonBusSaturationMode || '—'}`, { force: true });
+  };
+  const ratio = (returnValue, tap) => Math.abs(finite(tap)) < 1e-6 ? null : Math.min(999, Math.abs(finite(returnValue)) / Math.abs(finite(tap)));
+  const telemetryMetrics = packet => {
+    const left = packet.left; const right = packet.right; const countL = Math.max(1, finite(left.frameCount)); const countR = Math.max(1, finite(right.frameCount));
+    const sat = Math.max(finite(left.saturationActiveFrames) / countL, finite(right.saturationActiveFrames) / countR);
+    const feedbackRatioLeft = ratio(left.commonFeedbackReturn, left.commonTapSum);
+    const feedbackRatioRight = ratio(right.commonFeedbackReturn, right.commonTapSum);
+    return { sat, feedbackRatio: feedbackRatioLeft === null && feedbackRatioRight === null ? null : Math.max(feedbackRatioLeft ?? 0, feedbackRatioRight ?? 0), dcLeft: finite(left.wetDcSum) / countL, dcRight: finite(right.wetDcSum) / countR,
+      sourceRmsLeft: Math.sqrt(Math.max(0, finite(left.sourceEnergy) / countL)), sourceRmsRight: Math.sqrt(Math.max(0, finite(right.sourceEnergy) / countR)), wetRmsLeft: Math.sqrt(Math.max(0, finite(left.wetEnergy) / countL)), wetRmsRight: Math.sqrt(Math.max(0, finite(right.wetEnergy) / countR)) };
+  };
   const push = (history, value) => { history.push(value); if (history.length > maxHistory) history.shift(); };
   const dominantBand = packet => {
     const left = packet?.left?.bandEnergy || []; const right = packet?.right?.bandEnergy || [];
@@ -164,27 +377,64 @@ const devLabTelemetry = (() => {
       ['SOURCE PK L/R', `${number(left.sourcePeak)} / ${number(right.sourcePeak)}`], ['WET PK L/R', `${number(left.wetPeak)} / ${number(right.wetPeak)}`], ['LOCAL SAT IN/OUT L', `${number(left.commonSaturationInput)} / ${number(left.commonSaturationOutput)}`], ['LOCAL SAT IN/OUT R', `${number(right.commonSaturationInput)} / ${number(right.commonSaturationOutput)}`], ['MAIN SAT IN/OUT L', `${number(left.mainSaturationInput)} / ${number(left.mainSaturationOutput)}`], ['MAIN SAT IN/OUT R', `${number(right.mainSaturationInput)} / ${number(right.mainSaturationOutput)}`], ['MAIN RESETS L/R', `${Math.max(0, finite(left.mainCommonNonFiniteResets) - resetBaseline.left)} / ${Math.max(0, finite(right.mainCommonNonFiniteResets) - resetBaseline.right)}`]
     ];
     summary.replaceChildren(...items.map(([label, value]) => { const item = document.createElement('div'); item.innerHTML = `<span>${label}</span><b>${value ?? '—'}</b>`; return item; }));
-    detail.innerHTML = `<strong>DOMINANT BAND</strong><b>${frequencies[dominant.index]} Hz</b><span>DOMINANCE ${(dominant.dominance * 100).toFixed(0)} %</span>`;
+    const metrics = telemetryMetrics(latest);
+    const sourceCrestL = metrics.sourceRmsLeft > 1e-9 ? left.sourcePeak / metrics.sourceRmsLeft : 0;
+    const sourceCrestR = metrics.sourceRmsRight > 1e-9 ? right.sourcePeak / metrics.sourceRmsRight : 0;
+    const wetCrestL = metrics.wetRmsLeft > 1e-9 ? left.wetPeak / metrics.wetRmsLeft : 0;
+    const wetCrestR = metrics.wetRmsRight > 1e-9 ? right.wetPeak / metrics.wetRmsRight : 0;
+    detail.innerHTML = `<strong>DOMINANT BAND</strong><b>${frequencies[dominant.index]} Hz</b><span>DOMINANCE ${(dominant.dominance * 100).toFixed(0)} %</span><span>DOM STABLE ${((performance.now() - dominant.startedAt) / 1000).toFixed(1)} s</span><span>SAT ACT ${(metrics.sat * 100).toFixed(0)} % · RETURN/TAP ${metrics.feedbackRatio === null ? 'N/A' : metrics.feedbackRatio.toFixed(2)}</span><span>DC L/R ${number(metrics.dcLeft)} / ${number(metrics.dcRight)} · SRC CREST ${sourceCrestL.toFixed(2)} / ${sourceCrestR.toFixed(2)} · WET CREST ${wetCrestL.toFixed(2)} / ${wetCrestR.toFixed(2)}</span>`;
     bands.replaceChildren(...frequencies.map((frequency, index) => { const energy = finite(left.bandEnergy?.[index]) + finite(right.bandEnergy?.[index]); const maxEnergy = Math.max(1e-12, dominant.energy); const row = document.createElement('div'); const gain = Math.max(controlToBandGainDb(audioEngine?.bandGainLeft?.[index] ?? 0, audioEngine?.maxBandBoostDb, audioEngine?.maxBandCutDb), controlToBandGainDb(audioEngine?.bandGainRight?.[index] ?? 0, audioEngine?.maxBandBoostDb, audioEngine?.maxBandCutDb)); row.className = index === dominant.index ? 'is-dominant' : ''; row.innerHTML = `<span>${frequency >= 1000 ? `${(frequency / 1000).toFixed(1)} kHz` : `${frequency} Hz`}</span><i><b style="width:${Math.min(100, energy / maxEnergy * 100)}%"></b></i><em>${number(Math.max(finite(left.bandPeak?.[index]), finite(right.bandPeak?.[index])))}</em><small>${left.localGates?.[index] > .5 || right.localGates?.[index] > .5 ? 'FB ON' : 'FB OFF'} · ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} dB</small>`; return row; }));
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="common"]'), histories.common, ['left', 'right']);
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="main"]'), histories.main, ['left', 'right']);
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="resonance"]'), histories.resonance, ['target', 'smoothed'], 1);
   };
+  const observe = packet => {
+    const nextDominant = dominantBand(packet); const now = performance.now(); const metrics = telemetryMetrics(packet);
+    if (dominant.index === null) { dominant.index = nextDominant.index; dominant.startedAt = now; dominant.logged.clear(); }
+    else if (dominant.index !== nextDominant.index) { log(`DOMINANT BAND ${BAND_DEFINITIONS[dominant.index].frequency} Hz → ${BAND_DEFINITIONS[nextDominant.index].frequency} Hz`); dominant.index = nextDominant.index; dominant.startedAt = now; dominant.logged.clear(); }
+    const stableMs = now - dominant.startedAt; sessionMax.dominantMs = Math.max(sessionMax.dominantMs, stableMs);
+    [3000, 5000, 10000].forEach(threshold => { if (stableMs >= threshold && !dominant.logged.has(threshold)) { dominant.logged.add(threshold); log(`DOMINANT STABLE ${BAND_DEFINITIONS[dominant.index].frequency} Hz / ${(threshold / 1000).toFixed(1)} s`); } });
+    const satPercent = metrics.sat * 100; const threshold = [90, 75, 50, 25].find(value => satPercent >= value) || 0;
+    if (threshold > satThreshold) log(`SAT ACTIVITY ${threshold} % threshold crossed`);
+    satThreshold = threshold || (satPercent < Math.max(0, satThreshold - 8) ? 0 : satThreshold);
+    const resetCount = Math.max(finite(packet.left.mainCommonNonFiniteResets), finite(packet.right.mainCommonNonFiniteResets));
+    if (resetCount > sessionMax.resets) log('WARNING NON-FINITE RESET / MAIN COMMON BUS', { warning: true });
+    sessionMax.resets = Math.max(sessionMax.resets, resetCount); sessionMax.local = Math.max(sessionMax.local, Math.abs(finite(packet.left.commonFeedbackReturn)), Math.abs(finite(packet.right.commonFeedbackReturn))); sessionMax.main = Math.max(sessionMax.main, Math.abs(finite(packet.left.mainCommonFeedbackReturn)), Math.abs(finite(packet.right.mainCommonFeedbackReturn))); sessionMax.saturator = Math.max(sessionMax.saturator, Math.abs(finite(packet.left.commonSaturationInput)), Math.abs(finite(packet.right.commonSaturationInput)), Math.abs(finite(packet.left.mainSaturationInput)), Math.abs(finite(packet.right.mainSaturationInput))); sessionMax.satActivity = Math.max(sessionMax.satActivity, metrics.sat);
+    const energy = Math.max(...(packet.left.bandEnergy || []).map((value, index) => finite(value) + finite(packet.right.bandEnergy?.[index]))); if (energy > sessionMax.bandEnergy) { sessionMax.bandEnergy = energy; sessionMax.bandIndex = nextDominant.index; }
+  };
   const receive = packet => {
-    if (!packet?.left || !packet?.right || frozen) return;
+    if (!packet?.left || !packet?.right) return;
+    observe(packet);
+    if (frozen) return;
     latest = packet; audioLabel.textContent = 'LIVE · 15 Hz';
     push(histories.common, { left: packet.left.commonFeedbackReturn, right: packet.right.commonFeedbackReturn });
     push(histories.main, { left: packet.left.mainCommonFeedbackReturn, right: packet.right.mainCommonFeedbackReturn });
     push(histories.resonance, { target: packet.left.resonanceTarget, smoothed: packet.left.smoothedResonance }); render();
   };
-  const setMode = mode => { responseMode = mode; const dev = mode === 'dev-lab'; responseLab.hidden = !dev; responseChart.hidden = dev; if (responseLegend) responseLegend.hidden = dev; normalResponseButton.classList.toggle('active', !dev); devResponseButton.classList.toggle('active', dev); normalResponseButton.setAttribute('aria-pressed', String(!dev)); devResponseButton.setAttribute('aria-pressed', String(dev)); render(); };
+  const setMode = mode => { responseMode = mode; const dev = mode === 'dev-lab'; filterbankWorkspace?.classList.toggle('is-dev-lab', dev); responseLab.hidden = !dev; responseChart.hidden = dev; if (responseLegend) responseLegend.hidden = dev; spectrumForegroundControl.hidden = dev; spectrumRenderer.setVisible(!dev); normalResponseButton.classList.toggle('active', !dev); devResponseButton.classList.toggle('active', dev); normalResponseButton.setAttribute('aria-pressed', String(!dev)); devResponseButton.setAttribute('aria-pressed', String(dev)); render(); };
   normalResponseButton.addEventListener('click', () => setMode('normal')); devResponseButton.addEventListener('click', () => setMode('dev-lab'));
   freezeButton.addEventListener('click', () => { frozen = !frozen; freezeButton.textContent = frozen ? 'LIVE' : 'FREEZE'; freezeButton.setAttribute('aria-pressed', String(frozen)); });
-  resetButton.addEventListener('click', reset);
+  resetButton.addEventListener('click', () => { reset(); resetSessionMax(); log('RESET METRICS'); });
+  const setConsoleOpen = open => { if (open) debugConsoleGeometry.ensure(); debugConsole.hidden = !open; consoleToggle.setAttribute('aria-expanded', String(open)); consoleToggle.classList.toggle('active', open); if (open) renderLog(); };
+  consoleToggle.addEventListener('click', () => setConsoleOpen(debugConsole.hidden));
+  debugConsole.querySelector('[data-debug-console-close]').addEventListener('click', () => { setConsoleOpen(false); consoleToggle.focus(); });
+  responseLab.querySelector('[data-debug-mark]').addEventListener('click', () => { markerNumber += 1; log(`USER MARK #${markerNumber}`); });
+  responseLab.querySelector('[data-debug-snapshot]').addEventListener('click', () => {
+    if (!latest) { log('SNAPSHOT unavailable — NO AUDIO'); return; }
+    snapshotNumber += 1; const d = dominantBand(latest); const m = telemetryMetrics(latest); const state = audioEngine || {}; const gains = state.bandGainLeft?.map(value => `${controlToBandGainDb(value, state.maxBandBoostDb, state.maxBandCutDb) >= 0 ? '+' : ''}${controlToBandGainDb(value, state.maxBandBoostDb, state.maxBandCutDb).toFixed(1)}`).join(',') || '—'; const fb = (state.feedbackBandLeft || []).map((on, index) => on ? index + 1 : null).filter(Boolean).join(',') || 'none';
+    const text = `SNAPSHOT #${snapshotNumber} · RES ${number(latest.left.resonanceTarget)}/${number(latest.left.smoothedResonance)} · DOM ${BAND_DEFINITIONS[d.index].frequency} Hz/${((performance.now() - dominant.startedAt) / 1000).toFixed(1)} s · LOCAL ${number(latest.left.commonFeedbackReturn)}/${number(latest.right.commonFeedbackReturn)} · MAIN ${number(latest.left.mainCommonFeedbackReturn)}/${number(latest.right.mainCommonFeedbackReturn)} · SAT ${(m.sat * 100).toFixed(0)} % · FB ${fb} · GAIN [${gains}] · TOPOLOGY ${state.feedbackTopology} · TAP ${state.feedbackTap}`;
+    snapshots.push(text); log(text);
+  });
+  debugConsole.querySelector('[data-debug-clear]').addEventListener('click', () => { events.length = 0; snapshots.length = 0; markerNumber = 0; renderLog(); });
+  copyButton.addEventListener('click', async () => {
+    const report = [`FILTERBANK DEBUG REPORT`, ...events.map(event => `${event.time}  ${event.text}`), '', `SESSION MAX`, `LOCAL ${number(sessionMax.local)} MAIN ${number(sessionMax.main)} SAT IN ${number(sessionMax.saturator)} SAT ACT ${(sessionMax.satActivity * 100).toFixed(0)} % BAND ${BAND_DEFINITIONS[sessionMax.bandIndex]?.frequency ?? '—'} Hz DOM ${(sessionMax.dominantMs / 1000).toFixed(1)} s RESETS ${sessionMax.resets}`].join('\n');
+    try { await navigator.clipboard.writeText(report); copyState.textContent = 'COPIED'; setTimeout(() => { copyState.textContent = ''; }, 1200); } catch { copyState.textContent = 'COPY FAILED'; }
+  });
   responseCollapseButton.addEventListener('click', () => requestAnimationFrame(render));
   setMode('normal');
-  return { receive, reset, render, setAudioOff: () => { if (!frozen) { latest = null; audioLabel.textContent = 'NO AUDIO'; render(); } } };
+  return { receive, reset, render, startSession, logEvent: log, eventCount: () => events.length, logStateChange: (label, before, after) => { if (before !== after) log(`${label} ${before} → ${after}`, { key: label, throttle: 350 }); }, logPanic: () => log('PANIC'), setAudioOff: () => { log('AUDIO STOP'); if (!frozen) { latest = null; audioLabel.textContent = 'NO AUDIO'; render(); } } };
 })();
+window.FilterbankDebugConsole = devLabTelemetry;
 devLabToggle?.addEventListener('click', () => {
   const open = Boolean(devLabPanel?.hidden);
   if (devLabPanel) devLabPanel.hidden = !open;
@@ -461,6 +711,27 @@ document.querySelectorAll('.dev-lab-panel .dev-lab-control, .dev-lab-panel .dev-
   control.addEventListener('focusin', () => showDevLabTooltip(control));
   control.addEventListener('focusout', event => { if (!control.contains(event.relatedTarget)) hideDevLabTooltip(control); });
 });
+const DEV_LAB_BUTTON_HELP = {
+  'data-dev-lab-freeze': { title: 'FREEZE / LIVE', what: 'FREEZE hält ausschließlich die sichtbaren DEV-LAB-Livewerte und Zeitgraphen an. Event-Erfassung, Audio und DSP laufen weiter. LIVE setzt nur die visuelle Aktualisierung fort.' },
+  'data-dev-lab-reset': { title: 'RESET METRICS', what: 'Löscht ausschließlich Diagnose-Historien, Diagnose-Maxima und resetbare Diagnose-Baselines. Audio- und DSP-Parameter bleiben unverändert.' },
+  'data-debug-console-toggle': { title: 'DEBUG CONSOLE', what: 'Öffnet das frei verschiebbare und skalierbare Debug-Panel mit Ereignisprotokoll, Snapshots und Session-Maximalwerten. Die Audioverarbeitung bleibt unverändert.' },
+  'data-debug-mark': { title: 'MARK', what: 'Schreibt eine fortlaufende USER-MARK-Zeitmarke für Video- und Audioanalyse in das strukturierte Event-Log. Keine Audio- oder DSP-Änderung.' },
+  'data-debug-snapshot': { title: 'SNAPSHOT', what: 'Schreibt einen kompakten, passiven Momentzustand der vorhandenen Telemetrie und Filterbank-State in das Event-Log. Keine Parameter werden geändert.' },
+  'data-debug-copy': { title: 'COPY DEBUG REPORT', what: 'Kopiert Session-Header, Event-Log, Marks, Snapshots und Session-Maxima als lesbaren Text in die Zwischenablage.' },
+  'data-debug-clear': { title: 'CLEAR LOG', what: 'Löscht nur sichtbare Event-, Mark- und Snapshot-Einträge. Diagnose-Erfassung, Audio und Session-Maxima laufen weiter.' },
+  'data-debug-console-close': { title: 'DEBUG CONSOLE SCHLIESSEN', what: 'Schließt ausschließlich das nicht-modale Konsolen-Overlay. Die Diagnose-Session und das Event-Log bleiben erhalten.' }
+};
+let devLabButtonTooltipTimer = 0;
+const showDevLabButtonTooltip = button => {
+  const attribute = button.getAttributeNames().find(name => DEV_LAB_BUTTON_HELP[name]); const help = attribute && DEV_LAB_BUTTON_HELP[attribute];
+  if (!help) return; activeDevLabControl = button; renderDevLabHelp({ ...help, scope: 'Rein diagnostische UI-Funktion außerhalb des Audio-Signalwegs.', values: [['Wirkung', 'Keine DSP- oder Audio-Parameteränderung.']], default: '—', note: 'Keyboard-bedienbar; Tooltip bei Hover und Fokus.' }); devLabTooltip.hidden = false; positionDevLabTooltip(); button.setAttribute('aria-describedby', devLabTooltip.id);
+};
+document.querySelectorAll('[data-dev-lab-freeze], [data-dev-lab-reset], [data-debug-console-toggle], [data-debug-mark], [data-debug-snapshot], [data-debug-copy], [data-debug-clear], [data-debug-console-close]').forEach(button => {
+  button.addEventListener('mouseenter', () => { clearTimeout(devLabButtonTooltipTimer); devLabButtonTooltipTimer = setTimeout(() => showDevLabButtonTooltip(button), 350); });
+  button.addEventListener('mouseleave', () => { clearTimeout(devLabButtonTooltipTimer); if (document.activeElement !== button) hideDevLabTooltip(button); });
+  button.addEventListener('focus', () => { clearTimeout(devLabButtonTooltipTimer); showDevLabButtonTooltip(button); });
+  button.addEventListener('blur', () => hideDevLabTooltip(button));
+});
 window.addEventListener('resize', positionDevLabTooltip);
 const THEME_STORAGE_KEY = 'resonant-filterbank-theme';
 const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'pro-console'];
@@ -520,6 +791,9 @@ const setBandBaseGain = (channel, index, value) => {
     audioEngine?.setBandBaseGain(targetChannel, index, nextValue);
   });
   renderBand(index);
+  const gainDb = formatBandSliderValue(state.bandGainLeft[index]);
+  devLabTelemetry.logStateChange(`BAND ${index + 1} GAIN`, setBandBaseGain.last?.[index] ?? '+0.0 dB', gainDb);
+  (setBandBaseGain.last ||= [])[index] = gainDb;
 };
 const setBandFeedback = (channel, index, enabled) => {
   const channels = state.channelSelection === 'LR' ? ['left', 'right'] : [channel];
@@ -528,6 +802,8 @@ const setBandFeedback = (channel, index, enabled) => {
     target[index] = Boolean(enabled);
     audioEngine?.setBandFeedback(targetChannel, index, target[index]);
   });
+  devLabTelemetry.logStateChange(`BAND ${index + 1} FB`, setBandFeedback.last?.[index] ?? 'OFF', enabled ? 'ON' : 'OFF');
+  (setBandFeedback.last ||= [])[index] = enabled ? 'ON' : 'OFF';
 };
 const setFeedbackAll = (channel, enabled) => {
   const channels = state.channelSelection === 'LR' ? ['left', 'right'] : [channel];
@@ -536,6 +812,7 @@ const setFeedbackAll = (channel, enabled) => {
     else state.feedbackAllRight = Boolean(enabled);
     audioEngine?.setFeedbackAll(targetChannel, enabled);
   });
+  devLabTelemetry.logStateChange('FB ALL', setFeedbackAll.last ?? 'OFF', enabled ? 'ON' : 'OFF'); setFeedbackAll.last = enabled ? 'ON' : 'OFF';
 };
 faders.forEach((slider,index) => {
   slider.addEventListener('input', () => setBandBaseGain('left', index, slider.value));
@@ -654,7 +931,8 @@ const updateAudioStatus = (status, message = '') => {
   audioStatus.dataset.status = status;
   startAudioButton.disabled = status === 'STARTING' || status === 'ON';
   stopAudioButton.disabled = status !== 'ON';
-  if (status !== 'ON') devLabTelemetry.setAudioOff();
+  if (status === 'ON') devLabTelemetry.startSession(audioEngine?.context);
+  else if (status !== 'STARTING') devLabTelemetry.setAudioOff();
 };
 audioEngine = new AudioEngine({
   onStatusChange: updateAudioStatus,
@@ -714,8 +992,9 @@ setPositiveResonanceCurve(positiveResonanceCurveSelect?.value ?? 'current');
 positiveResonanceCurveSelect?.addEventListener('change', event => setPositiveResonanceCurve(event.target.value));
 const bindDevLabSelect = (select, apply, fallback) => {
   if (!select) return;
-  apply(select.value ?? fallback);
-  select.addEventListener('change', event => apply(event.target.value));
+  let previous = select.value ?? fallback;
+  apply(previous);
+  select.addEventListener('change', event => { const next = event.target.value; apply(next); devLabTelemetry.logStateChange(select.previousElementSibling?.textContent || select.closest('label')?.querySelector('span')?.textContent || 'DEV PARAMETER', previous, next); previous = next; });
 };
 bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
@@ -762,8 +1041,13 @@ document.querySelector('[data-control="inputGain"]').addEventListener('input', s
 document.querySelector('[data-control="dryWet"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="volume"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="resonance"]').addEventListener('input', () => audioEngine.setResonance(state.resonance));
+['resonance', 'dryWet', 'inputGain', 'volume'].forEach(name => {
+  const slider = document.querySelector(`[data-control="${name}"]`); let previous = state[name];
+  slider?.addEventListener('input', () => { const next = state[name]; devLabTelemetry.logStateChange(name.toUpperCase(), Number(previous).toFixed(name === 'resonance' ? 2 : 1), Number(next).toFixed(name === 'resonance' ? 2 : 1)); previous = next; });
+});
 syncAudioParameters();
 panic = () => {
+  devLabTelemetry.logPanic();
   audioEngine?.panic();
   renderGlobalControlValue('resonance', 0);
   renderGlobalControlValue('dryWet', 0);

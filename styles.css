@@ -269,6 +269,15 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
   min-height: 0;
   border-top: 1px solid var(--secondary-text);
 }
+.fb-workspace.is-dev-lab .analyzer {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.fb-workspace.is-dev-lab .analyzer-footer {
+  display: none;
+}
+.fb-workspace.is-collapsed.is-dev-lab .analyzer {
+  grid-template-rows: auto 0;
+}
 .response-collapse-toggle {
   width: 24px;
   height: 24px;
@@ -283,6 +292,17 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
 .response-mode-control { display: inline-flex; overflow: hidden; border: 1px solid var(--button-border); border-radius: 3px; }
 .response-mode-control button { height: 24px; padding: 0 7px; border: 0; border-right: 1px solid var(--button-border); color: var(--button-text); background: var(--output-background); font: 600 10px 'Trebuchet MS', Arial, sans-serif; letter-spacing: .4px; cursor: pointer; }
 .response-mode-control button:last-child { border-right: 0; }.response-mode-control button.active { color: var(--cyan); background: var(--active-background); box-shadow: var(--active-shadow); }
+.spectrum-foreground-control { display: inline-flex; overflow: hidden; border: 1px solid var(--button-border); border-radius: 3px; }
+.spectrum-foreground-control[hidden] { display: none; }
+.spectrum-foreground-control button { display: grid; width: 25px; height: 24px; padding: 4px; border: 0; border-right: 1px solid var(--button-border); color: var(--button-text); background: var(--output-background); cursor: pointer; place-items: center; }
+.spectrum-foreground-control button:last-child { border-right: 0; }
+.spectrum-foreground-control button.active { color: var(--cyan); background: var(--active-background); box-shadow: var(--active-shadow); }
+.spectrum-foreground-control svg { display: block; width: 16px; height: 14px; fill: currentColor; stroke: currentColor; stroke-width: 1.6; }
+.spectrum-foreground-control path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.filterbank-spectrum { position: absolute; z-index: 1; inset: 0; display: block; pointer-events: none; }
+.chart-grid.spectrum-foreground .filterbank-spectrum { z-index: 3; }
+.chart-grid.spectrum-foreground .bars { opacity: .35; }
+.chart-grid.spectrum-foreground::after { z-index: 4; }
 .response-dev-lab { min-height: 0; overflow: hidden; padding: 5px 14px 7px; color: var(--muted-text); background: var(--graph-background); }
 .response-dev-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 6px; min-height: 24px; font-size: 10px; letter-spacing: .8px; }.response-dev-toolbar > span { margin-right: auto; color: var(--secondary-text); }.response-dev-toolbar button { height: 22px; padding: 0 6px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 600 10px 'Trebuchet MS', Arial, sans-serif; cursor: pointer; }.response-dev-toolbar button[aria-pressed=true] { color: var(--cyan); border-color: var(--cyan); }
 .response-dev-summary { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px 8px; margin: 3px 0; }.response-dev-summary div { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 9px; }.response-dev-summary span { display: block; color: var(--secondary-text); font-size: 8px; letter-spacing: .35px; }.response-dev-summary b { color: var(--strong-text); font-size: 10px; }
@@ -315,3 +335,9 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
   text-align: center;
   white-space: nowrap;
 }
+
+/* DEV LAB structured event log: bounded, internal scroll only. */
+.response-debug-console { position: fixed; z-index: 900; display: flex; flex-direction: column; box-sizing: border-box; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); min-height: 0; padding: 7px 9px; border: 1px solid var(--panel-border); border-radius: 4px; color: var(--muted-text); background: var(--panel-background); box-shadow: var(--panel-shadow), 0 8px 28px rgba(0,0,0,.45); font: 10px/1.35 Consolas, 'Courier New', monospace; overflow: hidden; }
+.response-debug-console[hidden] { display: none; }
+.response-debug-console-toolbar { display: flex; flex: 0 0 25px; align-items: center; gap: 5px; cursor: grab; user-select: none; }.response-debug-console.is-dragging .response-debug-console-toolbar { cursor: grabbing; }.response-debug-console-toolbar strong { color: var(--secondary-text); font: 700 9px 'Trebuchet MS', Arial, sans-serif; letter-spacing: .8px; }.response-debug-console-toolbar span { margin-left: auto; color: var(--cyan); font: 700 9px 'Trebuchet MS', Arial, sans-serif; }.response-debug-console button { height: 20px; padding: 0 5px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 600 9px 'Trebuchet MS', Arial, sans-serif; cursor: pointer; }
+.response-debug-log { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--output-border); background: var(--output-background); scrollbar-color: var(--button-border) transparent; }.response-debug-event { display: grid; grid-template-columns: 73px minmax(0, 1fr); gap: 7px; min-height: 15px; padding: 1px 5px; white-space: nowrap; }.response-debug-event time { color: var(--secondary-text); }.response-debug-event span { overflow: hidden; color: var(--strong-text); text-overflow: ellipsis; }.response-debug-event.is-warning span { color: var(--error); }.response-debug-max { flex: 0 0 auto; overflow: hidden; padding-top: 3px; color: var(--secondary-text); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }.response-debug-resize-grip { position: absolute; right: 1px; bottom: 1px; width: 17px; height: 17px; cursor: nwse-resize; }.response-debug-resize-grip::after { content: ''; position: absolute; right: 4px; bottom: 4px; width: 7px; height: 7px; border-right: 1px solid var(--secondary-text); border-bottom: 1px solid var(--secondary-text); }
