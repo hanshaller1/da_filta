@@ -58,6 +58,50 @@ test('FILTERBANK RESPONSE keeps NORMAL intact and DEV LAB is a passive, collapsi
   expect(errors).toEqual([]);
 });
 
+test('DEV LAB keeps telemetry and graph geometry stable for long live values', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-response-mode="dev-lab"]').click();
+
+  const geometry = await page.evaluate(() => {
+    const channel = values => ({
+      resonanceTarget: values.resonance,
+      smoothedResonance: values.resonance,
+      feedbackTopology: 'isolated-tpt', feedbackTap: 'reference-delta', wetModel: 'post-gain', commonBusSaturationMode: 'constant-ceiling',
+      commonBusDrive: values.scalar, commonBusCeiling: values.scalar,
+      commonFeedbackReturn: values.scalar, commonTapSum: values.scalar, mainCommonFeedbackReturn: values.scalar, mainTapSum: values.scalar,
+      mainTapSumScaled: values.scalar, mainFeedbackLevelScale: values.scalar, sourcePeak: values.scalar, wetPeak: values.scalar,
+      commonSaturationInput: values.scalar, commonSaturationOutput: values.scalar, mainSaturationInput: values.scalar, mainSaturationOutput: values.scalar,
+      mainCommonNonFiniteResets: 0, frameCount: 128, saturationActiveFrames: 0, wetDcSum: values.scalar,
+      sourceEnergy: 1, wetEnergy: 1, bandEnergy: Array(10).fill(values.scalar), bandPeak: Array(10).fill(values.scalar), localGates: Array(10).fill(0)
+    });
+    const packet = values => ({ left: channel(values), right: channel(values) });
+    const rects = () => Object.fromEntries(['.response-dev-summary', '.response-dev-traces', '.response-dev-bottom', '.response-dev-bands', '.response-dev-band-detail'].map(selector => {
+      const rect = document.querySelector(selector).getBoundingClientRect();
+      return [selector, { top: rect.top, height: rect.height }];
+    }));
+    window.FilterbankDebugConsole.receive(packet({ resonance: 0, scalar: 0 }));
+    const short = rects();
+    const summaryCells = [...document.querySelectorAll('.response-dev-summary div')].map(cell => cell.getBoundingClientRect().height);
+    window.FilterbankDebugConsole.receive(packet({ resonance: -0.0000, scalar: -0.0000 }));
+    const negative = rects();
+    window.FilterbankDebugConsole.receive(packet({ resonance: 100, scalar: 11000 }));
+    const long = rects();
+    const valueCells = [...document.querySelectorAll('.response-dev-summary b')].map(value => ({ text: value.textContent, height: value.getBoundingClientRect().height, wraps: value.scrollHeight > value.clientHeight, clipped: value.scrollWidth > value.clientWidth, textOverflow: getComputedStyle(value).textOverflow }));
+    const visibleDiagnosticNodes = [...document.querySelectorAll('.response-dev-summary div, .response-dev-band-detail > *, .response-dev-bands em, .response-dev-bands small')].map(node => ({ clipped: node.scrollWidth > node.clientWidth, textOverflow: getComputedStyle(node).textOverflow }));
+    const panel = document.querySelector('.response-dev-lab');
+    return { short, negative, long, summaryCells, valueCells, visibleDiagnosticNodes, horizontalOverflow: panel.scrollWidth > panel.clientWidth };
+  });
+
+  for (const selector of ['.response-dev-traces', '.response-dev-bottom', '.response-dev-bands', '.response-dev-band-detail']) {
+    expect(geometry.long[selector]).toEqual(geometry.short[selector]);
+    expect(geometry.negative[selector]).toEqual(geometry.short[selector]);
+  }
+  expect(geometry.summaryCells.every(height => height === 23)).toBeTruthy();
+  expect(geometry.valueCells.every(value => value.height === 11 && !value.wraps && !value.clipped && value.textOverflow !== 'ellipsis')).toBeTruthy();
+  expect(geometry.visibleDiagnosticNodes.every(node => !node.clipped && node.textOverflow !== 'ellipsis')).toBeTruthy();
+  expect(geometry.horizontalOverflow).toBeFalsy();
+});
+
 test('resonator diagnostics publish passive L/R telemetry at the bounded 15 Hz rate', async ({ page }) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
