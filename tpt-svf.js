@@ -57,6 +57,23 @@ export class LinearTptSvf {
       return this;
     }
 
+    // Retune an already running TPT filter without discarding its integrator
+    // state. This is intentionally separate from configure(), whose reset is
+    // retained for construction and explicit full reconfiguration.
+    setFrequency(frequency) {
+      if (!Number.isFinite(frequency) || frequency <= 0 || frequency >= this.sampleRate / 2) {
+        throw new RangeError('TPT SVF frequency must be above 0 Hz and below Nyquist.');
+      }
+
+      if (frequency === this.frequency) return this;
+      const dampingScale = this.dampingScale;
+      this.frequency = frequency;
+      this.g = Math.tan(Math.PI * frequency / this.sampleRate);
+      this.dampingScale = -1;
+      this.setDampingScale(dampingScale);
+      return this;
+    }
+
     setDampingScale(value) {
       if (!Number.isFinite(value) || value < 0) {
         throw new RangeError('TPT SVF requires a non-negative damping scale.');

@@ -79,10 +79,13 @@ body::before { content: ''; position: fixed; inset: 0; pointer-events: none; opa
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .global-controls { display: grid; grid-template-columns: 1.1fr 1.05fr 1.05fr 1.05fr 1fr; gap: 2px; }.control-card, .status-panel, .analyzer, .info-panel, .band-card { border: 1px solid var(--panel-border); background: var(--panel-background); box-shadow: var(--panel-shadow); }.control-card { padding: 10px 15px 8px; min-height: 82px; border-radius: 5px; }.control-label { display: block; font-size: 14px; letter-spacing: 1px; }.control-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; }.control-row input { flex: 1; }.control-row output { min-width: 60px; padding: 5px 8px; border: 1px solid var(--output-border); border-radius: 4px; text-align: center; color: var(--strong-text); font-size: 16px; background: var(--output-background); }.control-scale { display: flex; justify-content: space-between; color: var(--muted-text); font-size: 14px; margin-top: 2px; }
 .control-row output[data-output="volume"] { width: 92px; min-width: 92px; white-space: nowrap; }
-input[type=range] { appearance: none; height: 5px; border-radius: 4px; background: var(--range-track); outline: none; }.control-card input[type=range]::-webkit-slider-thumb { appearance: none; width: 10px; height: 20px; border: 2px solid var(--range-thumb-border); border-radius: 3px; background: var(--cyan); box-shadow: var(--range-thumb-shadow); }
+input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; border-radius: 4px; background: transparent; outline: none; }
+.control-card input[type=range]::-webkit-slider-runnable-track { -webkit-appearance: none; appearance: none; height: 5px; border: 0; border-radius: 4px; background: var(--range-track); }
+.control-card input[type=range]::-moz-range-track { height: 5px; border: 0; border-radius: 4px; background: var(--range-track); }
+.control-card input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 10px; height: 20px; border: 2px solid var(--range-thumb-border); border-radius: 3px; background: var(--cyan); box-shadow: var(--range-thumb-shadow); }
 .status-grid { display: grid; grid-template-columns: 310px minmax(0, 1fr) 370px; gap: 12px; margin-top: 9px; height: 174px; min-height: 174px; align-items: stretch; }.status-panel, .analyzer, .info-panel { height: 100%; min-height: 0; border-radius: 5px; }.status-panel { padding: 12px 15px; }.status-panel div { display: grid; grid-template-columns: 105px 1fr; margin: 0 0 4px; font-size: 14px; }.status-panel b, .info-panel strong { font-size: 18px; letter-spacing: 1px; }.analyzer { position: relative; display: flex; padding: 12px 36px 25px 46px; overflow: hidden; background-color: var(--graph-background); }.chart-grid { flex: 1; position: relative; border-left: 1px solid var(--muted-text); border-bottom: 1px solid var(--secondary-text); background: transparent; }.bars { height: 100%; display: flex; align-items: end; justify-content: space-around; padding: 0 1%; }.bar-pair { width: 6%; height: 100%; display: flex; align-items: end; gap: 4px; }.bar-pair i { width: 50%; background: var(--graph-left); box-shadow: var(--graph-left-shadow); }.bar-pair i:last-child { background: var(--graph-right); }.axis-y { position: absolute; left: 12px; top: 11px; bottom: 22px; display: flex; flex-direction: column; justify-content: space-between; font-size: 14px; }.axis-x { position: absolute; left: 0; right: 0; bottom: -22px; display: flex; justify-content: space-around; font-size: 13px; }.legend { position: absolute; right: 10px; top: 28px; display: grid; gap: 6px; }.legend span { display: flex; gap: 7px; align-items: center; }.legend i { width: 11px; height: 11px; background: var(--cyan); display: inline-block; }.legend span:last-child i { background: var(--graph-right); }.info-panel { padding: 12px 15px; }.info-panel strong { font-size: 21px; }.info-panel p { color: var(--muted-text); font-size: 15px; line-height: 1.25; margin: 6px 0 0; }.info-panel span { display: block; text-align: right; margin-top: 6px; font-size: 11px; letter-spacing: 1px; }
 .bands { display: grid; grid-template-columns: repeat(10, 1fr); gap: var(--band-gap); margin-top: 10px; clear: both; }.band-card { min-width: 0; height: 360px; border-radius: 5px; display: flex; flex-direction: column; align-items: center; padding: 15px 8px 10px; }.band-title { font-size: 16px; }.band-action { width: 78%; height: 32px; margin: 10px 0 14px; color: var(--button-text); background: var(--band-button-background); border: 1px solid var(--band-button-border); border-radius: 4px; font: 600 16px 'Trebuchet MS', Arial, sans-serif; cursor: pointer; }.band-action.active { color: var(--cyan); border-color: var(--cyan); box-shadow: var(--active-shadow); }
-.fader-wrap { position: relative; display: flex; flex: 0 0 230px; height: 230px; align-items: center; justify-content: center; width: 100%; }.fader-track { position: relative; width: 12px; height: 220px; border-radius: 6px; background: var(--fader-track); box-shadow: var(--fader-track-shadow); }.fader-track::before { content: ''; position: absolute; top: 50%; left: -14px; right: -14px; height: 1px; background: var(--cyan); box-shadow: var(--range-thumb-shadow); }.fader-track::after { content: '0'; position: absolute; left: 22px; top: calc(50% - 10px); color: var(--strong-text); font-size: 16px; }.band-fader { appearance: none; -webkit-appearance: none; position: absolute; z-index: 2; left: 50%; top: 50%; width: 220px; height: 30px; margin: 0; padding: 0; transform: translate(-50%, -50%) rotate(-90deg); transform-origin: center; background: transparent; background-color: transparent; cursor: pointer; }.fader-track > .band-fader { background: transparent; }.band-fader::-webkit-slider-runnable-track { height: 5px; background: transparent; }.band-fader::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 16px; height: 25px; background: var(--fader-thumb); border: 2px solid var(--cyan); border-radius: 2px; box-shadow: var(--range-thumb-shadow); }.band-fader::-moz-range-track { height: 5px; background: transparent; border: 0; }.band-fader::-moz-range-thumb { width: 16px; height: 25px; background: var(--fader-thumb); border: 2px solid var(--cyan); border-radius: 2px; }.band-scale { display: flex; width: 100%; justify-content: space-between; color: var(--strong-text); font-size: 16px; }.band-scale.top { margin-bottom: -4px; }.band-scale.bottom { margin-top: -4px; }.band-value { font-size: 20px; font-weight: 700; }
+.fader-wrap { position: relative; display: flex; flex: 0 0 230px; height: 230px; align-items: center; justify-content: center; width: 100%; }.fader-track { position: relative; width: 12px; height: 220px; border-radius: 6px; background: var(--fader-track); box-shadow: var(--fader-track-shadow); }.fader-track::before { content: ''; position: absolute; top: 50%; left: -14px; right: -14px; height: 1px; background: var(--cyan); box-shadow: var(--range-thumb-shadow); }.fader-track::after { content: '0'; position: absolute; left: 22px; top: calc(50% - 10px); color: var(--strong-text); font-size: 16px; }.band-fader { appearance: none; -webkit-appearance: none; position: absolute; z-index: 2; left: 50%; top: 50%; width: 220px; height: 30px; margin: 0; padding: 0; transform: translate(-50%, -50%) rotate(-90deg); transform-origin: center; background: transparent; background-color: transparent; cursor: pointer; }.band-fader::-webkit-slider-runnable-track { height: 5px; background: transparent; }.band-fader::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 16px; height: 25px; background: var(--fader-thumb); border: 2px solid var(--cyan); border-radius: 2px; box-shadow: var(--range-thumb-shadow); }.band-fader::-moz-range-track { height: 5px; background: transparent; border: 0; }.band-fader::-moz-range-thumb { width: 16px; height: 25px; background: var(--fader-thumb); border: 2px solid var(--cyan); border-radius: 2px; }.band-scale { display: flex; width: 100%; justify-content: space-between; color: var(--strong-text); font-size: 16px; }.band-scale.top { margin-bottom: -4px; }.band-scale.bottom { margin-top: -4px; }.band-value { font-size: 20px; font-weight: 700; }
 @media (max-width: 1250px) { .console { width: calc(100vw - 20px); }.masthead { gap: 12px; }.brand { font-size: 23px; letter-spacing: 4px; }.layout-note { display: none; }.status-grid { grid-template-columns: 250px minmax(0, 1fr) 290px; }.info-panel p { font-size: 15px; } }
  .fader-label { position: absolute; color: var(--strong-text); font-size: 16px; }
  .fader-label.positive { top: 0; left: 18px; }
@@ -142,9 +145,6 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
 .analyzer-status { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; min-height: 22px; padding: 2px 0 6px; color: var(--muted-text); font-size: 12px; letter-spacing: .6px; }
 .analyzer-status b { color: var(--cyan); font-size: 13px; }
 .fb-workspace .legend { top: 76px; }
-.fader-track > .band-fader { height: 30px; }
-.fader-track > .band-fader { position: absolute; inset: 0; width: 100%; height: 100%; transform: none; transform-origin: initial; writing-mode: vertical-lr; direction: rtl; }
-
 /* Compact desktop calibration: keep the existing controls and routing unchanged. */
 .global-controls { gap: var(--panel-gap); margin-top: var(--panel-gap); }
 .fb-workspace, .bands { margin-top: var(--panel-gap); }
@@ -430,6 +430,8 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
   .control-card { min-height: 82px; padding: 8px 8px 6px; }
   .control-label { font-size: 12px; letter-spacing: .7px; }
   .control-card input[type=range] { height: 4px; }
+  .range-hit-area > input[type=range]::-webkit-slider-runnable-track,
+  .range-hit-area > input[type=range]::-moz-range-track { height: 4px; }
   .control-row { column-gap: 5px; }
   .control-row output[data-output="volume"], .control-row output[data-output="inputGain"] { width: 68px; min-width: 68px; font-size: 13px; }
   .fb-workspace { height: clamp(250px, 31dvh, 300px); }
@@ -442,20 +444,26 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
   .analyzer-status { flex-wrap: nowrap; white-space: nowrap; gap: 7px 12px; }
 }
 
-/* Expanded touch targets: the visible tracks and thumbs keep their existing dimensions. */
+/* The range controls have a 44px transparent input box; only their pseudo-track is painted. */
 .range-hit-area {
   position: relative;
-  flex: 1 1 auto;
+  grid-column: 1;
+  width: 100%;
   min-width: 0;
-  height: 44px;
+  height: 5px;
+  margin-top: 6px;
+  align-self: center;
 }
 .range-hit-area > input[type=range] {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 50%;
   width: 100%;
-  height: 100%;
+  height: 44px;
   margin: 0;
+  transform: translateY(-50%);
   background: transparent;
+  background-color: transparent;
   touch-action: none;
 }
 .range-hit-area > input[type=range]::-webkit-slider-runnable-track {
@@ -469,17 +477,7 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
   border-radius: 4px;
   background: var(--range-track);
 }
-.fader-hit-area {
-  position: absolute;
-  z-index: 2;
-  left: 50%;
-  top: 50%;
-  width: 220px;
-  height: 52px;
-  transform: translate(-50%, -50%) rotate(-90deg);
-  transform-origin: center;
-  touch-action: none;
-}
+/* This box is interactive only. The narrow .fader-track remains the visible rail. */
 .fader-hit-area > .band-fader {
   position: absolute;
   inset: 0;
@@ -487,10 +485,29 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
   height: 100%;
   margin: 0;
   transform: none;
+  transform-origin: initial;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  background: transparent;
+  background-color: transparent;
+  touch-action: none;
+}
+.fader-hit-area {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 0;
+  width: 44px;
+  height: 100%;
+  transform: translateX(-50%);
+  background: transparent;
   touch-action: none;
 }
 .fader-hit-area > .band-fader::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  appearance: none;
   height: 5px;
+  border: 0;
   background: transparent;
 }
 .fader-hit-area > .band-fader::-moz-range-track {

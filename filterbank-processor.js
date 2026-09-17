@@ -2,6 +2,7 @@ import { LinearTptSvf, OversampledPositiveTptResonator } from './tpt-svf.js';
 
 const COMMON_BUS_RESONANCE_EPSILON = 1e-12;
 const DIAGNOSTICS_UPDATE_HZ = 15;
+const LOCAL_LOOP_COMPENSATED_BAND_INDEXES = Object.freeze([3, 5, 6, 7]);
 
 class DaFiltaProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -20,6 +21,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.feedbackTopology = processorOptions.feedbackTopology === 'common-bus'
       ? 'common-bus'
       : processorOptions.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
+    this.localLoopTuning = this.readLocalLoopTuning(processorOptions.localLoopTuning);
     this.feedbackTap = processorOptions.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
     this.wetModel = processorOptions.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
     this.commonBusSaturationMode = processorOptions.commonBusSaturationMode === 'constant-ceiling' ? 'constant-ceiling' : 'current';
@@ -129,10 +131,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     };
     this.resonanceTarget = this.clampResonance(processorOptions.resonance);
     this.resonance = this.resonanceTarget;
+    this.compensatedLocalLoopFrequencies = this.createCompensatedLocalLoopFrequencies();
     this.baseFilters = {
       left: this.createFilters(),
       right: this.createFilters()
     };
+    this.applyLocalLoopTuning();
     this.resonatorFilters = {
       left: this.createFilters(),
       right: this.createFilters()
@@ -191,6 +195,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   readPositiveResonanceEngine(value) {
     return value === 'phase2' ? 'phase2' : 'tpt';
   }
+  readLocalLoopTuning(value) { return value === 'compensated' ? 'compensated' : 'current'; }
   readFeedbackAllEngine(value) { return value === 'common-bus' ? 'common-bus' : 'legacy'; }
   readFeedbackAllSource(value) { return value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; }
   readFeedbackAllLevel(value) {
@@ -315,6 +320,67 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     return filters;
   }
 
+  isCompensatedLocalLoopBand(index) {
+    return LOCAL_LOOP_COMPENSATED_BAND_INDEXES.includes(index);
+  }
+
+  tptBandpassPhase(centerFrequency, q, targetFrequency) {
+    const g = Math.tan(Math.PI * centerFrequency / sampleRate);
+    const k = 1 / q;
+    const coefficientDenominator = 1 + g * (g + k);
+    const b0 = (k * g) / coefficientDenominator;
+    const d1 = (2 * (g * g - 1)) / coefficientDenominator;
+    const d2 = (1 - g * k + g * g) / coefficientDenominator;
+    const omega = (2 * Math.PI * targetFrequency) / sampleRate;
+    const cosine = Math.cos(omega);
+    const sine = Math.sin(omega);
+    const cosine2 = Math.cos(2 * omega);
+    const sine2 = Math.sin(2 * omega);
+    const numeratorReal = b0 * (1 - cosine2);
+    const numeratorImaginary = b0 * sine2;
+    const denominatorReal = 1 + d1 * cosine + d2 * cosine2;
+    const denominatorImaginary = -d1 * sine - d2 * sine2;
+    const phase = Math.atan2(numeratorImaginary, numeratorReal) - Math.atan2(denominatorImaginary, denominatorReal);
+    return phase > Math.PI ? phase - 2 * Math.PI : phase < -Math.PI ? phase + 2 * Math.PI : phase;
+  }
+
+  calculateCompensatedLocalLoopFrequency(frequency, q) {
+    const targetOmega = (2 * Math.PI * frequency) / sampleRate;
+    if (!Number.isFinite(targetOmega) || targetOmega <= 0 || frequency >= sampleRate / 2) return frequency;
+    let lower = frequency;
+    let upper = sampleRate * 0.49;
+    const phaseError = centerFrequency => this.tptBandpassPhase(centerFrequency, q, frequency) - targetOmega;
+    const lowerError = phaseError(lower);
+    const upperError = phaseError(upper);
+    if (!Number.isFinite(lowerError) || !Number.isFinite(upperError) || lowerError >= 0 || upperError <= 0) return frequency;
+    for (let iteration = 0; iteration < 48; iteration += 1) {
+      const middle = (lower + upper) * 0.5;
+      if (phaseError(middle) < 0) lower = middle;
+      else upper = middle;
+    }
+    const result = (lower + upper) * 0.5;
+    return Number.isFinite(result) && result > 0 && result < sampleRate / 2 ? result : frequency;
+  }
+
+  createCompensatedLocalLoopFrequencies() {
+    return this.bandFrequencies.map((frequency, index) => this.isCompensatedLocalLoopBand(index)
+      ? this.calculateCompensatedLocalLoopFrequency(frequency, this.bandQs[index])
+      : frequency);
+  }
+
+  applyLocalLoopTuning() {
+    if (!this.baseFilters) return;
+    const useCompensatedFrequencies = this.feedbackTopology === 'local-loop-exp'
+      && this.positiveResonanceEngine === 'tpt'
+      && this.localLoopTuning === 'compensated';
+    for (const channel of ['left', 'right']) {
+      for (let index = 0; index < this.bandCount; index += 1) {
+        const frequency = useCompensatedFrequencies ? this.compensatedLocalLoopFrequencies[index] : this.bandFrequencies[index];
+        const filter = this.baseFilters[channel][index];
+        if (Math.abs(filter.frequency - frequency) > 1e-12) filter.setFrequency(frequency);
+      }
+    }
+  }
   createOversampledResonatorFilters() {
     const filters = new Array(this.bandCount);
     for (let index = 0; index < this.bandCount; index += 1) {
@@ -389,6 +455,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       mainCommonNonFiniteResets: 0,
       resonanceTarget: 0,
       smoothedResonance: 0,
+      localLoopTuning: this.localLoopTuning,
+      baseFilterFrequencies: this.baseFilters?.left.map(filter => filter.frequency) ?? [],
       sampleCount: 0
     };
   }
@@ -500,7 +568,13 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   }
 
   setPositiveResonanceEngine(value) {
-    this.positiveResonanceEngine = this.readPositiveResonanceEngine(value);
+    const nextEngine = this.readPositiveResonanceEngine(value);
+    if (nextEngine === this.positiveResonanceEngine) return;
+    this.positiveResonanceEngine = nextEngine;
+    if (this.feedbackTopology === 'local-loop-exp' && this.localLoopTuning === 'compensated') {
+      this.clearLocalFeedbackReturns();
+      this.applyLocalLoopTuning();
+    }
   }
   clearMainCommonFeedbackReturns() {
     this.mainCommonFeedbackReturns.left = 0;
@@ -554,7 +628,17 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const nextTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
     if (this.feedbackTopology === 'local-loop-exp' && nextTopology !== 'local-loop-exp') this.clearLocalFeedbackReturns();
     this.feedbackTopology = nextTopology;
+    this.applyLocalLoopTuning();
     if (this.feedbackTopology === 'isolated-tpt') this.clearMainCommonFeedbackReturns();
+  }
+  setLocalLoopTuning(value) {
+    const nextTuning = this.readLocalLoopTuning(value);
+    if (nextTuning === this.localLoopTuning) return;
+    this.localLoopTuning = nextTuning;
+    if (this.feedbackTopology === 'local-loop-exp') {
+      this.clearLocalFeedbackReturns();
+      this.applyLocalLoopTuning();
+    }
   }
   setFeedbackTap(value) { this.feedbackTap = value === 'post-gain' ? 'post-gain' : 'pre-gain'; }
   setWetModel(value) { this.wetModel = value === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta'; }
@@ -602,6 +686,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.maxBandCutDb !== undefined) this.setBandCutDb(data.maxBandCutDb, true);
     if (data.positiveResonanceEngine !== undefined) this.setPositiveResonanceEngine(data.positiveResonanceEngine);
     if (data.feedbackTopology !== undefined) this.setFeedbackTopology(data.feedbackTopology);
+    if (data.localLoopTuning !== undefined) this.setLocalLoopTuning(data.localLoopTuning);
     if (data.feedbackTap !== undefined) this.setFeedbackTap(data.feedbackTap);
     if (data.wetModel !== undefined) this.setWetModel(data.wetModel);
     if (data.commonBusSaturationMode !== undefined) this.setCommonBusSaturationMode(data.commonBusSaturationMode);
@@ -660,6 +745,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-band-cut-db') { this.setBandCutDb(data.value); return; }
     if (data.type === 'set-positive-resonance-engine') { this.setPositiveResonanceEngine(data.value); return; }
     if (data.type === 'set-feedback-topology') { this.setFeedbackTopology(data.value); return; }
+    if (data.type === 'set-local-loop-tuning') { this.setLocalLoopTuning(data.value); return; }
     if (data.type === 'set-feedback-tap') { this.setFeedbackTap(data.value); return; }
     if (data.type === 'set-wet-model') { this.setWetModel(data.value); return; }
     if (data.type === 'set-common-bus-saturation-mode') { this.setCommonBusSaturationMode(data.value); return; }
@@ -936,6 +1022,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       diagnostics.maxBandCutDb = this.maxBandCutDb;
       diagnostics.positiveResonanceEngine = this.positiveResonanceEngine;
       diagnostics.feedbackTopology = this.feedbackTopology;
+      diagnostics.localLoopTuning = this.localLoopTuning;
+      diagnostics.baseFilterFrequencies = baseFilters.map(filter => filter.frequency);
       diagnostics.feedbackTap = this.feedbackTap;
       diagnostics.wetModel = this.wetModel;
       diagnostics.commonBusSaturationMode = this.commonBusSaturationMode;
