@@ -408,5 +408,35 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
 }
 
 @media (min-width: 1000px) and (max-width: 1199px) {
-  .global-controls { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .masthead { flex-wrap: nowrap; gap: 10px; }
+  .brand { flex: 0 1 auto; }
+  .theme-picker { flex: 0 1 180px; min-width: 150px; }
+  .dev-lab-toggle { flex: 0 0 auto; }
+  .audio-io-bar {
+    grid-template-columns: minmax(150px, 1.25fr) minmax(150px, 1.25fr) auto auto minmax(145px, .9fr);
+    gap: 6px;
+    min-height: 58px;
+    padding: 7px 8px;
+  }
+  .audio-device { gap: 6px; font-size: 12px; }
+  .audio-device select { height: 32px; padding-inline: 5px; font-size: 13px; }
+  .audio-actions { gap: 4px; }
+  .audio-button { min-height: 32px; height: 32px; padding-inline: 9px; font-size: 11px; }
+  .audio-io-bar > .panic { min-width: 70px; }
+  .audio-state { font-size: 11px; gap: 4px 6px; }
+  .audio-state strong { font-size: 13px; }
+  .global-controls { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+  .control-card { min-height: 82px; padding: 8px 8px 6px; }
+  .control-label { font-size: 12px; letter-spacing: .7px; }
+  .control-card input[type=range] { height: 4px; }
+  .control-row { column-gap: 5px; }
+  .control-row output[data-output="volume"], .control-row output[data-output="inputGain"] { width: 68px; min-width: 68px; font-size: 13px; }
+  .fb-workspace { height: clamp(250px, 31dvh, 300px); }
+  .bands { height: clamp(250px, 38dvh, 315px); }
+  .band-card { padding-top: clamp(5px, .8dvh, 8px); padding-bottom: clamp(4px, .7dvh, 6px); }
+  .band-actions { margin-top: clamp(3px, .6dvh, 6px); margin-bottom: clamp(3px, .6dvh, 6px); }
+  .band-actions .band-action { height: clamp(28px, 4dvh, 34px); }
+  .fader-wrap { flex-basis: auto; }
+  .fader-track { height: min(225px, calc(100% - 6px)); }
+  .analyzer-status { flex-wrap: nowrap; white-space: nowrap; gap: 7px 12px; }
 }
