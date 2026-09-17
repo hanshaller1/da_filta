@@ -41,7 +41,7 @@ const devLabGroups = new Map();
   const group = document.createElement('section');
   group.className = 'dev-lab-group';
   group.dataset.devLabGroup = value;
-  group.innerHTML = `<h2>${label}</h2>`;
+  group.innerHTML = `<div class="dev-lab-group-header"><h2>${label}</h2><button class="dev-lab-info-button" type="button" data-dev-lab-help="${value}" aria-label="Hilfe zu ${label}" aria-expanded="false" aria-controls="dev-lab-tooltip">i</button></div>`;
   devLabControls?.append(group);
   devLabGroups.set(value, group);
 });
@@ -240,7 +240,7 @@ responseLab.className = 'response-dev-lab';
 responseLab.hidden = true;
 responseLab.setAttribute('aria-label', 'Filterbank DSP Telemetrie');
 responseLab.innerHTML = `
-  <div class="response-dev-toolbar"><span data-dev-lab-audio>NO AUDIO</span><button type="button" data-dev-lab-freeze aria-pressed="false">FREEZE</button><button type="button" data-dev-lab-reset>RESET METRICS</button><button type="button" data-debug-console-toggle aria-expanded="false">DEBUG CONSOLE</button><button type="button" data-debug-mark>MARK</button><button type="button" data-debug-snapshot>SNAPSHOT</button></div>
+  <div class="response-dev-toolbar"><span data-dev-lab-audio>NO AUDIO</span><button type="button" data-dev-lab-freeze aria-pressed="false">FREEZE</button><button type="button" data-dev-lab-reset>RESET METRICS</button><button type="button" data-debug-console-toggle aria-expanded="false">DEBUG CONSOLE</button><button type="button" data-debug-mark>MARK</button><button type="button" data-debug-snapshot>SNAPSHOT</button><button class="dev-lab-info-button" type="button" data-dev-lab-help="response" aria-label="Hilfe zu den DEV-LAB-Diagnosewerkzeugen" aria-expanded="false" aria-controls="dev-lab-tooltip">i</button></div>
   <div class="response-dev-summary" data-dev-lab-summary></div>
   <div class="response-dev-traces"><figure><figcaption>COMMON RETURN <i>L</i> <i>R</i></figcaption><canvas data-dev-lab-trace="common"></canvas></figure><figure><figcaption>MAIN RETURN <i>L</i> <i>R</i></figcaption><canvas data-dev-lab-trace="main"></canvas></figure><figure><figcaption>RESONANCE <i>TARGET</i> <i>SMOOTHED</i></figcaption><canvas data-dev-lab-trace="resonance"></canvas></figure></div>
   <div class="response-dev-bottom"><div class="response-dev-bands" data-dev-lab-bands></div><div class="response-dev-band-detail" data-dev-lab-band-detail></div></div>`;
@@ -567,10 +567,16 @@ const DEV_LAB_HELP = {
     default: 'REFERENCE + DELTA', note: 'Experimenteller Architekturvergleich, keine bestätigte interne Hardwaretopologie.'
   },
   'data-feedback-topology': {
-    title: 'DEV FB TOPOLOGY', what: 'Wählt die Topologie des positiven lokalen Feedbacks.',
-    scope: 'Wirkt bei aktivem lokalem Feedback und positiver Resonance; COMMON BUS führt lokale Taps an den gemeinsamen Filterbank-Eingang zurück.',
-    values: [['ISOLATED TPT', 'Ältere separate Resonator-/TPT-Architektur.'], ['COMMON BUS', 'Ausgewählte lokale Taps werden gemeinsam zurückgeführt und regen erneut alle Base-Bänder an.']],
-    default: 'ISOLATED TPT', note: 'Experimenteller Reverse-Engineering-Hörvergleich; COMMON BUS ist der aktuelle lokale Entwicklungspfad. Keine Schaltung wird als bewiesen behauptet.'
+    title: 'DEV FB TOPOLOGY', what: 'Wählt die Topologie des positiven individuellen Feedbacks.',
+    scope: 'ISOLATED TPT verwendet den älteren Resonator-/Residualpfad. COMMON BUS führt aktive Band-Taps als gemeinsamen Return an alle Base-Filter zurück. LOCAL LOOP EXP führt jeden aktiven Bandpass über einen eigenen gesättigten One-Sample-Return nur an sein eigenes Band zurück.',
+    values: [['ISOLATED TPT', 'Ältere separate Resonator-/TPT-Architektur.'], ['COMMON BUS', 'Aktive lokale Taps werden gemeinsam zurückgeführt und können dadurch alle Base-Bänder erneut anregen.'], ['LOCAL LOOP EXP', 'Jedes aktive Band besitzt einen getrennten lokalen äußeren Loop; MAIN/FB ALL kann zusätzlich weiterlaufen.']],
+    default: 'ISOLATED TPT', note: 'Experimenteller Reverse-Engineering-Hörvergleich. Keine Schaltung wird als bewiesen behauptet.'
+  },
+  'data-local-loop-tuning': {
+    title: 'DEV LOCAL LOOP TUNING', what: 'Wählt die interne Stimmung des experimentellen lokalen Feedback-Loops.',
+    scope: 'Wirkt ausschließlich bei LOCAL LOOP EXP. CURRENT lässt die Base-Bandzentren unverändert; COMPENSATED verschiebt nur die Testbänder 218 Hz, 777 Hz, 1.5 kHz und 2.8 kHz abhängig von der tatsächlichen Worklet-Sample-Rate und dem vorhandenen TPT-Q.',
+    values: [['CURRENT', 'Unveränderte Base-Bandzentren und das bisherige One-Sample-Delay-Verhalten.'], ['COMPENSATED', 'Stimmt die vier Testbänder intern höher, damit deren verzögerte lokale Selbstoszillation näher an der nominalen Bandfrequenz liegt.']],
+    default: 'CURRENT', note: '5.2 kHz und 11 kHz bleiben unverändert. Gain, Saturation, Delay, MAIN/FB ALL und alle anderen Topologien werden nicht angepasst.'
   },
   'data-feedback-tap': {
     title: 'DEV FB TAP', what: 'Legt fest, ob der lokale COMMON-BUS-Tap Band-Ausgänge vor oder nach Band-Gain verwendet.',
@@ -658,34 +664,66 @@ const DEV_LAB_HELP = {
   }
 };
 
-const devLabTooltip = document.createElement('div');
+const DEV_LAB_GROUP_HELP = {
+  input: ['data-input-preamp-stage', 'data-input-character-amount'],
+  filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-wet-model'],
+  'local-feedback': ['data-feedback-topology', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
+  main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-feedback-all-level'],
+  resonator: ['data-positive-resonance-audition', 'data-positive-resonance-drive', 'data-positive-resonance-damping-floor', 'data-positive-resonance-output', 'data-positive-resonance-latency', 'data-positive-resonance-curve', 'data-positive-resonance-engine']
+};
+const RESPONSE_DEV_LAB_HELP = [
+  { title: 'FREEZE / LIVE', what: 'FREEZE hält ausschließlich die sichtbaren DEV-LAB-Livewerte und Zeitgraphen an. Event-Erfassung, Audio und DSP laufen weiter. LIVE setzt nur die visuelle Aktualisierung fort.' },
+  { title: 'RESET METRICS', what: 'Löscht ausschließlich Diagnose-Historien, Diagnose-Maxima und resetbare Diagnose-Baselines. Audio- und DSP-Parameter bleiben unverändert.' },
+  { title: 'DEBUG CONSOLE', what: 'Öffnet das frei verschiebbare und skalierbare Debug-Panel mit Ereignisprotokoll, Snapshots und Session-Maximalwerten. Die Audioverarbeitung bleibt unverändert.' },
+  { title: 'MARK', what: 'Schreibt eine fortlaufende USER-MARK-Zeitmarke für Video- und Audioanalyse in das strukturierte Event-Log. Keine Audio- oder DSP-Änderung.' },
+  { title: 'SNAPSHOT', what: 'Schreibt einen kompakten, passiven Momentzustand der vorhandenen Telemetrie und Filterbank-State in das Event-Log. Keine Parameter werden geändert.' }
+];
+const devLabTooltip = document.createElement('section');
 devLabTooltip.className = 'dev-lab-tooltip';
 devLabTooltip.id = 'dev-lab-tooltip';
-devLabTooltip.setAttribute('role', 'tooltip');
+devLabTooltip.setAttribute('role', 'dialog');
+devLabTooltip.setAttribute('aria-label', 'DEV-LAB Hilfe');
 devLabTooltip.hidden = true;
 document.body.append(devLabTooltip);
-let activeDevLabControl = null;
-const renderDevLabHelp = help => {
+let activeDevLabHelpButton = null;
+const appendDevLabHelpText = (parent, text) => {
+  if (!text) return;
+  const paragraph = document.createElement('p');
+  paragraph.textContent = text;
+  parent.append(paragraph);
+};
+const renderDevLabHelp = (title, entries) => {
   devLabTooltip.replaceChildren();
-  const heading = document.createElement('h3'); heading.textContent = help.title; devLabTooltip.append(heading);
-  [['Erklärung', help.what], ['Signalweg / Scope', help.scope]].forEach(([label, value]) => {
-    const paragraph = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = `${label}: `; paragraph.append(strong, value); devLabTooltip.append(paragraph);
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  devLabTooltip.append(heading);
+  entries.forEach(help => {
+    const section = document.createElement('section');
+    section.className = 'dev-lab-help-entry';
+    const entryHeading = document.createElement('h4');
+    entryHeading.textContent = help.title;
+    section.append(entryHeading);
+    appendDevLabHelpText(section, help.what);
+    appendDevLabHelpText(section, help.scope);
+    if (help.values?.length) {
+      const values = document.createElement('ul');
+      help.values.forEach(([name, description]) => { const item = document.createElement('li'); const value = document.createElement('strong'); value.textContent = `${name} — `; item.append(value, description); values.append(item); });
+      section.append(values);
+    }
+    appendDevLabHelpText(section, help.default);
+    appendDevLabHelpText(section, help.note);
+    devLabTooltip.append(section);
   });
-  const valuesHeading = document.createElement('strong'); valuesHeading.textContent = 'Werte:'; devLabTooltip.append(valuesHeading);
-  const values = document.createElement('ul');
-  help.values.forEach(([name, description]) => { const item = document.createElement('li'); const value = document.createElement('strong'); value.textContent = `${name} — `; item.append(value, description); values.append(item); });
-  devLabTooltip.append(values);
-  [['Default', help.default], ['Hinweis', help.note]].forEach(([label, value]) => { const paragraph = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = `${label}: `; paragraph.append(strong, value); devLabTooltip.append(paragraph); });
 };
 const positionDevLabTooltip = () => {
-  if (!activeDevLabControl) return;
-  const anchor = activeDevLabControl.getBoundingClientRect();
-  const width = Math.min(420, Math.max(280, window.innerWidth - 24));
+  if (!activeDevLabHelpButton) return;
+  const anchor = activeDevLabHelpButton.getBoundingClientRect();
+  const width = Math.min(460, Math.max(280, window.innerWidth - 24));
   devLabTooltip.style.width = `${width}px`;
   devLabTooltip.style.maxHeight = `${Math.max(160, window.innerHeight - 24)}px`;
   const tooltipHeight = devLabTooltip.getBoundingClientRect().height;
-  let left = anchor.right + 10;
-  if (left + width > window.innerWidth - 12) left = anchor.left - width - 10;
+  let left = anchor.right + 8;
+  if (left + width > window.innerWidth - 12) left = anchor.left - width - 8;
   left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
   let top = anchor.top;
   if (top + tooltipHeight > window.innerHeight - 12) top = window.innerHeight - tooltipHeight - 12;
@@ -693,48 +731,31 @@ const positionDevLabTooltip = () => {
   devLabTooltip.style.left = `${left}px`;
   devLabTooltip.style.top = `${top}px`;
 };
-const hideDevLabTooltip = control => {
-  if (control && activeDevLabControl !== control) return;
-  activeDevLabControl = null;
+const hideDevLabTooltip = () => {
+  if (activeDevLabHelpButton) activeDevLabHelpButton.setAttribute('aria-expanded', 'false');
+  activeDevLabHelpButton = null;
   devLabTooltip.hidden = true;
 };
-const showDevLabTooltip = control => {
-  const input = control.querySelector('select, input');
-  const help = input && DEV_LAB_HELP[input.getAttributeNames().find(name => name.startsWith('data-'))];
-  if (!help) return;
-  activeDevLabControl = control;
-  renderDevLabHelp(help);
+const showDevLabTooltip = button => {
+  const key = button.dataset.devLabHelp;
+  const entries = key === 'response' ? RESPONSE_DEV_LAB_HELP : (DEV_LAB_GROUP_HELP[key] || []).map(attribute => DEV_LAB_HELP[attribute]).filter(Boolean);
+  if (!entries.length) return;
+  activeDevLabHelpButton = button;
+  renderDevLabHelp(key === 'response' ? 'FILTERBANK RESPONSE · DEV LAB' : button.closest('.dev-lab-group')?.querySelector('h2')?.textContent || 'DEV / LAB', entries);
   devLabTooltip.hidden = false;
+  button.setAttribute('aria-expanded', 'true');
   positionDevLabTooltip();
-  input.setAttribute('aria-describedby', devLabTooltip.id);
 };
-document.querySelectorAll('.dev-lab-panel .dev-lab-control, .dev-lab-panel .dev-audition-control').forEach(control => {
-  control.addEventListener('mouseenter', () => showDevLabTooltip(control));
-  control.addEventListener('mouseleave', () => { if (!control.contains(document.activeElement)) hideDevLabTooltip(control); });
-  control.addEventListener('focusin', () => showDevLabTooltip(control));
-  control.addEventListener('focusout', event => { if (!control.contains(event.relatedTarget)) hideDevLabTooltip(control); });
+document.addEventListener('click', event => {
+  const button = event.target.closest('.dev-lab-info-button');
+  if (button) {
+    if (button === activeDevLabHelpButton) hideDevLabTooltip();
+    else { hideDevLabTooltip(); showDevLabTooltip(button); }
+    return;
+  }
+  if (!devLabTooltip.hidden && !devLabTooltip.contains(event.target)) hideDevLabTooltip();
 });
-const DEV_LAB_BUTTON_HELP = {
-  'data-dev-lab-freeze': { title: 'FREEZE / LIVE', what: 'FREEZE hält ausschließlich die sichtbaren DEV-LAB-Livewerte und Zeitgraphen an. Event-Erfassung, Audio und DSP laufen weiter. LIVE setzt nur die visuelle Aktualisierung fort.' },
-  'data-dev-lab-reset': { title: 'RESET METRICS', what: 'Löscht ausschließlich Diagnose-Historien, Diagnose-Maxima und resetbare Diagnose-Baselines. Audio- und DSP-Parameter bleiben unverändert.' },
-  'data-debug-console-toggle': { title: 'DEBUG CONSOLE', what: 'Öffnet das frei verschiebbare und skalierbare Debug-Panel mit Ereignisprotokoll, Snapshots und Session-Maximalwerten. Die Audioverarbeitung bleibt unverändert.' },
-  'data-debug-mark': { title: 'MARK', what: 'Schreibt eine fortlaufende USER-MARK-Zeitmarke für Video- und Audioanalyse in das strukturierte Event-Log. Keine Audio- oder DSP-Änderung.' },
-  'data-debug-snapshot': { title: 'SNAPSHOT', what: 'Schreibt einen kompakten, passiven Momentzustand der vorhandenen Telemetrie und Filterbank-State in das Event-Log. Keine Parameter werden geändert.' },
-  'data-debug-copy': { title: 'COPY DEBUG REPORT', what: 'Kopiert Session-Header, Event-Log, Marks, Snapshots und Session-Maxima als lesbaren Text in die Zwischenablage.' },
-  'data-debug-clear': { title: 'CLEAR LOG', what: 'Löscht nur sichtbare Event-, Mark- und Snapshot-Einträge. Diagnose-Erfassung, Audio und Session-Maxima laufen weiter.' },
-  'data-debug-console-close': { title: 'DEBUG CONSOLE SCHLIESSEN', what: 'Schließt ausschließlich das nicht-modale Konsolen-Overlay. Die Diagnose-Session und das Event-Log bleiben erhalten.' }
-};
-let devLabButtonTooltipTimer = 0;
-const showDevLabButtonTooltip = button => {
-  const attribute = button.getAttributeNames().find(name => DEV_LAB_BUTTON_HELP[name]); const help = attribute && DEV_LAB_BUTTON_HELP[attribute];
-  if (!help) return; activeDevLabControl = button; renderDevLabHelp({ ...help, scope: 'Rein diagnostische UI-Funktion außerhalb des Audio-Signalwegs.', values: [['Wirkung', 'Keine DSP- oder Audio-Parameteränderung.']], default: '—', note: 'Keyboard-bedienbar; Tooltip bei Hover und Fokus.' }); devLabTooltip.hidden = false; positionDevLabTooltip(); button.setAttribute('aria-describedby', devLabTooltip.id);
-};
-document.querySelectorAll('[data-dev-lab-freeze], [data-dev-lab-reset], [data-debug-console-toggle], [data-debug-mark], [data-debug-snapshot], [data-debug-copy], [data-debug-clear], [data-debug-console-close]').forEach(button => {
-  button.addEventListener('mouseenter', () => { clearTimeout(devLabButtonTooltipTimer); devLabButtonTooltipTimer = setTimeout(() => showDevLabButtonTooltip(button), 350); });
-  button.addEventListener('mouseleave', () => { clearTimeout(devLabButtonTooltipTimer); if (document.activeElement !== button) hideDevLabTooltip(button); });
-  button.addEventListener('focus', () => { clearTimeout(devLabButtonTooltipTimer); showDevLabButtonTooltip(button); });
-  button.addEventListener('blur', () => hideDevLabTooltip(button));
-});
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && !devLabTooltip.hidden) hideDevLabTooltip(); });
 window.addEventListener('resize', positionDevLabTooltip);
 const THEME_STORAGE_KEY = 'da_filta-theme';
 const LEGACY_THEME_STORAGE_KEY = 'resonant-filterbank-theme';
