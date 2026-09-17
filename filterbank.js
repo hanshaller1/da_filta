@@ -28,7 +28,7 @@
   const BAND_CUT_DB = 12;
   const FEEDBACK_ALL_LEVELS = Object.freeze(['raw', 'sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth']);
   const FEEDBACK_ALL_NORMALIZATION = 1 / Math.sqrt(BAND_COUNT);
-  const PROCESSOR_NAME = 'resonant-filterbank-processor';
+  const PROCESSOR_NAME = 'da-filta-processor';
   const workletModuleLoads = new WeakMap();
   const bandFrequencies = Object.freeze(BAND_DEFINITIONS.map(band => band.frequency));
   const bandBoundaries = Object.freeze(

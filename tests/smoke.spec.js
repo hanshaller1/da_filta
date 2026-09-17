@@ -17,7 +17,7 @@ test('local webapp loads in Chromium without browser errors', async ({ page }) =
 
   expect(response).not.toBeNull();
   expect(response.ok()).toBeTruthy();
-  await expect(page).toHaveTitle(/Resonant Filterbank/);
+  await expect(page).toHaveTitle(/da_filta/);
   await expect(page.locator('main.console')).toBeVisible();
   await page.screenshot({ path: 'tests/artifacts/smoke-full-page.png', fullPage: true });
 
@@ -59,12 +59,12 @@ test('theme selector switches all themes and persists without resetting UI state
   await expect(page.locator('body')).toHaveAttribute('data-theme', 'pro-console');
   await expect(page.locator('[data-theme-select]')).toHaveValue('pro-console');
 
-  await page.evaluate(() => window.localStorage.setItem('resonant-filterbank-theme', 'invalid-theme'));
+  await page.evaluate(() => window.localStorage.setItem('da_filta-theme', 'invalid-theme'));
   await page.reload({ waitUntil: 'networkidle' });
   await expect(page.locator('body')).toHaveAttribute('data-theme', 'current');
   await expect(page.locator('[data-theme-select]')).toHaveValue('current');
 
-  await page.evaluate(() => window.localStorage.setItem('resonant-filterbank-theme', 'soft-neutral'));
+  await page.evaluate(() => window.localStorage.setItem('da_filta-theme', 'soft-neutral'));
   await page.reload({ waitUntil: 'networkidle' });
   await expect(page.locator('body')).toHaveAttribute('data-theme', 'current');
   await expect(page.locator('[data-theme-select]')).toHaveValue('current');
@@ -79,6 +79,22 @@ test('theme selector switches all themes and persists without resetting UI state
   expect(layout.themePickerHeight).toBeLessThanOrEqual(layout.headerHeight);
   expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
+});
+
+test('theme storage migrates the legacy project key without deleting it', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.evaluate(() => {
+    window.localStorage.removeItem('da_filta-theme');
+    window.localStorage.setItem('resonant-filterbank-theme', 'dark-studio');
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await expect(page.locator('body')).toHaveAttribute('data-theme', 'dark-studio');
+  await expect(page.locator('[data-theme-select]')).toHaveValue('dark-studio');
+  const storage = await page.evaluate(() => ({
+    current: window.localStorage.getItem('da_filta-theme'),
+    legacy: window.localStorage.getItem('resonant-filterbank-theme')
+  }));
+  expect(storage).toEqual({ current: 'dark-studio', legacy: 'dark-studio' });
 });
 
 test('central state and the filterbank wrapper keep L/R base values separate', async ({ page }) => {
@@ -109,7 +125,7 @@ test('central state and the filterbank wrapper keep L/R base values separate', a
   expect(result.deltaMapping[1]).toBeCloseTo(10 ** ((12 * -0.2) / 20) - 1, 10);
   expect(result.qValues).toHaveLength(10);
   expect(result.qValues.every(value => Number.isFinite(value) && value > 0)).toBeTruthy();
-  expect(result.processorName).toBe('resonant-filterbank-processor');
+  expect(result.processorName).toBe('da-filta-processor');
   expect(result.smoothingSeconds).toBe(0.015);
 });
 
@@ -603,7 +619,7 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   expect(await page.evaluate(() => window.__audioTestState.gains[4].value)).toBeCloseTo(10 ** (-12 / 20), 5);
   expect(await page.evaluate(() => window.__audioTestState.workletModules.length)).toBe(1);
   expect(await page.evaluate(() => window.__audioTestState.workletNodes.length)).toBe(1);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].name)).toBe('resonant-filterbank-processor');
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].name)).toBe('da-filta-processor');
   expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.outputChannelCount)).toEqual([2]);
   expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.bandGainLeft[0])).toBe(40);
   expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.bandGainRight[0])).toBe(40);

@@ -1,4 +1,4 @@
-# Resonant Filterbank Webapp
+# da_filta
 ## Prototype 0.1 – Spezifikation
 
 ## 1. Ziel des Prototyps
@@ -157,7 +157,7 @@ Die Grundstruktur soll einfach und transparent bleiben.
 Aktuell:
 
 ```text
-resonant-filterbank-webapp/
+da_filta/
 │
 ├─ index.html
 ├─ styles.css

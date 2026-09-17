@@ -733,11 +733,18 @@ document.querySelectorAll('[data-dev-lab-freeze], [data-dev-lab-reset], [data-de
   button.addEventListener('blur', () => hideDevLabTooltip(button));
 });
 window.addEventListener('resize', positionDevLabTooltip);
-const THEME_STORAGE_KEY = 'resonant-filterbank-theme';
+const THEME_STORAGE_KEY = 'da_filta-theme';
+const LEGACY_THEME_STORAGE_KEY = 'resonant-filterbank-theme';
 const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'pro-console'];
 const themeSelect = document.querySelector('[data-theme-select]');
 const readStoredTheme = () => {
-  try { return window.localStorage.getItem(THEME_STORAGE_KEY); } catch { return null; }
+  try {
+    const currentTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (currentTheme !== null) return currentTheme;
+    const legacyTheme = window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
+    if (legacyTheme !== null) window.localStorage.setItem(THEME_STORAGE_KEY, legacyTheme);
+    return legacyTheme;
+  } catch { return null; }
 };
 const applyTheme = value => {
   const theme = THEME_VALUES.includes(value) ? value : 'current';

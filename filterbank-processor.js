@@ -3,7 +3,7 @@ import { LinearTptSvf, OversampledPositiveTptResonator } from './tpt-svf.js';
 const COMMON_BUS_RESONANCE_EPSILON = 1e-12;
 const DIAGNOSTICS_UPDATE_HZ = 15;
 
-class ResonantFilterbankProcessor extends AudioWorkletProcessor {
+class DaFiltaProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
 
@@ -1012,4 +1012,4 @@ class ResonantFilterbankProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('resonant-filterbank-processor', ResonantFilterbankProcessor);
+registerProcessor('da-filta-processor', DaFiltaProcessor);
