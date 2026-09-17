@@ -441,3 +441,60 @@ input[type=range] { appearance: none; height: 5px; border-radius: 4px; backgroun
   .fader-track { height: min(225px, calc(100% - 6px)); }
   .analyzer-status { flex-wrap: nowrap; white-space: nowrap; gap: 7px 12px; }
 }
+
+/* Expanded touch targets: the visible tracks and thumbs keep their existing dimensions. */
+.range-hit-area {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+}
+.range-hit-area > input[type=range] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  touch-action: none;
+}
+.range-hit-area > input[type=range]::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 4px;
+  background: var(--range-track);
+}
+.range-hit-area > input[type=range]::-moz-range-track {
+  height: 5px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--range-track);
+}
+.fader-hit-area {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  width: 220px;
+  height: 52px;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
+  touch-action: none;
+}
+.fader-hit-area > .band-fader {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  transform: none;
+  touch-action: none;
+}
+.fader-hit-area > .band-fader::-webkit-slider-runnable-track {
+  height: 5px;
+  background: transparent;
+}
+.fader-hit-area > .band-fader::-moz-range-track {
+  height: 5px;
+  border: 0;
+  background: transparent;
+}

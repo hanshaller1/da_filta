@@ -136,7 +136,9 @@
       this.maxBandBoostDb = normalizeBandBoostDb(initialState?.maxBandBoostDb);
       this.maxBandCutDb = normalizeBandCutDb(initialState?.maxBandCutDb);
       this.positiveResonanceEngine = normalizePositiveResonanceEngine(initialState?.positiveResonanceEngine);
-      this.feedbackTopology = initialState?.feedbackTopology === 'common-bus' ? 'common-bus' : 'isolated-tpt';
+      this.feedbackTopology = initialState?.feedbackTopology === 'common-bus'
+        ? 'common-bus'
+        : initialState?.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
       this.feedbackTap = initialState?.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
       this.wetModel = initialState?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
       this.commonBusSaturationMode = initialState?.commonBusSaturationMode === 'constant-ceiling' ? 'constant-ceiling' : 'current';
@@ -323,7 +325,7 @@
     setBandBoostDb(value) { if (!this.disposed) { this.maxBandBoostDb = normalizeBandBoostDb(value); this.workletNode.port.postMessage({ type: 'set-band-boost-db', value: this.maxBandBoostDb }); } return this.maxBandBoostDb; }
     setBandCutDb(value) { if (!this.disposed) { this.maxBandCutDb = normalizeBandCutDb(value); this.workletNode.port.postMessage({ type: 'set-band-cut-db', value: this.maxBandCutDb }); } return this.maxBandCutDb; }
     setPositiveResonanceEngine(value) { if (!this.disposed) { this.positiveResonanceEngine = normalizePositiveResonanceEngine(value); this.workletNode.port.postMessage({ type: 'set-positive-resonance-engine', value: this.positiveResonanceEngine }); } return this.positiveResonanceEngine; }
-    setFeedbackTopology(value) { if (!this.disposed) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : 'isolated-tpt'; this.workletNode.port.postMessage({ type: 'set-feedback-topology', value: this.feedbackTopology }); } return this.feedbackTopology; }
+    setFeedbackTopology(value) { if (!this.disposed) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt'; this.workletNode.port.postMessage({ type: 'set-feedback-topology', value: this.feedbackTopology }); } return this.feedbackTopology; }
     setFeedbackTap(value) { if (!this.disposed) { this.feedbackTap = value === 'post-gain' ? 'post-gain' : 'pre-gain'; this.workletNode.port.postMessage({ type: 'set-feedback-tap', value: this.feedbackTap }); } return this.feedbackTap; }
     setWetModel(value) { if (!this.disposed) { this.wetModel = value === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta'; this.workletNode.port.postMessage({ type: 'set-wet-model', value: this.wetModel }); } return this.wetModel; }
     setCommonBusSaturationMode(value) { if (!this.disposed) { this.commonBusSaturationMode = value === 'constant-ceiling' ? 'constant-ceiling' : 'current'; this.workletNode.port.postMessage({ type: 'set-common-bus-saturation-mode', value: this.commonBusSaturationMode }); } return this.commonBusSaturationMode; }
@@ -352,7 +354,9 @@
       this.maxBandBoostDb = normalizeBandBoostDb(snapshot?.maxBandBoostDb ?? this.maxBandBoostDb);
       this.maxBandCutDb = normalizeBandCutDb(snapshot?.maxBandCutDb ?? this.maxBandCutDb);
       this.positiveResonanceEngine = normalizePositiveResonanceEngine(snapshot?.positiveResonanceEngine ?? this.positiveResonanceEngine);
-      this.feedbackTopology = snapshot?.feedbackTopology === 'common-bus' ? 'common-bus' : this.feedbackTopology;
+      this.feedbackTopology = snapshot?.feedbackTopology === 'common-bus'
+        ? 'common-bus'
+        : snapshot?.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : this.feedbackTopology;
       this.feedbackTap = snapshot?.feedbackTap === 'post-gain' ? 'post-gain' : this.feedbackTap;
       this.wetModel = snapshot?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : this.wetModel;
       this.feedbackAllEngine = snapshot?.feedbackAllEngine === 'common-bus' ? 'common-bus' : this.feedbackAllEngine;

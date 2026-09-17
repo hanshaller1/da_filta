@@ -17,7 +17,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.referenceLevel = this.readReferenceLevel(processorOptions.referenceLevel);
     this.referenceLevelTarget = this.referenceLevel;
     this.positiveResonanceEngine = this.readPositiveResonanceEngine(processorOptions.positiveResonanceEngine);
-    this.feedbackTopology = processorOptions.feedbackTopology === 'common-bus' ? 'common-bus' : 'isolated-tpt';
+    this.feedbackTopology = processorOptions.feedbackTopology === 'common-bus'
+      ? 'common-bus'
+      : processorOptions.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
     this.feedbackTap = processorOptions.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
     this.wetModel = processorOptions.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
     this.commonBusSaturationMode = processorOptions.commonBusSaturationMode === 'constant-ceiling' ? 'constant-ceiling' : 'current';
@@ -107,6 +109,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       right: Array(this.bandCount).fill(0)
     };
     this.commonFeedbackReturns = { left: 0, right: 0 };
+    this.localFeedbackReturns = {
+      left: Array(this.bandCount).fill(0),
+      right: Array(this.bandCount).fill(0)
+    };
     this.mainCommonFeedbackReturns = { left: 0, right: 0 };
     this.mainCommonNonFiniteResetCounts = { left: 0, right: 0 };
     this.bandOutputs = {
@@ -368,6 +374,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       commonSaturationInput: 0,
       commonSaturationOutput: 0,
       commonFeedbackReturnPeak: 0,
+      localFeedbackReturnPeak: Array(this.bandCount).fill(0),
       mainCommonFeedbackReturn: 0,
       mainTapSum: 0,
       mainTapSumScaled: 0,
@@ -506,6 +513,11 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     }
   }
 
+  clearLocalFeedbackReturns() {
+    this.localFeedbackReturns.left.fill(0);
+    this.localFeedbackReturns.right.fill(0);
+  }
+
   panic() {
     this.setResonance(0, true);
     for (const channel of ['left', 'right']) {
@@ -526,6 +538,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.feedbackAllGateTargets.right = 0;
     this.commonFeedbackReturns.left = 0;
     this.commonFeedbackReturns.right = 0;
+    this.clearLocalFeedbackReturns();
     this.clearMainCommonFeedbackReturns();
     this.clearLegacyFeedbackReturns();
   }
@@ -538,8 +551,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   }
 
   setFeedbackTopology(value) {
-    this.feedbackTopology = value === 'common-bus' ? 'common-bus' : 'isolated-tpt';
-    if (this.feedbackTopology !== 'common-bus') this.clearMainCommonFeedbackReturns();
+    const nextTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
+    if (this.feedbackTopology === 'local-loop-exp' && nextTopology !== 'local-loop-exp') this.clearLocalFeedbackReturns();
+    this.feedbackTopology = nextTopology;
+    if (this.feedbackTopology === 'isolated-tpt') this.clearMainCommonFeedbackReturns();
   }
   setFeedbackTap(value) { this.feedbackTap = value === 'post-gain' ? 'post-gain' : 'pre-gain'; }
   setWetModel(value) { this.wetModel = value === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta'; }
@@ -687,10 +702,13 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const commonBusActive = this.feedbackTopology === 'common-bus'
       && this.resonanceTarget >= 0
       && this.resonance > COMMON_BUS_RESONANCE_EPSILON;
-    const usesCommonBusMainEngine = this.feedbackTopology === 'common-bus'
+    const localLoopActive = this.feedbackTopology === 'local-loop-exp'
+      && this.resonanceTarget >= 0
+      && this.resonance > COMMON_BUS_RESONANCE_EPSILON;
+    const usesCommonBusMainEngine = this.feedbackTopology !== 'isolated-tpt'
       && this.feedbackAllEngine === 'common-bus'
       && this.resonanceTarget >= 0;
-    const mainCommonBusActive = commonBusActive
+    const mainCommonBusActive = (commonBusActive || localLoopActive)
       && usesCommonBusMainEngine
       && feedbackAllGate > COMMON_BUS_RESONANCE_EPSILON;
     const localCommonReturn = commonBusActive && Number.isFinite(this.commonFeedbackReturns[channel])
@@ -705,7 +723,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     let mainTapSum = 0;
     let globalTapSum = 0;
     const usesLegacyLocalResonance = (this.resonanceTarget < 0 && this.resonance < 0)
-      || (!commonBusActive && this.positiveResonanceEngine === 'phase2' && this.resonanceTarget > 0 && this.resonance > 0);
+      || (this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'phase2' && this.resonanceTarget > 0 && this.resonance > 0);
     const usesLegacyFeedbackAll = feedbackAllGate > 1e-12 && !usesCommonBusMainEngine;
     let hasActiveLegacyFeedbackGate = usesLegacyFeedbackAll;
 
@@ -720,21 +738,24 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       resonatorMagnitudes[band] = resonatorMagnitude;
       const resonatorDampingScale = this.getResonatorDampingScale(resonatorMagnitude);
       resonatorFilters[band].setDampingScale(this.getLinearResonatorDampingScale(resonatorMagnitude));
-      const resonatorAuditionTarget = !commonBusActive && this.positiveResonanceEngine === 'tpt' && this.resonanceTarget > 0 && localGate > 1e-12 ? 1 : 0;
+      const resonatorAuditionTarget = this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'tpt' && this.resonanceTarget > 0 && localGate > 1e-12 ? 1 : 0;
       const resonatorAuditionGate = resonatorAuditionTarget + this.resonanceSmoothingCoefficient * (
         resonatorAuditionGates[band] - resonatorAuditionTarget
       );
       resonatorAuditionGates[band] = resonatorAuditionGate;
       const previousReturn = Number.isFinite(feedbackReturns[band]) ? feedbackReturns[band] : 0;
       if (!Number.isFinite(feedbackReturns[band])) feedbackReturns[band] = 0;
-      const bandInput = source + previousReturn + localCommonReturn + mainCommonReturn;
+      const localLoopReturn = localLoopActive && Number.isFinite(this.localFeedbackReturns[channel][band])
+        ? this.localFeedbackReturns[channel][band]
+        : 0;
+      const bandInput = source + previousReturn + localCommonReturn + mainCommonReturn + localLoopReturn;
       const bandOutput = this.processBandpass(baseFilters[band], bandInput);
       const resonatorBandOutput = this.processBandpass(resonatorFilters[band], source);
       const resonanceResidual = resonatorBandOutput - bandOutput;
       let nonlinearResonatorBandOutput = 0;
       let nonlinearResidual = 0;
       let nonlinearBaseResidual = 0;
-      const useAudibleNonlinearResidual = !commonBusActive && this.positiveResonanceEngine === 'tpt' && this.enableNonlinearPositiveResonator
+      const useAudibleNonlinearResidual = this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'tpt' && this.enableNonlinearPositiveResonator
         && (resonatorMagnitude > 1e-12 || resonatorAuditionGate > 1e-12);
       if (nonlinearResonatorFilters && (this.collectResonatorDiagnostics || resonatorMagnitude > 1e-12 || resonatorAuditionGate > 1e-12)) {
         const nonlinearFilter = nonlinearResonatorFilters[band];
@@ -766,7 +787,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const audibleResidual = this.positiveResonanceOutputWeights[0] * currentResidual
         + this.positiveResonanceOutputWeights[1] * baseResidual
         + this.positiveResonanceOutputWeights[2] * fullOutput;
-      if (localGate > 1e-12 && this.resonance > 0 && !commonBusActive) {
+      if (localGate > 1e-12 && this.resonance > 0 && this.feedbackTopology === 'isolated-tpt') {
         mainOutput += resonatorAuditionGate * this.positiveResonanceAuditionGain * audibleResidual;
       }
       if (this.collectResonatorDiagnostics) {
@@ -869,6 +890,17 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       this.commonFeedbackReturns[channel] = 0;
     }
 
+    if (localLoopActive && resonanceMagnitudeSquared > 0) {
+      const feedbackGain = this.maxFeedbackGain * resonanceMagnitudeSquared;
+      for (let band = 0; band < this.bandCount; band += 1) {
+        const feedbackDrive = feedbackGain * feedbackGates[band] * bandOutputs[band];
+        const feedbackReturn = Number.isFinite(feedbackDrive) ? Math.tanh(feedbackDrive) : 0;
+        this.localFeedbackReturns[channel][band] = Number.isFinite(feedbackReturn) ? feedbackReturn : 0;
+      }
+    } else {
+      this.localFeedbackReturns[channel].fill(0);
+    }
+
     if (mainCommonBusActive && resonanceMagnitudeSquared > 0) {
       const feedbackGain = this.maxFeedbackGain * resonanceMagnitudeSquared;
       const mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
@@ -921,6 +953,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         diagnostics.commonFeedbackReturnPeak,
         Math.abs(this.commonFeedbackReturns[channel])
       );
+      for (let band = 0; band < this.bandCount; band += 1) {
+        diagnostics.localFeedbackReturnPeak[band] = Math.max(
+          diagnostics.localFeedbackReturnPeak[band],
+          Math.abs(this.localFeedbackReturns[channel][band])
+        );
+      }
       diagnostics.mainCommonFeedbackReturn = this.mainCommonFeedbackReturns[channel];
       diagnostics.mainTapSum = mainTapSum;
       diagnostics.mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
