@@ -51,6 +51,12 @@
       this.context = null;
       this.stream = null;
       this.source = null;
+      this.sourceBus = null;
+      this.activeInputGate = null;
+      this.sampleSource = null;
+      this.sampleBufferCache = new Map();
+      this.sourceMode = 'device';
+      this.sample = null;
       this.inputGainNode = null;
       this.inputPreampNode = null;
       this.dryGainNode = null;
@@ -298,7 +304,113 @@
       this.setAudioParam(this.volumeGainNode?.gain, dbToGain(this.volumeDb), immediate);
     }
 
-    async start({ inputDeviceId, outputDeviceId }) {
+    setGateGain(gate, value, time = this.context?.currentTime || 0, rampSeconds = 0) {
+      const gain = gate?.gain;
+      if (!gain) return;
+      gain.cancelScheduledValues?.(time);
+      if (!rampSeconds) { gain.setValueAtTime?.(value, time); gain.value = value; return; }
+      gain.setValueAtTime?.(gain.value, time);
+      if (gain.linearRampToValueAtTime) gain.linearRampToValueAtTime(value, time + rampSeconds);
+      else if (gain.setTargetAtTime) gain.setTargetAtTime(value, time, Math.max(.001, rampSeconds / 3));
+      else gain.value = value;
+    }
+
+    disconnectNode(node) {
+      try { node?.disconnect?.(); } catch (_) {}
+    }
+
+    stopInputNodes({ immediate = false } = {}) {
+      const context = this.context;
+      const now = context?.currentTime || 0;
+      const fadeSeconds = immediate ? 0 : .008;
+      const oldGate = this.activeInputGate;
+      const oldSource = this.source;
+      const oldStream = this.stream;
+      const oldSampleSource = this.sampleSource;
+      this.activeInputGate = null;
+      this.source = null;
+      this.stream = null;
+      this.sampleSource = null;
+      this.setGateGain(oldGate, 0, now, fadeSeconds);
+      if (oldSampleSource) {
+        const { source, gain } = oldSampleSource;
+        try { source.stop(now + fadeSeconds); } catch (_) {}
+        source.onended = () => { this.disconnectNode(source); this.disconnectNode(gain); };
+      }
+      const dispose = () => {
+        this.disconnectNode(oldSource);
+        this.disconnectNode(oldGate);
+        oldStream?.getTracks?.().forEach(track => track.stop());
+      };
+      if (immediate || !context) dispose();
+      else window.setTimeout(dispose, Math.ceil((fadeSeconds + .004) * 1000));
+    }
+
+    createInputGate(startTime) {
+      const gate = this.context.createGain();
+      this.setGateGain(gate, 0, this.context.currentTime || 0);
+      gate.connect(this.sourceBus);
+      this.activeInputGate = gate;
+      this.setGateGain(gate, 1, startTime, .008);
+      return gate;
+    }
+
+    async loadSampleBuffer(sample) {
+      if (!sample?.id || !sample?.path) throw new Error('Ungültige Sample-Konfiguration.');
+      const cached = this.sampleBufferCache.get(sample.id);
+      if (cached) return cached;
+      const load = (async () => {
+        const response = await fetch(sample.path);
+        if (!response.ok) throw new Error(`Sample konnte nicht geladen werden: ${sample.name || sample.id}`);
+        const data = await response.arrayBuffer();
+        return this.context.decodeAudioData(data.slice(0));
+      })().catch(error => { this.sampleBufferCache.delete(sample.id); throw error; });
+      this.sampleBufferCache.set(sample.id, load);
+      return load;
+    }
+
+    async activateDevice(inputDeviceId) {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Mikrofonzugriff wird von diesem Browser nicht unterstützt.');
+      const audioConstraints = { channelCount: { ideal: 2 }, echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+      if (inputDeviceId) audioConstraints.deviceId = { exact: inputDeviceId };
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      const source = this.context.createMediaStreamSource(stream);
+      this.stopInputNodes();
+      const gate = this.createInputGate((this.context.currentTime || 0) + .012);
+      source.connect(gate);
+      this.stream = stream;
+      this.source = source;
+      this.onDevicesChanged?.(await this.refreshDevices());
+    }
+
+    async activateSample(sample) {
+      if (!sample?.path) throw new Error('Kein integriertes Sample ausgewählt.');
+      const buffer = await this.loadSampleBuffer(sample);
+      this.stopInputNodes();
+      const now = this.context.currentTime || 0;
+      const startTime = now + .02;
+      const gate = this.createInputGate(startTime);
+      const source = this.context.createBufferSource();
+      const gain = this.context.createGain();
+      source.buffer = buffer;
+      source.loop = true;
+      gain.gain.value = 1;
+      source.connect(gain);
+      gain.connect(gate);
+      source.start(startTime);
+      this.sampleSource = { sample, source, gain, startTime };
+    }
+
+    async setSource({ sourceMode = 'device', inputDeviceId = '', sample = null } = {}) {
+      if (!this.context || !this.sourceBus) return;
+      const mode = sourceMode === 'sample' ? 'sample' : 'device';
+      if (mode === 'sample') await this.activateSample(sample);
+      else await this.activateDevice(inputDeviceId);
+      this.sourceMode = mode;
+      this.sample = sample;
+    }
+
+    async start({ inputDeviceId, outputDeviceId, sourceMode = 'device', sample = null }) {
       if (this.status === 'STARTING' || this.status === 'ON') return;
       this.setStatus('STARTING');
       try {
@@ -306,13 +418,7 @@
         if (!AudioContextClass) throw new Error('AudioContext ist in diesem Browser nicht verfügbar.');
         this.context = new AudioContextClass();
         await this.context.resume();
-        if (!navigator.mediaDevices?.getUserMedia) throw new Error('Mikrofonzugriff wird von diesem Browser nicht unterstützt.');
-        const audioConstraints = { channelCount: { ideal: 2 }, echoCancellation: false, noiseSuppression: false, autoGainControl: false };
-        if (inputDeviceId) audioConstraints.deviceId = { exact: inputDeviceId };
-        this.stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
-        if (this.onDevicesChanged) this.onDevicesChanged(await this.refreshDevices());
-
-        this.source = this.context.createMediaStreamSource(this.stream);
+        this.sourceBus = this.context.createGain();
         this.inputGainNode = this.context.createGain();
         await loadInputPreampModule(this.context);
         this.inputPreampNode = new AudioWorkletNode(this.context, INPUT_PREAMP_PROCESSOR_NAME, {
@@ -343,7 +449,7 @@
         this.filterbank = await Filterbank.create(this.context, this.getFilterbankState());
 
         // The wet branch stays structurally unchanged; Filterbank owns its DSP internally.
-        this.source.connect(this.inputGainNode);
+        this.sourceBus.connect(this.inputGainNode);
         this.inputGainNode.connect(this.inputPreampNode);
         this.inputPreampNode.connect(this.dryGainNode);
         this.inputPreampNode.connect(this.filterbank.input);
@@ -360,6 +466,7 @@
         this.mixBus.connect(this.volumeGainNode);
         this.volumeGainNode.connect(this.destination);
         this.applyAudioParameters(true);
+        await this.setSource({ sourceMode, inputDeviceId, sample });
 
         this.outputElement = document.createElement('audio');
         this.outputElement.autoplay = true;
@@ -381,14 +488,14 @@
       this.setStatus('OFF');
     }
 
-    disconnectNode(node) {
-      if (node) node.disconnect();
-    }
-
     async cleanup() {
+      this.stopInputNodes({ immediate: true });
       if (this.filterbank) { this.filterbank.dispose(); this.filterbank = null; }
-      [this.source, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
+      [this.sourceBus, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
       this.source = null;
+      this.sourceBus = null;
+      this.activeInputGate = null;
+      this.sampleSource = null;
       this.inputGainNode = null;
       this.inputPreampNode = null;
       this.dryGainNode = null;
@@ -398,7 +505,6 @@
       this.spectrumAnalyserRight = null;
       this.mixBus = null;
       this.volumeGainNode = null;
-      if (this.stream) { this.stream.getTracks().forEach(track => track.stop()); this.stream = null; }
       if (this.outputElement) { this.outputElement.pause(); this.outputElement.srcObject = null; this.outputElement.remove(); this.outputElement = null; }
       if (this.context) { await this.context.close(); this.context = null; }
       this.destination = null;

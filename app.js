@@ -895,15 +895,70 @@ document.addEventListener('keydown', event => {
 
 const inputDeviceSelect = document.querySelector('[data-audio-input]');
 const outputDeviceSelect = document.querySelector('[data-audio-output]');
+const inputSourceButtons = [...document.querySelectorAll('[data-audio-source]')];
 const startAudioButton = document.querySelector('[data-audio-start]');
 const stopAudioButton = document.querySelector('[data-audio-stop]');
 const panicAudioButton = document.querySelector('[data-audio-panic]');
 const audioStatus = document.querySelector('[data-audio-status]');
 const audioMessage = document.querySelector('[data-audio-message]');
 let hasManualInputSelection = false;
+const SAMPLE_LIBRARY = Array.isArray(window.ResonantSamples) ? window.ResonantSamples : [];
+const sampleById = new Map(SAMPLE_LIBRARY.map(sample => [sample.id, sample]));
+let audioSourceMode = 'device';
+let selectedSampleId = SAMPLE_LIBRARY[0]?.id || '';
+let rememberedInputDeviceId = '';
+let knownInputDevices = [];
+const selectedSample = () => sampleById.get(selectedSampleId) || null;
+const logSourceEvent = message => devLabTelemetry.logEvent?.(message);
+const renderSampleOptions = () => {
+  if (!inputDeviceSelect) return;
+  inputDeviceSelect.replaceChildren();
+  SAMPLE_LIBRARY.forEach(sample => {
+    const option = document.createElement('option'); option.value = sample.id; option.textContent = sample.name; inputDeviceSelect.append(option);
+  });
+  if (!SAMPLE_LIBRARY.length) {
+    const option = document.createElement('option'); option.value = ''; option.textContent = 'Kein integriertes Sample'; inputDeviceSelect.append(option);
+  }
+  inputDeviceSelect.value = selectedSampleId;
+  inputDeviceSelect.setAttribute('aria-label', 'Integrierter Audio-Loop');
+};
+const renderSourceMode = () => {
+  const isSample = audioSourceMode === 'sample';
+  inputSourceButtons.forEach(button => {
+    const active = button.dataset.audioSource === audioSourceMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  if (isSample) renderSampleOptions();
+  else {
+    renderDevices(inputDeviceSelect, knownInputDevices, 'Kein Input-Gerät');
+    inputDeviceSelect?.setAttribute('aria-label', 'Audio-Eingabegerät');
+  }
+};
+const switchRunningSource = async () => {
+  if (audioEngine?.status !== 'ON') return;
+  await audioEngine.setSource({ sourceMode: audioSourceMode, inputDeviceId: rememberedInputDeviceId || inputDeviceSelect?.value || '', sample: selectedSample() });
+};
+const setAudioSourceMode = async mode => {
+  const nextMode = mode === 'sample' ? 'sample' : 'device';
+  if (nextMode === audioSourceMode) return;
+  const previousMode = audioSourceMode;
+  try {
+    if (nextMode === 'sample') rememberedInputDeviceId = inputDeviceSelect?.value || rememberedInputDeviceId;
+    else renderDevices(inputDeviceSelect, knownInputDevices, 'Kein Input-Gerät');
+    if (audioEngine?.status === 'ON') await audioEngine.setSource({ sourceMode: nextMode, inputDeviceId: rememberedInputDeviceId || inputDeviceSelect?.value || '', sample: selectedSample() });
+    audioSourceMode = nextMode;
+    renderSourceMode();
+    logSourceEvent(`SOURCE ${previousMode.toUpperCase()} → ${nextMode.toUpperCase()}`);
+    if (previousMode === 'sample') logSourceEvent('SAMPLE STOP');
+    if (nextMode === 'sample' && selectedSample()) logSourceEvent(`SAMPLE START ${selectedSample().name}`);
+  } catch (error) { audioMessage.textContent = audioEngine.getErrorMessage(error); }
+};
+inputSourceButtons.forEach(button => button.addEventListener('click', () => { setAudioSourceMode(button.dataset.audioSource); }));
 const findElektronInput = devices => devices.find(device => /elektron/i.test(device.label ?? ''));
 const renderDevices = (select, devices, emptyLabel) => {
-  const selectedValue = select.value;
+  if (!select) return;
+  const selectedValue = select === inputDeviceSelect ? rememberedInputDeviceId || select.value : select.value;
   select.replaceChildren();
   if (!devices.length) {
     const option = document.createElement('option');
@@ -921,8 +976,17 @@ const renderDevices = (select, devices, emptyLabel) => {
   const preferredElektronInput = select === inputDeviceSelect && !hasManualInputSelection ? findElektronInput(devices) : null;
   if (preferredElektronInput) select.value = preferredElektronInput.deviceId;
   else if ([...select.options].some(option => option.value === selectedValue)) select.value = selectedValue;
+  if (select === inputDeviceSelect) rememberedInputDeviceId = select.value;
 };
-inputDeviceSelect?.addEventListener('change', () => { hasManualInputSelection = true; });
+inputDeviceSelect?.addEventListener('change', async () => {
+  if (audioSourceMode === 'device') { hasManualInputSelection = true; rememberedInputDeviceId = inputDeviceSelect.value; return; }
+  selectedSampleId = inputDeviceSelect.value;
+  try {
+    await switchRunningSource();
+    if (audioEngine?.status === 'ON' && selectedSample()) logSourceEvent(`SAMPLE START ${selectedSample().name}`);
+  } catch (error) { audioMessage.textContent = audioEngine.getErrorMessage(error); }
+});
+renderSourceMode();
 const updateAudioStatus = (status, message = '') => {
   state.audioStatus = status;
   state.audioError = message;
@@ -936,7 +1000,7 @@ const updateAudioStatus = (status, message = '') => {
 };
 audioEngine = new AudioEngine({
   onStatusChange: updateAudioStatus,
-  onDevicesChanged: devices => { renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät'); renderDevices(outputDeviceSelect, devices.outputs, 'Standardausgabe'); },
+  onDevicesChanged: devices => { knownInputDevices = devices.inputs; if (audioSourceMode === 'device') renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät'); renderDevices(outputDeviceSelect, devices.outputs, 'Standardausgabe'); },
   onDiagnostics: packet => devLabTelemetry.receive(packet)
 });
 audioEngine.applyState(state);
@@ -1067,7 +1131,8 @@ panic = () => {
 const refreshAudioDevices = async () => {
   try {
     const devices = await audioEngine.refreshDevices();
-    renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät');
+    knownInputDevices = devices.inputs;
+    if (audioSourceMode === 'device') renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät');
     renderDevices(outputDeviceSelect, devices.outputs, 'Standardausgabe');
   } catch (error) {
     audioMessage.textContent = error.message;
@@ -1075,7 +1140,8 @@ const refreshAudioDevices = async () => {
 };
 startAudioButton.addEventListener('click', async () => {
   try {
-    await audioEngine.start({ inputDeviceId: inputDeviceSelect.value, outputDeviceId: outputDeviceSelect.value });
+    await audioEngine.start({ inputDeviceId: rememberedInputDeviceId || inputDeviceSelect.value, outputDeviceId: outputDeviceSelect.value, sourceMode: audioSourceMode, sample: selectedSample() });
+    if (audioSourceMode === 'sample' && selectedSample()) logSourceEvent(`SAMPLE START ${selectedSample().name}`);
   } catch (error) {
     audioMessage.textContent = audioEngine.getErrorMessage(error);
   }
