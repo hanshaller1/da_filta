@@ -4,7 +4,7 @@ test('the INPUT combobox switches between one device source and one integrated l
   const consoleErrors = [];
   page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
   await page.addInitScript(() => {
-    window.__sampleGraph = { sources: [], decodeCalls: 0, deviceCalls: 0 };
+    window.__sampleGraph = { sources: [], decodeCalls: 0, deviceCalls: 0, fetches: [] };
     const node = () => ({ connect() {}, disconnect() {} });
     const devices = navigator.mediaDevices || {};
     devices.enumerateDevices = async () => [{ kind: 'audioinput', deviceId: 'input-1', label: 'Elektron Mock' }, { kind: 'audiooutput', deviceId: 'output-1', label: 'Mock Output' }];
@@ -23,7 +23,7 @@ test('the INPUT combobox switches between one device source and one integrated l
       createAnalyser() { return { ...node(), frequencyBinCount: 1024, getFloatFrequencyData(data) { data.fill(-80); } }; }
     }
     window.AudioContext = MockAudioContext; window.AudioWorkletNode = MockAudioWorkletNode;
-    window.fetch = async url => { window.__sampleGraph.lastFetch = url; return { ok: true, arrayBuffer: async () => new ArrayBuffer(32) }; };
+    window.fetch = async url => { window.__sampleGraph.fetches.push(String(url)); return { ok: true, arrayBuffer: async () => new ArrayBuffer(32) }; };
     HTMLMediaElement.prototype.setSinkId = async function () {}; HTMLMediaElement.prototype.play = async function () {}; HTMLMediaElement.prototype.pause = function () {};
   });
   await page.goto('/', { waitUntil: 'networkidle' });
@@ -38,29 +38,39 @@ test('the INPUT combobox switches between one device source and one integrated l
 
   await page.locator('[data-audio-source="sample"]').click();
   await expect(inputSelect).toHaveValue('full-drums-145');
-  await expect(inputSelect.locator('option')).toHaveText(['Full Drums 145 BPM']);
+  await expect(inputSelect.locator('option')).toHaveText(['Full Drums 145 BPM', 'Loop 140 BPM']);
   expect(await inputRow.evaluate(element => element.getBoundingClientRect().height)).toBe(initialHeight);
   await page.locator('[data-audio-start]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('ON');
   let graph = await page.evaluate(() => ({ ...window.__sampleGraph, source: window.__sampleGraph.sources.at(-1) && { loop: window.__sampleGraph.sources.at(-1).loop, starts: window.__sampleGraph.sources.at(-1).startTimes, stops: window.__sampleGraph.sources.at(-1).stopTimes, channels: window.__sampleGraph.sources.at(-1).buffer.numberOfChannels } }));
   expect(graph.deviceCalls).toBe(0);
   expect(graph.decodeCalls).toBe(1);
-  expect(graph.lastFetch).toContain('assets/samples/145_LOOP.wav');
+  expect(graph.fetches).toEqual(['assets/samples/145_LOOP.wav']);
   expect(graph.source).toEqual({ loop: true, starts: [10.02], stops: [], channels: 2 });
 
   await page.locator('[data-audio-panic]').click();
   expect(await page.evaluate(() => window.__sampleGraph.sources.at(-1).stopTimes.length)).toBe(0);
+  await inputSelect.selectOption('loop-140');
+  graph = await page.evaluate(() => ({ ...window.__sampleGraph, sourceData: window.__sampleGraph.sources.map(source => ({ loop: source.loop, starts: source.startTimes, stops: source.stopTimes, channels: source.buffer.numberOfChannels })) }));
+  expect(graph.decodeCalls).toBe(2);
+  expect(graph.fetches).toEqual(['assets/samples/145_LOOP.wav', 'assets/samples/140_LOOP.wav']);
+  expect(graph.sourceData).toEqual([
+    { loop: true, starts: [10.02], stops: [10.008], channels: 2 },
+    { loop: true, starts: [10.02], stops: [], channels: 2 }
+  ]);
   await page.locator('[data-audio-stop]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('OFF');
   expect(await page.evaluate(() => window.__sampleGraph.sources.at(-1).stopTimes.length)).toBe(1);
   await page.locator('[data-audio-start]').click();
-  expect(await page.evaluate(() => window.__sampleGraph.sources.length)).toBe(2);
-  expect(await page.evaluate(() => window.__sampleGraph.decodeCalls)).toBe(1);
+  expect(await page.evaluate(() => window.__sampleGraph.sources.length)).toBe(3);
+  expect(await page.evaluate(() => window.__sampleGraph.decodeCalls)).toBe(2);
+  expect(await page.evaluate(() => window.__sampleGraph.sources.at(-1).loop)).toBeTruthy();
 
   await page.locator('[data-audio-source="device"]').click();
   await expect(inputSelect).toHaveValue('input-1');
   expect(await page.evaluate(() => window.__sampleGraph.deviceCalls)).toBe(1);
   await page.locator('[data-audio-source="sample"]').click();
   expect(await page.evaluate(() => window.__sampleGraph.sources.at(-1).loop)).toBeTruthy();
+  expect(await page.evaluate(() => window.__sampleGraph.decodeCalls)).toBe(2);
   expect(consoleErrors).toEqual([]);
 });
