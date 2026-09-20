@@ -374,7 +374,7 @@ const devLabTelemetry = (() => {
     const { left, right } = latest; const dominant = dominantBand(latest); const frequencies = BAND_DEFINITIONS.map(band => band.frequency);
     const items = [
       ['RES TARGET', number(left.resonanceTarget)], ['RES SMOOTHED', number(left.smoothedResonance)], ['TOPOLOGY', left.feedbackTopology], ['TAP', left.feedbackTap], ['WET', left.wetModel], ['SAT', left.commonBusSaturationMode], ['DRIVE', number(left.commonBusDrive)], ['CEILING', number(left.commonBusCeiling)],
-      ['LOCAL RET L/R', `${number(left.commonFeedbackReturn)} / ${number(right.commonFeedbackReturn)}`], ['LOCAL TAP L/R', `${number(left.commonTapSum)} / ${number(right.commonTapSum)}`], ['MAIN RET L/R', `${number(left.mainCommonFeedbackReturn)} / ${number(right.mainCommonFeedbackReturn)}`], ['MAIN TAP L/R', `${number(left.mainTapSum)} / ${number(right.mainTapSum)}`], ['MAIN SCALED L/R', `${number(left.mainTapSumScaled)} / ${number(right.mainTapSumScaled)}`], ['FB ALL SCALE', number(left.mainFeedbackLevelScale)],
+      ['LOCAL RET L/R', `${number(left.commonFeedbackReturn)} / ${number(right.commonFeedbackReturn)}`], ['LOCAL TAP L/R', `${number(left.commonTapSum)} / ${number(right.commonTapSum)}`], ['MAIN RET L/R', `${number(left.mainCommonFeedbackReturn)} / ${number(right.mainCommonFeedbackReturn)}`], ['MAIN TAP L/R', `${number(left.mainTapSum)} / ${number(right.mainTapSum)}`], ['MAIN SCALED L/R', `${number(left.mainTapSumScaled)} / ${number(right.mainTapSumScaled)}`], ['MAIN FB GAIN', number(left.mainFeedbackGain)], ['FB ALL SCALE', number(left.mainFeedbackLevelScale)],
       ['SOURCE PK L/R', `${number(left.sourcePeak)} / ${number(right.sourcePeak)}`], ['WET PK L/R', `${number(left.wetPeak)} / ${number(right.wetPeak)}`], ['LOCAL SAT IN/OUT L', `${number(left.commonSaturationInput)} / ${number(left.commonSaturationOutput)}`], ['LOCAL SAT IN/OUT R', `${number(right.commonSaturationInput)} / ${number(right.commonSaturationOutput)}`], ['MAIN SAT IN/OUT L', `${number(left.mainSaturationInput)} / ${number(left.mainSaturationOutput)}`], ['MAIN SAT IN/OUT R', `${number(right.mainSaturationInput)} / ${number(right.mainSaturationOutput)}`], ['MAIN RESETS L/R', `${Math.max(0, finite(left.mainCommonNonFiniteResets) - resetBaseline.left)} / ${Math.max(0, finite(right.mainCommonNonFiniteResets) - resetBaseline.right)}`]
     ];
     summary.replaceChildren(...items.map(([label, value]) => { const item = document.createElement('div'); item.innerHTML = `<span>${label}</span><b>${value ?? '—'}</b>`; return item; }));
@@ -457,7 +457,9 @@ const addDevLabSelector = (label, attribute, options) => {
     'data-common-bus-ceiling': 'local-feedback',
     'data-feedback-all-engine': 'main',
     'data-feedback-all-source': 'main',
-    'data-feedback-all-level': 'main'
+    'data-feedback-all-level': 'main',
+    'data-feedback-all-resonance-curve': 'main',
+    'data-feedback-all-saturation-return': 'main'
   }[attribute] ?? 'resonator');
   if (!container) return null;
   const control = document.createElement('label');
@@ -493,6 +495,8 @@ const feedbackAllLevelSelect = addDevLabSelector('DEV FB ALL LEVEL', 'data-feedb
   ['fortieth', '1 / 40'],
   ['eightieth', '1 / 80']
 ]);
+const feedbackAllResonanceCurveSelect = addDevLabSelector('DEV RESONANCE CURVE', 'data-feedback-all-resonance-curve', [['current', 'CURRENT'], ['soft-knee', 'SOFT KNEE']]);
+const feedbackAllSaturationReturnSelect = addDevLabSelector('DEV MAIN SAT/RETURN', 'data-feedback-all-saturation-return', [['current', 'CURRENT'], ['drive-4-return-0.2', 'DRIVE 4 / RETURN 0.2']]);
 const inputPreampStageSelect = addDevLabSelector('DEV INPUT STAGE', 'data-input-preamp-stage', [
   ['linear', 'LINEAR'],
   ['silk', 'SILK'],
@@ -656,6 +660,18 @@ const DEV_LAB_HELP = {
     values: [['CURRENT', 'Lineare Resonance-Abbildung.'], ['EARLY', 'Früherer Anstieg über sqrt(resonance).'], ['AGGRESSIVE', 'Früherer/stärkerer Anstieg über cbrt(resonance).']],
     default: 'CURRENT', note: 'Experimenteller Resonator-LAB-Wert.'
   },
+  'data-feedback-all-resonance-curve': {
+    title: 'DEV RESONANCE CURVE', what: 'Formt ausschließlich die positive Resonance-zu-Feedback-Gain-Kennlinie des COMMON-BUS MAIN-/FB-ALL-Pfads.',
+    scope: 'COMMON BUS + FB ALL ENGINE = COMMON BUS: CURRENT verwendet 1.25 * resonance². SOFT KNEE verteilt den oberen kritischen Bereich über mehr Reglerweg und erreicht bei 1.00 weiterhin exakt 1.25. LOCAL LOOP EXP, lokaler Common Bus, negative Resonance und Legacy-Pfade bleiben bei der bisherigen Kennlinie.',
+    values: [['CURRENT', 'Unverändert: K = 1.25 * resonance².'], ['SOFT KNEE', 'Glatter A/B-Versuch mit mehr Auflösung vor dem Maximum.']],
+    default: 'CURRENT', note: 'Nur Mapping; Topologie, Summierung, Saturation und FB-ALL-Level bleiben unverÃ¤ndert.'
+  },
+  'data-feedback-all-saturation-return': {
+    title: 'DEV MAIN SAT/RETURN', what: 'A/B-Versuch nur im MAIN-/FB-ALL-COMMON-BUS-Return mit normaler CURRENT-tanh-Saturation.',
+    scope: 'CURRENT bleibt unveraendert: tanh(K * S). DRIVE 4 / RETURN 0.2 verwendet 0.2 * tanh(4 * K * S). CONSTANT CEILING, lokaler Common Bus, LOCAL LOOP EXP, negative Resonance und Legacy bleiben unveraendert.',
+    values: [['CURRENT', 'Unveraendert: tanh(K * S).'], ['DRIVE 4 / RETURN 0.2', 'Vierfacher Drive vor tanh, danach 0.2 Return-Level; Kleinsignal-Steigung 0.8.']],
+    default: 'CURRENT', note: 'Nur ein MAIN-Return-A/B-Test; keine Topologie-, Pegel- oder Wet-Modell-Aenderung.'
+  },
   'data-positive-resonance-engine': {
     title: 'DEV RES ENGINE', what: 'Wählt die Engine des positiven lokalen Resonators.',
     scope: 'Nur positive lokale Resonance außerhalb des COMMON-BUS-Modus; negative Resonance und FB ALL bleiben im Legacy-Pfad.',
@@ -668,7 +684,7 @@ const DEV_LAB_GROUP_HELP = {
   input: ['data-input-preamp-stage', 'data-input-character-amount'],
   filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-wet-model'],
   'local-feedback': ['data-feedback-topology', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
-  main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-feedback-all-level'],
+  main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-feedback-all-level', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
   resonator: ['data-positive-resonance-audition', 'data-positive-resonance-drive', 'data-positive-resonance-damping-floor', 'data-positive-resonance-output', 'data-positive-resonance-latency', 'data-positive-resonance-curve', 'data-positive-resonance-engine']
 };
 const RESPONSE_DEV_LAB_HELP = [
@@ -1105,6 +1121,8 @@ bindDevLabSelect(commonBusCeilingSelect, value => audioEngine.setCommonBusCeilin
 bindDevLabSelect(feedbackAllEngineSelect, value => audioEngine.setFeedbackAllEngine(value), 'legacy');
 bindDevLabSelect(feedbackAllSourceSelect, value => audioEngine.setFeedbackAllSource(value), 'post-gain-sum');
 bindDevLabSelect(feedbackAllLevelSelect, value => audioEngine.setFeedbackAllLevel(value), 'raw');
+bindDevLabSelect(feedbackAllResonanceCurveSelect, value => audioEngine.setFeedbackAllResonanceCurve(value), 'current');
+bindDevLabSelect(feedbackAllSaturationReturnSelect, value => audioEngine.setFeedbackAllSaturationReturn(value), 'current');
 const updateInputCharacterRelevance = () => {
   const control = inputCharacterAmountSlider?.closest('.dev-lab-character-control');
   const irrelevant = inputPreampStageSelect?.value === 'linear';

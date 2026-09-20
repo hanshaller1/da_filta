@@ -11,10 +11,12 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
   const devLabPanel = page.locator('[data-dev-lab-panel]');
   await expect(devLabPanel).toBeVisible();
   await expect(page.locator('.analyzer-header .dev-lab-controls')).toHaveCount(0);
-  await expect(page.locator('.dev-lab-panel [data-input-preamp-stage], .dev-lab-panel [data-reference-level], .dev-lab-panel [data-band-boost-db], .dev-lab-panel [data-band-cut-db], .dev-lab-panel [data-wet-model], .dev-lab-panel [data-feedback-topology], .dev-lab-panel [data-feedback-tap], .dev-lab-panel [data-common-bus-saturation-mode], .dev-lab-panel [data-common-bus-drive], .dev-lab-panel [data-common-bus-ceiling], .dev-lab-panel [data-feedback-all-engine], .dev-lab-panel [data-feedback-all-source], .dev-lab-panel [data-feedback-all-level], .dev-lab-panel [data-positive-resonance-engine], .dev-lab-panel [data-positive-resonance-output], .dev-lab-panel [data-positive-resonance-latency], .dev-lab-panel [data-positive-resonance-curve], .dev-lab-panel [data-positive-resonance-audition], .dev-lab-panel [data-positive-resonance-drive], .dev-lab-panel [data-positive-resonance-damping-floor]')).toHaveCount(20);
+  await expect(page.locator('.dev-lab-panel [data-input-preamp-stage], .dev-lab-panel [data-reference-level], .dev-lab-panel [data-band-boost-db], .dev-lab-panel [data-band-cut-db], .dev-lab-panel [data-wet-model], .dev-lab-panel [data-feedback-topology], .dev-lab-panel [data-feedback-tap], .dev-lab-panel [data-common-bus-saturation-mode], .dev-lab-panel [data-common-bus-drive], .dev-lab-panel [data-common-bus-ceiling], .dev-lab-panel [data-feedback-all-engine], .dev-lab-panel [data-feedback-all-source], .dev-lab-panel [data-feedback-all-level], .dev-lab-panel [data-feedback-all-resonance-curve], .dev-lab-panel [data-feedback-all-saturation-return], .dev-lab-panel [data-positive-resonance-engine], .dev-lab-panel [data-positive-resonance-output], .dev-lab-panel [data-positive-resonance-latency], .dev-lab-panel [data-positive-resonance-curve], .dev-lab-panel [data-positive-resonance-audition], .dev-lab-panel [data-positive-resonance-drive], .dev-lab-panel [data-positive-resonance-damping-floor]')).toHaveCount(22);
   await expect(page.locator('[data-feedback-all-engine]')).toHaveValue('legacy');
   await expect(page.locator('[data-feedback-all-source]')).toHaveValue('post-gain-sum');
   await expect(page.locator('[data-feedback-all-level]')).toHaveValue('raw');
+  await expect(page.locator('[data-feedback-all-resonance-curve]')).toHaveValue('current');
+  await expect(page.locator('[data-feedback-all-saturation-return]')).toHaveValue('current');
   await devLabToggle.click();
   await expect(devLabPanel).toBeHidden();
   await devLabToggle.click();
@@ -23,8 +25,8 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
     overflowY: getComputedStyle(element).overflowY,
     fitsWithoutScroll: element.scrollHeight === element.clientHeight
   }));
-  expect(panelLayout.overflowY).toBe('visible');
-  expect(panelLayout.fitsWithoutScroll).toBeTruthy();
+  expect(panelLayout.overflowY).toBe('auto');
+  expect(panelLayout.fitsWithoutScroll).toBeFalsy();
   await page.locator('[data-feedback-topology]').selectOption('common-bus');
   await page.locator('[data-common-bus-drive]').selectOption('8');
   await page.locator('[data-feedback-all-level]').selectOption('fortieth');
@@ -39,6 +41,8 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
   expect(await page.locator('[data-feedback-all-level] option').allTextContents()).toEqual([
     'RAW', '1 / SQRT(10)', '1 / 10', '1 / 20', '1 / 40', '1 / 80'
   ]);
+  expect(await page.locator('[data-feedback-all-resonance-curve] option').allTextContents()).toEqual(['CURRENT', 'SOFT KNEE']);
+  expect(await page.locator('[data-feedback-all-saturation-return] option').allTextContents()).toEqual(['CURRENT', 'DRIVE 4 / RETURN 0.2']);
 
   const report = await page.evaluate(async () => {
     const frequencies = [...window.Filterbank.BAND_FREQUENCIES];
@@ -110,10 +114,16 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
         energy += sample * sample;
         finite = finite && Number.isFinite(sample);
       }
+      const latest = diagnostics.at(-1) || { left: {}, right: {} };
+      const firstMain = diagnostics.map(item => item.left).find(item => item.firstMainTapSum !== null);
+      if (firstMain) {
+        latest.left.firstMainTapSum = firstMain.firstMainTapSum;
+        latest.left.firstMainTapSumScaled = firstMain.firstMainTapSumScaled;
+      }
       return {
         samples,
         diagnostics,
-        latest: diagnostics.at(-1) || { left: {}, right: {} },
+        latest,
         peak,
         rms: Math.sqrt(energy / samples.length),
         finite
