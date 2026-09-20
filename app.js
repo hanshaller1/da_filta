@@ -45,6 +45,21 @@ const devLabGroups = new Map();
   devLabControls?.append(group);
   devLabGroups.set(value, group);
 });
+const SWEETSPOT_SLOTS = ['A', 'B', 'C', 'D'];
+const sweetspotGroup = document.createElement('section');
+sweetspotGroup.className = 'dev-lab-group sweetspot-group';
+sweetspotGroup.dataset.devLabGroup = 'sweetspots';
+sweetspotGroup.innerHTML = '<div class="dev-lab-group-header"><h2>SWEETSPOTS</h2></div><div class="sweetspot-list"></div>';
+const sweetspotList = sweetspotGroup.querySelector('.sweetspot-list');
+const sweetspotRows = new Map();
+SWEETSPOT_SLOTS.forEach(slot => {
+  const row = document.createElement('div');
+  row.className = 'sweetspot-row';
+  row.innerHTML = `<strong>${slot}</strong><input type="text" maxlength="48" data-sweetspot-name="${slot}" aria-label="Sweetspot ${slot} Name"><button type="button" data-sweetspot-save="${slot}">SAVE</button><button type="button" data-sweetspot-load="${slot}" disabled>LOAD</button><button type="button" data-sweetspot-clear="${slot}" disabled>CLEAR</button>`;
+  sweetspotList?.append(row);
+  sweetspotRows.set(slot, row);
+});
+devLabControls?.append(sweetspotGroup);
 const groupForDevControl = control => {
   const attribute = control.querySelector('select')?.getAttributeNames().find(name => name.startsWith('data-')) ?? '';
   if (attribute === 'data-input-preamp-stage') return 'input';
@@ -1173,6 +1188,110 @@ document.querySelector('[data-control="resonance"]').addEventListener('input', (
   slider?.addEventListener('input', () => { const next = state[name]; devLabTelemetry.logStateChange(name.toUpperCase(), Number(previous).toFixed(name === 'resonance' ? 2 : 1), Number(next).toFixed(name === 'resonance' ? 2 : 1)); previous = next; });
 });
 syncAudioParameters();
+const SWEETSPOT_STORAGE_KEY = 'da-filta-sweetspots-v1';
+const sweetspotDefaultName = slot => `Sweetspot ${slot}`;
+const createEmptySweetspots = () => Object.fromEntries(SWEETSPOT_SLOTS.map(slot => [slot, { name: sweetspotDefaultName(slot), state: null }]));
+const cloneSnapshot = value => JSON.parse(JSON.stringify(value));
+const readSweetspots = () => {
+  const empty = createEmptySweetspots();
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SWEETSPOT_STORAGE_KEY) || 'null');
+    if (!parsed || parsed.version !== 1 || !parsed.slots || typeof parsed.slots !== 'object') return empty;
+    SWEETSPOT_SLOTS.forEach(slot => {
+      const entry = parsed.slots[slot];
+      if (!entry || typeof entry !== 'object') return;
+      const name = typeof entry.name === 'string' && entry.name.trim() ? entry.name : empty[slot].name;
+      const savedState = entry.state && typeof entry.state === 'object' && !Array.isArray(entry.state) ? entry.state : null;
+      empty[slot] = { name, state: savedState ? cloneSnapshot(savedState) : null };
+    });
+  } catch { /* Invalid or unavailable storage means empty slots. */ }
+  return empty;
+};
+let sweetspots = readSweetspots();
+const persistSweetspots = () => {
+  try { window.localStorage.setItem(SWEETSPOT_STORAGE_KEY, JSON.stringify({ version: 1, slots: sweetspots })); } catch { /* Storage may be unavailable. */ }
+};
+const syncUiFromAudioState = snapshot => {
+  if (!snapshot) return;
+  state.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => Number(snapshot.bandGainLeft?.[index] ?? 0));
+  state.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => Number(snapshot.bandGainRight?.[index] ?? 0));
+  state.feedbackBandLeft = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.feedbackBandLeft?.[index]));
+  state.feedbackBandRight = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.feedbackBandRight?.[index]));
+  state.feedbackAllLeft = Boolean(snapshot.feedbackAllLeft);
+  state.feedbackAllRight = Boolean(snapshot.feedbackAllRight);
+  if (snapshot.resonance !== undefined) renderGlobalControlValue('resonance', snapshot.resonance);
+  if (snapshot.inputGainDb !== undefined) renderGlobalControlValue('inputGain', snapshot.inputGainDb);
+  if (snapshot.dryWet !== undefined) renderGlobalControlValue('dryWet', snapshot.dryWet);
+  if (snapshot.volumeDb !== undefined) renderGlobalControlValue('volume', snapshot.volumeDb);
+  faders.forEach((_, index) => renderBand(index));
+  document.querySelectorAll('[data-feedback-band]').forEach(button => {
+    const active = state.feedbackBandLeft[Number(button.dataset.feedbackBand)];
+    button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
+  });
+  if (fbAllButton) {
+    fbAllButton.classList.toggle('active', state.feedbackAllLeft);
+    fbAllButton.textContent = state.feedbackAllLeft ? 'ON' : 'OFF';
+    fbAllButton.setAttribute('aria-pressed', String(state.feedbackAllLeft));
+  }
+  const selectValues = [
+    [bandBoostSelect, snapshot.maxBandBoostDb], [bandCutSelect, snapshot.maxBandCutDb],
+    [referenceLevelSelect, snapshot.referenceLevel], [resonanceEngineSelect, snapshot.positiveResonanceEngine],
+    [feedbackTopologySelect, snapshot.feedbackTopology], [localLoopTuningSelect, snapshot.localLoopTuning],
+    [feedbackTapSelect, snapshot.feedbackTap], [wetModelSelect, snapshot.wetModel],
+    [commonBusSatSelect, snapshot.commonBusSaturationMode], [commonBusDriveSelect, snapshot.commonBusDrive],
+    [commonBusCeilingSelect, snapshot.commonBusCeiling], [feedbackAllEngineSelect, snapshot.feedbackAllEngine],
+    [feedbackAllSourceSelect, snapshot.feedbackAllSource], [postGainFeedbackWeightSelect, snapshot.postGainFeedbackWeight],
+    [feedbackAllLevelSelect, snapshot.feedbackAllLevel], [feedbackAllResonanceCurveSelect, snapshot.feedbackAllResonanceCurve],
+    [feedbackAllSaturationReturnSelect, snapshot.feedbackAllSaturationReturn], [resonanceEngineSelect, snapshot.positiveResonanceEngine],
+    [positiveResonanceAuditionSelect, snapshot.positiveResonanceAuditionGain], [positiveResonanceDriveSelect, snapshot.positiveResonanceDrive],
+    [positiveResonanceDampingFloorSelect, snapshot.positiveResonanceDampingFloor], [positiveResonanceOutputSelect, snapshot.positiveResonanceOutputMode],
+    [positiveResonanceLatencySelect, snapshot.positiveResonanceLatencyMode], [positiveResonanceCurveSelect, snapshot.positiveResonanceCurve]
+  ];
+  const setSelectValue = (select, value) => {
+    if (!select || value === undefined) return;
+    const textValue = String(value);
+    const exact = [...select.options].find(option => option.value === textValue);
+    const numeric = exact || (Number.isFinite(Number(value)) ? [...select.options].find(option => Number(option.value) === Number(value)) : null);
+    select.value = numeric?.value ?? textValue;
+  };
+  selectValues.forEach(([select, value]) => setSelectValue(select, value));
+  setSelectValue(inputPreampStageSelect, snapshot.inputPreampStage);
+  if (inputCharacterAmountSlider && snapshot.inputCharacterAmount !== undefined) {
+    state.inputCharacterAmount = Number(snapshot.inputCharacterAmount);
+    inputCharacterAmountSlider.value = String(snapshot.inputCharacterAmount);
+    const output = document.querySelector('[data-input-character-output]');
+    if (output) output.textContent = `${snapshot.inputCharacterAmount} %`;
+  }
+  updateInputCharacterRelevance();
+  renderBandSliderValues();
+};
+const renderSweetspots = () => SWEETSPOT_SLOTS.forEach(slot => {
+  const entry = sweetspots[slot]; const row = sweetspotRows.get(slot); if (!row) return;
+  const nameInput = row.querySelector(`[data-sweetspot-name="${slot}"]`);
+  const loadButton = row.querySelector(`[data-sweetspot-load="${slot}"]`);
+  const clearButton = row.querySelector(`[data-sweetspot-clear="${slot}"]`);
+  nameInput.value = entry.name; loadButton.disabled = !entry.state; clearButton.disabled = !entry.state;
+});
+SWEETSPOT_SLOTS.forEach(slot => {
+  const row = sweetspotRows.get(slot); const nameInput = row.querySelector(`[data-sweetspot-name="${slot}"]`);
+  nameInput.addEventListener('input', () => { sweetspots[slot].name = nameInput.value; persistSweetspots(); });
+  row.querySelector(`[data-sweetspot-save="${slot}"]`).addEventListener('click', () => {
+    const currentState = audioEngine?.getState?.();
+    if (!currentState) return;
+    sweetspots[slot] = { name: nameInput.value || sweetspotDefaultName(slot), state: cloneSnapshot(currentState) };
+    persistSweetspots(); renderSweetspots();
+  });
+  row.querySelector(`[data-sweetspot-load="${slot}"]`).addEventListener('click', () => {
+    const savedState = sweetspots[slot]?.state; if (!savedState) return;
+    const snapshot = cloneSnapshot(savedState);
+    audioEngine.applyState(snapshot);
+    syncUiFromAudioState(audioEngine.getState());
+  });
+  row.querySelector(`[data-sweetspot-clear="${slot}"]`).addEventListener('click', () => {
+    sweetspots[slot].state = null; persistSweetspots(); renderSweetspots();
+  });
+});
+renderSweetspots();
 panic = () => {
   devLabTelemetry.logPanic();
   audioEngine?.panic();

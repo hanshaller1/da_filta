@@ -259,15 +259,37 @@
       };
     }
 
+    getState() {
+      const { onDiagnostics, ...filterbankState } = this.getFilterbankState();
+      return {
+        ...filterbankState,
+        bandGainLeft: [...this.bandGainLeft],
+        bandGainRight: [...this.bandGainRight],
+        feedbackBandLeft: [...this.feedbackBandLeft],
+        feedbackBandRight: [...this.feedbackBandRight],
+        inputGainDb: this.inputGainDb,
+        inputPreampStage: this.inputPreampStage,
+        inputCharacterAmount: this.inputCharacterAmount,
+        dryWet: this.dryWet,
+        volumeDb: this.volumeDb
+      };
+    }
+
     applyState(snapshot) {
       const left = Array.isArray(snapshot?.bandGainLeft) ? snapshot.bandGainLeft : [];
       const right = Array.isArray(snapshot?.bandGainRight) ? snapshot.bandGainRight : [];
+      const finiteOr = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
       this.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(left[index] ?? 0));
       this.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(right[index] ?? 0));
       this.feedbackBandLeft = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandLeft?.[index]));
       this.feedbackBandRight = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandRight?.[index]));
       this.feedbackAllLeft = Boolean(snapshot?.feedbackAllLeft);
       this.feedbackAllRight = Boolean(snapshot?.feedbackAllRight);
+      if (snapshot?.inputGainDb !== undefined) this.setInputGainDb(finiteOr(snapshot.inputGainDb, this.inputGainDb));
+      if (snapshot?.inputPreampStage !== undefined) this.setInputPreampStage(snapshot.inputPreampStage);
+      if (snapshot?.inputCharacterAmount !== undefined) this.setInputCharacterAmount(finiteOr(snapshot.inputCharacterAmount, this.inputCharacterAmount));
+      if (snapshot?.dryWet !== undefined) this.setDryWet(finiteOr(snapshot.dryWet, this.dryWet));
+      if (snapshot?.volumeDb !== undefined) this.setVolumeDb(finiteOr(snapshot.volumeDb, this.volumeDb));
       this.setResonance(snapshot?.resonance);
       this.setPositiveResonanceDrive(snapshot?.positiveResonanceDrive ?? this.positiveResonanceDrive);
       this.setPositiveResonanceDampingFloor(snapshot?.positiveResonanceDampingFloor ?? this.positiveResonanceDampingFloor);
