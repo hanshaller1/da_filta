@@ -26,6 +26,33 @@ test('DEV LAB structured debug console opens and remains an internal, passive su
   expect(after.gain).toBe(before.gain); expect(after.resonance).toBe(before.resonance); expect(after.height).toBeLessThanOrEqual(before.height); expect(errors).toEqual([]);
 });
 
+test('MAIN RESETS L/R uses independent cumulative-counter baselines for reset and new audio sessions', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-response-mode="dev-lab"]').click();
+  const packet = (leftResets, rightResets) => {
+    const channel = resets => ({ frameCount: 1, resonanceTarget: 0, smoothedResonance: 0, feedbackTopology: 'common-bus', feedbackTap: 'post-gain', wetModel: 'filterbank-sum', commonBusSaturationMode: 'current', commonBusDrive: 1, commonBusCeiling: 1, commonFeedbackReturn: 0, commonTapSum: 0, mainCommonFeedbackReturn: 0, mainTapSum: 0, mainTapSumScaled: 0, mainFeedbackLevelScale: 1, commonSaturationInput: 0, commonSaturationOutput: 0, mainSaturationInput: 0, mainSaturationOutput: 0, saturationActiveFrames: 0, mainCommonNonFiniteResets: resets, bandEnergy: Array(10).fill(0), bandPeak: Array(10).fill(0), localGates: Array(10).fill(0) });
+    return { left: channel(leftResets), right: channel(rightResets) };
+  };
+  const resetValue = () => page.locator('.response-dev-summary div').filter({ hasText: 'MAIN RESETS L/R' });
+
+  await page.evaluate(packet => { window.FilterbankDebugConsole.startSession({ sampleRate: 48000, state: 'running' }); window.FilterbankDebugConsole.receive(packet); }, packet(11, 29));
+  await expect(resetValue()).toContainText('0 / 0');
+  await page.evaluate(packet => window.FilterbankDebugConsole.receive(packet), packet(12, 29));
+  await expect(resetValue()).toContainText('1 / 0');
+  await page.locator('[data-feedback-all-level]').selectOption('sqrt2');
+  await page.evaluate(packet => window.FilterbankDebugConsole.receive(packet), packet(12, 29));
+  await expect(resetValue()).toContainText('1 / 0');
+
+  await page.locator('[data-dev-lab-reset]').click();
+  await page.evaluate(packet => window.FilterbankDebugConsole.receive(packet), packet(12, 29));
+  await expect(resetValue()).toContainText('0 / 0');
+  await page.evaluate(packet => window.FilterbankDebugConsole.receive(packet), packet(13, 30));
+  await expect(resetValue()).toContainText('1 / 1');
+
+  await page.evaluate(packet => { window.FilterbankDebugConsole.startSession({ sampleRate: 44100, state: 'running' }); window.FilterbankDebugConsole.receive(packet); }, packet(0, 0));
+  await expect(resetValue()).toContainText('0 / 0');
+});
+
 test('structured events are bounded, timestamped, passive and survive the diagnostic flow', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/');

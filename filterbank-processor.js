@@ -37,6 +37,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.commonBusCeilingTarget = this.commonBusCeiling;
     this.feedbackAllEngine = this.readFeedbackAllEngine(processorOptions.feedbackAllEngine);
     this.feedbackAllSource = this.readFeedbackAllSource(processorOptions.feedbackAllSource);
+    this.postGainFeedbackWeight = this.readPostGainFeedbackWeight(processorOptions.postGainFeedbackWeight);
     this.feedbackAllLevel = this.readFeedbackAllLevel(processorOptions.feedbackAllLevel);
     this.feedbackAllResonanceCurve = this.readFeedbackAllResonanceCurve(processorOptions.feedbackAllResonanceCurve);
     this.feedbackAllSaturationReturn = this.readFeedbackAllSaturationReturn(processorOptions.feedbackAllSaturationReturn);
@@ -207,18 +208,40 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   readLocalLoopTuning(value) { return value === 'compensated' ? 'compensated' : 'current'; }
   readFeedbackAllEngine(value) { return value === 'common-bus' ? 'common-bus' : 'legacy'; }
   readFeedbackAllSource(value) { return value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; }
+  readPostGainFeedbackWeight(value) { return value === 'soft-knee' ? 'soft-knee' : 'current'; }
   readFeedbackAllLevel(value) {
-    return ['sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth'].includes(value) ? value : 'raw';
+    return ['sqrt2', 'half', 'sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth'].includes(value) ? value : 'raw';
   }
   readFeedbackAllResonanceCurve(value) { return value === 'soft-knee' ? 'soft-knee' : 'current'; }
   readFeedbackAllSaturationReturn(value) { return value === 'drive-4-return-0.2' ? 'drive-4-return-0.2' : 'current'; }
   feedbackAllLevelScale() {
-    return this.feedbackAllLevel === 'sqrt10' ? 1 / Math.sqrt(10)
-      : this.feedbackAllLevel === 'tenth' ? 0.1
-        : this.feedbackAllLevel === 'twentieth' ? 0.05
-          : this.feedbackAllLevel === 'fortieth' ? 0.025
-            : this.feedbackAllLevel === 'eightieth' ? 0.0125
-        : 1;
+    return this.feedbackAllLevel === 'sqrt2' ? 1 / Math.sqrt(2)
+      : this.feedbackAllLevel === 'half' ? 0.5
+        : this.feedbackAllLevel === 'sqrt10' ? 1 / Math.sqrt(10)
+          : this.feedbackAllLevel === 'tenth' ? 0.1
+            : this.feedbackAllLevel === 'twentieth' ? 0.05
+              : this.feedbackAllLevel === 'fortieth' ? 0.025
+                : this.feedbackAllLevel === 'eightieth' ? 0.0125
+                  : 1;
+  }
+  postGainFeedbackWeightDb(audibleGainDb) {
+    const inputDb = Number.isFinite(audibleGainDb) ? audibleGainDb : 0;
+    if (inputDb <= 12) return inputDb;
+    if (inputDb >= 24) return 18 + (inputDb - 24) * 0.5;
+    const kneeDb = inputDb - 12;
+    // C1 polynomial through (12, 12), (18, 15), and (24, 18). Its
+    // endpoint slopes are 1 and 0.5 dB/dB, so the continuation is smooth.
+    return 12 + kneeDb - kneeDb ** 2 / 6 + 5 * kneeDb ** 3 / 288 - kneeDb ** 4 / 1728;
+  }
+  mainPostGainFeedbackWeight(audibleGain) {
+    if (this.postGainFeedbackWeight !== 'soft-knee') return audibleGain;
+    const safeAudibleGain = Number.isFinite(audibleGain) && audibleGain > 0 ? audibleGain : 1;
+    const kneeThreshold = 10 ** (12 / 20);
+    // Returning the original factor below the knee preserves the CURRENT
+    // arithmetic exactly for cuts, neutral, and boosts through +12 dB.
+    if (safeAudibleGain <= kneeThreshold) return safeAudibleGain;
+    const feedbackGain = 10 ** (this.postGainFeedbackWeightDb(20 * Math.log10(safeAudibleGain)) / 20);
+    return Number.isFinite(feedbackGain) ? Math.min(safeAudibleGain, feedbackGain) : safeAudibleGain;
   }
   readCommonBusDrive(value) { return [0.5, 1, 2, 4, 8, 16].includes(Number(value)) ? Number(value) : 1; }
   readCommonBusCeiling(value) { return [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; }
@@ -462,6 +485,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       mainTapSumScaledPeak: 0,
       mainFeedbackLevelScale: this.feedbackAllLevelScale(),
       mainFeedbackGain: 0,
+      mainPostGainFeedbackWeightMode: this.postGainFeedbackWeight,
+      mainPostGainFeedbackWeightDb: Array(this.bandCount).fill(0),
       firstMainTapSum: null,
       firstMainTapSumScaled: null,
       mainCommonNonFiniteResets: 0,
@@ -712,6 +737,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (nextValue === 'common-bus') this.clearLegacyFeedbackReturns();
   }
   setFeedbackAllSource(value) { this.feedbackAllSource = this.readFeedbackAllSource(value); }
+  setPostGainFeedbackWeight(value) { this.postGainFeedbackWeight = this.readPostGainFeedbackWeight(value); }
   setFeedbackAllLevel(value) { this.feedbackAllLevel = this.readFeedbackAllLevel(value); }
   setFeedbackAllResonanceCurve(value) { this.feedbackAllResonanceCurve = this.readFeedbackAllResonanceCurve(value); }
   setFeedbackAllSaturationReturn(value) { this.feedbackAllSaturationReturn = this.readFeedbackAllSaturationReturn(value); }
@@ -755,6 +781,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.commonBusCeiling !== undefined) this.setCommonBusCeiling(data.commonBusCeiling, true);
     if (data.feedbackAllEngine !== undefined) this.setFeedbackAllEngine(data.feedbackAllEngine);
     if (data.feedbackAllSource !== undefined) this.setFeedbackAllSource(data.feedbackAllSource);
+    if (data.postGainFeedbackWeight !== undefined) this.setPostGainFeedbackWeight(data.postGainFeedbackWeight);
     if (data.feedbackAllLevel !== undefined) this.setFeedbackAllLevel(data.feedbackAllLevel);
     if (data.feedbackAllResonanceCurve !== undefined) this.setFeedbackAllResonanceCurve(data.feedbackAllResonanceCurve);
     if (data.feedbackAllSaturationReturn !== undefined) this.setFeedbackAllSaturationReturn(data.feedbackAllSaturationReturn);
@@ -816,6 +843,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-common-bus-ceiling') { this.setCommonBusCeiling(data.value); return; }
     if (data.type === 'set-feedback-all-engine') { this.setFeedbackAllEngine(data.value); return; }
     if (data.type === 'set-feedback-all-source') { this.setFeedbackAllSource(data.value); return; }
+    if (data.type === 'set-post-gain-feedback-weight') { this.setPostGainFeedbackWeight(data.value); return; }
     if (data.type === 'set-feedback-all-level') { this.setFeedbackAllLevel(data.value); return; }
     if (data.type === 'set-feedback-all-resonance-curve') { this.setFeedbackAllResonanceCurve(data.value); return; }
     if (data.type === 'set-feedback-all-saturation-return') { this.setFeedbackAllSaturationReturn(data.value); return; }
@@ -997,14 +1025,19 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       }
       globalTapSum += bandOutput;
       deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
+      const audibleGain = 1 + deltaGains[band];
+      const mainPostGainWeight = this.mainPostGainFeedbackWeight(audibleGain);
+      if (this.collectResonatorDiagnostics) {
+        this.resonatorDiagnostics[channel].mainPostGainFeedbackWeightDb[band] = 20 * Math.log10(mainPostGainWeight);
+      }
       if (this.wetModel === 'reference-delta') mainOutput += deltaGains[band] * bandOutput;
-      else filterbankSum += (1 + deltaGains[band]) * bandOutput;
+      else filterbankSum += audibleGain * bandOutput;
       if (commonBusActive && localGate > 1e-12) {
-        commonTapSum += localGate * (this.feedbackTap === 'post-gain' ? (1 + deltaGains[band]) * bandOutput : bandOutput);
+        commonTapSum += localGate * (this.feedbackTap === 'post-gain' ? audibleGain * bandOutput : bandOutput);
       }
       if (mainCommonBusActive) {
         mainTapSum += feedbackAllGate * (this.feedbackAllSource === 'post-gain-sum'
-          ? (1 + deltaGains[band]) * bandOutput
+          ? mainPostGainWeight * bandOutput
           : bandOutput);
       }
     }
@@ -1118,6 +1151,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       diagnostics.mainCommonFeedbackReturn = this.mainCommonFeedbackReturns[channel];
       diagnostics.mainTapSum = mainTapSum;
       diagnostics.mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
+      diagnostics.mainPostGainFeedbackWeightMode = this.postGainFeedbackWeight;
       diagnostics.mainSaturationInput = mainCommonBusActive && resonanceMagnitudeSquared > 0
         ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared) * diagnostics.mainTapSumScaled : 0;
       diagnostics.mainSaturationOutput = this.mainCommonSaturationOutputs[channel];

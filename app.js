@@ -50,7 +50,7 @@ const groupForDevControl = control => {
   if (attribute === 'data-input-preamp-stage') return 'input';
   if (attribute === 'data-reference-level' || attribute === 'data-band-boost-db' || attribute === 'data-band-cut-db' || attribute === 'data-wet-model') return 'filterbank';
   if (attribute === 'data-feedback-topology' || attribute === 'data-feedback-tap' || attribute === 'data-local-loop-tuning') return 'local-feedback';
-  if (attribute === 'data-feedback-all-engine' || attribute === 'data-feedback-all-source' || attribute === 'data-feedback-all-level') return 'main';
+  if (attribute === 'data-feedback-all-engine' || attribute === 'data-feedback-all-source' || attribute === 'data-post-gain-feedback-weight' || attribute === 'data-feedback-all-level') return 'main';
   return 'resonator';
 };
 const inlineDevLabControls = document.querySelector('.analyzer-header .dev-lab-controls');
@@ -280,7 +280,7 @@ const devLabTelemetry = (() => {
   let latest = null;
   let frozen = false;
   let responseMode = 'normal';
-  let resetBaseline = { left: 0, right: 0 };
+  let resetBaseline = null;
   const maxEvents = 1000;
   const events = [];
   const snapshots = [];
@@ -336,7 +336,7 @@ const devLabTelemetry = (() => {
   };
   const resetSessionMax = () => { sessionMax = { local: 0, main: 0, saturator: 0, satActivity: 0, bandEnergy: 0, bandIndex: 0, dominantMs: 0, resets: 0 }; satThreshold = 0; dominant = { index: null, startedAt: performance.now(), logged: new Set() }; };
   const startSession = context => {
-    sessionStartedAt = performance.now(); markerNumber = 0; snapshotNumber = 0; events.length = 0; snapshots.length = 0; lastEventAt.clear(); if (!debugConsole.hidden) debugLog.replaceChildren(); resetSessionMax();
+    sessionStartedAt = performance.now(); markerNumber = 0; snapshotNumber = 0; events.length = 0; snapshots.length = 0; lastEventAt.clear(); if (!debugConsole.hidden) debugLog.replaceChildren(); resetSessionMax(); latest = null; resetBaseline = null;
     const state = audioEngine || {}; log(`AUDIO START · SR ${Math.round(context?.sampleRate || 0)} Hz · ${context?.state || 'running'} · TOPOLOGY ${state.feedbackTopology || '—'} · TAP ${state.feedbackTap || '—'} · WET ${state.wetModel || '—'} · SAT ${state.commonBusSaturationMode || '—'}`, { force: true });
   };
   const ratio = (returnValue, tap) => Math.abs(finite(tap)) < 1e-6 ? null : Math.min(999, Math.abs(finite(returnValue)) / Math.abs(finite(tap)));
@@ -357,7 +357,7 @@ const devLabTelemetry = (() => {
   };
   const reset = () => {
     histories.common.length = histories.main.length = histories.resonance.length = 0;
-    resetBaseline = { left: finite(latest?.left?.mainCommonNonFiniteResets), right: finite(latest?.right?.mainCommonNonFiniteResets) };
+    resetBaseline = latest ? { left: finite(latest.left.mainCommonNonFiniteResets), right: finite(latest.right.mainCommonNonFiniteResets) } : null;
     latest = null; render();
   };
   const renderTrace = (canvas, history, keys, range = 1) => {
@@ -374,6 +374,7 @@ const devLabTelemetry = (() => {
     const { left, right } = latest; const dominant = dominantBand(latest); const frequencies = BAND_DEFINITIONS.map(band => band.frequency);
     const items = [
       ['RES TARGET', number(left.resonanceTarget)], ['RES SMOOTHED', number(left.smoothedResonance)], ['TOPOLOGY', left.feedbackTopology], ['TAP', left.feedbackTap], ['WET', left.wetModel], ['SAT', left.commonBusSaturationMode], ['DRIVE', number(left.commonBusDrive)], ['CEILING', number(left.commonBusCeiling)],
+      ['POST GAIN FB WEIGHT', left.mainPostGainFeedbackWeightMode],
       ['LOCAL RET L/R', `${number(left.commonFeedbackReturn)} / ${number(right.commonFeedbackReturn)}`], ['LOCAL TAP L/R', `${number(left.commonTapSum)} / ${number(right.commonTapSum)}`], ['MAIN RET L/R', `${number(left.mainCommonFeedbackReturn)} / ${number(right.mainCommonFeedbackReturn)}`], ['MAIN TAP L/R', `${number(left.mainTapSum)} / ${number(right.mainTapSum)}`], ['MAIN SCALED L/R', `${number(left.mainTapSumScaled)} / ${number(right.mainTapSumScaled)}`], ['MAIN FB GAIN', number(left.mainFeedbackGain)], ['FB ALL SCALE', number(left.mainFeedbackLevelScale)],
       ['SOURCE PK L/R', `${number(left.sourcePeak)} / ${number(right.sourcePeak)}`], ['WET PK L/R', `${number(left.wetPeak)} / ${number(right.wetPeak)}`], ['LOCAL SAT IN/OUT L', `${number(left.commonSaturationInput)} / ${number(left.commonSaturationOutput)}`], ['LOCAL SAT IN/OUT R', `${number(right.commonSaturationInput)} / ${number(right.commonSaturationOutput)}`], ['MAIN SAT IN/OUT L', `${number(left.mainSaturationInput)} / ${number(left.mainSaturationOutput)}`], ['MAIN SAT IN/OUT R', `${number(right.mainSaturationInput)} / ${number(right.mainSaturationOutput)}`], ['MAIN RESETS L/R', `${Math.max(0, finite(left.mainCommonNonFiniteResets) - resetBaseline.left)} / ${Math.max(0, finite(right.mainCommonNonFiniteResets) - resetBaseline.right)}`]
     ];
@@ -405,6 +406,7 @@ const devLabTelemetry = (() => {
   };
   const receive = packet => {
     if (!packet?.left || !packet?.right) return;
+    if (!resetBaseline) resetBaseline = { left: finite(packet.left.mainCommonNonFiniteResets), right: finite(packet.right.mainCommonNonFiniteResets) };
     observe(packet);
     if (frozen) return;
     latest = packet; audioLabel.textContent = 'LIVE · 15 Hz';
@@ -457,6 +459,7 @@ const addDevLabSelector = (label, attribute, options) => {
     'data-common-bus-ceiling': 'local-feedback',
     'data-feedback-all-engine': 'main',
     'data-feedback-all-source': 'main',
+    'data-post-gain-feedback-weight': 'main',
     'data-feedback-all-level': 'main',
     'data-feedback-all-resonance-curve': 'main',
     'data-feedback-all-saturation-return': 'main'
@@ -487,8 +490,11 @@ const commonBusCeilingSelect = addDevLabSelector('DEV FB CEILING', 'data-common-
 const feedbackAllEngineSelect = addDevLabSelector('DEV FB ALL ENGINE', 'data-feedback-all-engine', [['legacy', 'LEGACY'], ['common-bus', 'COMMON BUS']]);
 const feedbackAllSourceSelect = addDevLabSelector('DEV FB ALL SOURCE', 'data-feedback-all-source', [['pre-gain-sum', 'PRE GAIN SUM'], ['post-gain-sum', 'POST GAIN SUM']]);
 if (feedbackAllSourceSelect) feedbackAllSourceSelect.value = 'post-gain-sum';
+const postGainFeedbackWeightSelect = addDevLabSelector('DEV POST GAIN FB WEIGHT', 'data-post-gain-feedback-weight', [['current', 'CURRENT'], ['soft-knee', 'SOFT KNEE']]);
 const feedbackAllLevelSelect = addDevLabSelector('DEV FB ALL LEVEL', 'data-feedback-all-level', [
   ['raw', 'RAW'],
+  ['sqrt2', '1 / SQRT(2)'],
+  ['half', '1 / 2'],
   ['sqrt10', '1 / SQRT(10)'],
   ['tenth', '1 / 10'],
   ['twentieth', '1 / 20'],
@@ -618,10 +624,16 @@ const DEV_LAB_HELP = {
     values: [['PRE GAIN SUM', 'Summe der Base-Band-Ausgänge vor Band-Gain.'], ['POST GAIN SUM', 'Summe der mit (1 + deltaGain) gewichteten Band-Ausgänge; Boost/Cut beeinflusst dadurch zusätzlich die MAIN-Schleife.']],
     default: 'POST GAIN SUM', note: 'Bei LEGACY wirkungslos; experimenteller MAIN-Tap-Vergleich.'
   },
+  'data-post-gain-feedback-weight': {
+    title: 'DEV POST GAIN FB WEIGHT', what: 'Formt ausschliesslich die Band-Gewichtung der MAIN-/FB-ALL-POST-GAIN-Summe.',
+    scope: 'Nur COMMON BUS + FB ALL ENGINE = COMMON BUS + POST GAIN SUM. Hoerbarer Band-Gain, FILTERBANK SUM und der lokale POST-GAIN-Tap bleiben unveraendert; die Gewichtung liegt vor FB ALL LEVEL, Resonance und Saturation.',
+    values: [['CURRENT', 'Verwendet den hoerbaren linearen Band-Gain unveraendert.'], ['SOFT KNEE', 'Bis +12 dB identisch; +18 dB werden zu +15 dB und +24 dB zu +18 dB fuer den MAIN-Tap gewichtet.']],
+    default: 'CURRENT', note: 'Statische, zeitunabhaengige Feedback-Gewichtung; keine Kompression des hoerbaren Signals.'
+  },
   'data-feedback-all-level': {
     title: 'DEV FB ALL LEVEL', what: 'Skaliert die gebildete MAIN-Tap-Summe.',
     scope: 'Ausschließlich COMMON-BUS-MAIN: MAIN-Tap-Summe → Level → feedbackGain (1.25 * resonance²) → bestehende Saturation → mainCommonReturn. LEGACY ignoriert den Wert.',
-    values: [['RAW', 'Faktor 1,0.'], ['1 / SQRT(10)', 'Faktor 1 / sqrt(10) ≈ 0,316227766.'], ['1 / 10', 'Faktor 0,1.'], ['1 / 20', 'Faktor 0,05.'], ['1 / 40', 'Faktor 0,025.'], ['1 / 80', 'Faktor 0,0125.']],
+    values: [['RAW', 'Faktor 1,0.'], ['1 / SQRT(2)', 'Faktor ≈ 0,7071 (≈ -3,01 dB).'], ['1 / 2', 'Faktor 0,5 (≈ -6,02 dB).'], ['1 / SQRT(10)', 'Faktor 1 / sqrt(10) ≈ 0,316227766.'], ['1 / 10', 'Faktor 0,1.'], ['1 / 20', 'Faktor 0,05.'], ['1 / 40', 'Faktor 0,025.'], ['1 / 80', 'Faktor 0,0125.']],
     default: 'RAW', note: 'Experimentelle feste COMMON-BUS-MAIN-Kalibrierung; keine automatische Normalisierung und keine finale Klangentscheidung.'
   },
   'data-positive-resonance-audition': {
@@ -684,7 +696,7 @@ const DEV_LAB_GROUP_HELP = {
   input: ['data-input-preamp-stage', 'data-input-character-amount'],
   filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-wet-model'],
   'local-feedback': ['data-feedback-topology', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
-  main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-feedback-all-level', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
+  main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-post-gain-feedback-weight', 'data-feedback-all-level', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
   resonator: ['data-positive-resonance-audition', 'data-positive-resonance-drive', 'data-positive-resonance-damping-floor', 'data-positive-resonance-output', 'data-positive-resonance-latency', 'data-positive-resonance-curve', 'data-positive-resonance-engine']
 };
 const RESPONSE_DEV_LAB_HELP = [
@@ -1120,6 +1132,7 @@ bindDevLabSelect(commonBusDriveSelect, value => audioEngine.setCommonBusDrive(va
 bindDevLabSelect(commonBusCeilingSelect, value => audioEngine.setCommonBusCeiling(value), '1');
 bindDevLabSelect(feedbackAllEngineSelect, value => audioEngine.setFeedbackAllEngine(value), 'legacy');
 bindDevLabSelect(feedbackAllSourceSelect, value => audioEngine.setFeedbackAllSource(value), 'post-gain-sum');
+bindDevLabSelect(postGainFeedbackWeightSelect, value => audioEngine.setPostGainFeedbackWeight(value), 'current');
 bindDevLabSelect(feedbackAllLevelSelect, value => audioEngine.setFeedbackAllLevel(value), 'raw');
 bindDevLabSelect(feedbackAllResonanceCurveSelect, value => audioEngine.setFeedbackAllResonanceCurve(value), 'current');
 bindDevLabSelect(feedbackAllSaturationReturnSelect, value => audioEngine.setFeedbackAllSaturationReturn(value), 'current');

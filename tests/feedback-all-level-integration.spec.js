@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('DEV FB ALL LEVEL survives the UI, AudioEngine, Filterbank, and Worklet handoff', async ({ page }) => {
+test('DEV FB ALL LEVEL and POST GAIN FB WEIGHT survive the UI, AudioEngine, Filterbank, and Worklet handoff', async ({ page }) => {
   await page.addInitScript(() => {
     window.__feedbackAllLevelTestState = { nodes: [] };
     const mediaDevices = navigator.mediaDevices || {};
@@ -50,6 +50,8 @@ test('DEV FB ALL LEVEL survives the UI, AudioEngine, Filterbank, and Worklet han
 
   const expectedLevels = [
     ['raw', 1],
+    ['sqrt2', 1 / Math.sqrt(2)],
+    ['half', 0.5],
     ['sqrt10', 1 / Math.sqrt(10)],
     ['tenth', 0.1],
     ['twentieth', 0.05],
@@ -60,6 +62,19 @@ test('DEV FB ALL LEVEL survives the UI, AudioEngine, Filterbank, and Worklet han
     .find(node => node.name === window.Filterbank.PROCESSOR_NAME)
     .options.processorOptions.feedbackAllLevel);
   expect(initialLevel).toBe('raw');
+
+  const initialWeight = await page.evaluate(() => window.__feedbackAllLevelTestState.nodes
+    .find(node => node.name === window.Filterbank.PROCESSOR_NAME)
+    .options.processorOptions.postGainFeedbackWeight);
+  expect(initialWeight).toBe('current');
+  for (const value of ['current', 'soft-knee']) {
+    await page.locator('[data-post-gain-feedback-weight]').selectOption(value);
+    const received = await page.evaluate(() => {
+      const node = window.__feedbackAllLevelTestState.nodes.find(candidate => candidate.name === window.Filterbank.PROCESSOR_NAME);
+      return [...node.messages].reverse().find(message => message.type === 'set-post-gain-feedback-weight')?.value;
+    });
+    expect(received).toBe(value);
+  }
 
   for (const [value] of expectedLevels) {
     await page.locator('[data-feedback-all-level]').selectOption(value);
@@ -73,21 +88,30 @@ test('DEV FB ALL LEVEL survives the UI, AudioEngine, Filterbank, and Worklet han
   const fallback = await page.evaluate(() => {
     const audioEngine = new window.AudioEngine({});
     let audioEngineForwarded;
-    audioEngine.filterbank = { setFeedbackAllLevel: value => { audioEngineForwarded = value; } };
+    let audioEngineWeightForwarded;
+    audioEngine.filterbank = { setFeedbackAllLevel: value => { audioEngineForwarded = value; }, setPostGainFeedbackWeight: value => { audioEngineWeightForwarded = value; } };
     const context = new AudioContext();
-    const filterbank = new window.Filterbank(context, { feedbackAllLevel: 'invalid-value' });
+    const filterbank = new window.Filterbank(context, { feedbackAllLevel: 'invalid-value', postGainFeedbackWeight: 'invalid-value' });
     const constructorValue = filterbank.feedbackAllLevel;
+    const constructorWeight = filterbank.postGainFeedbackWeight;
     const setterValue = filterbank.setFeedbackAllLevel('invalid-value');
+    const setterWeight = filterbank.setPostGainFeedbackWeight('invalid-value');
     return {
+      audioEngineWeightValue: audioEngine.setPostGainFeedbackWeight('invalid-value'),
+      audioEngineWeightForwarded,
+      constructorWeight,
+      setterWeight,
       audioEngineValue: audioEngine.setFeedbackAllLevel('invalid-value'),
       audioEngineForwarded,
       constructorValue,
       setterValue,
-      workletValue: filterbank.workletNode.messages.at(-1).value
+      workletValue: filterbank.workletNode.messages.at(-2).value,
+      workletWeightValue: filterbank.workletNode.messages.at(-1).value
     };
   });
   expect(fallback).toEqual({
-    audioEngineValue: 'raw', audioEngineForwarded: 'raw', constructorValue: 'raw', setterValue: 'raw', workletValue: 'raw'
+    audioEngineValue: 'raw', audioEngineForwarded: 'raw', constructorValue: 'raw', setterValue: 'raw', workletValue: 'raw',
+    audioEngineWeightValue: 'current', audioEngineWeightForwarded: 'current', constructorWeight: 'current', setterWeight: 'current', workletWeightValue: 'current'
   });
 
 });

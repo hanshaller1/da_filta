@@ -11,7 +11,7 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
   const devLabPanel = page.locator('[data-dev-lab-panel]');
   await expect(devLabPanel).toBeVisible();
   await expect(page.locator('.analyzer-header .dev-lab-controls')).toHaveCount(0);
-  await expect(page.locator('.dev-lab-panel [data-input-preamp-stage], .dev-lab-panel [data-reference-level], .dev-lab-panel [data-band-boost-db], .dev-lab-panel [data-band-cut-db], .dev-lab-panel [data-wet-model], .dev-lab-panel [data-feedback-topology], .dev-lab-panel [data-feedback-tap], .dev-lab-panel [data-common-bus-saturation-mode], .dev-lab-panel [data-common-bus-drive], .dev-lab-panel [data-common-bus-ceiling], .dev-lab-panel [data-feedback-all-engine], .dev-lab-panel [data-feedback-all-source], .dev-lab-panel [data-feedback-all-level], .dev-lab-panel [data-feedback-all-resonance-curve], .dev-lab-panel [data-feedback-all-saturation-return], .dev-lab-panel [data-positive-resonance-engine], .dev-lab-panel [data-positive-resonance-output], .dev-lab-panel [data-positive-resonance-latency], .dev-lab-panel [data-positive-resonance-curve], .dev-lab-panel [data-positive-resonance-audition], .dev-lab-panel [data-positive-resonance-drive], .dev-lab-panel [data-positive-resonance-damping-floor]')).toHaveCount(22);
+  await expect(page.locator('.dev-lab-panel [data-input-preamp-stage], .dev-lab-panel [data-reference-level], .dev-lab-panel [data-band-boost-db], .dev-lab-panel [data-band-cut-db], .dev-lab-panel [data-wet-model], .dev-lab-panel [data-feedback-topology], .dev-lab-panel [data-feedback-tap], .dev-lab-panel [data-common-bus-saturation-mode], .dev-lab-panel [data-common-bus-drive], .dev-lab-panel [data-common-bus-ceiling], .dev-lab-panel [data-feedback-all-engine], .dev-lab-panel [data-feedback-all-source], .dev-lab-panel [data-post-gain-feedback-weight], .dev-lab-panel [data-feedback-all-level], .dev-lab-panel [data-feedback-all-resonance-curve], .dev-lab-panel [data-feedback-all-saturation-return], .dev-lab-panel [data-positive-resonance-engine], .dev-lab-panel [data-positive-resonance-output], .dev-lab-panel [data-positive-resonance-latency], .dev-lab-panel [data-positive-resonance-curve], .dev-lab-panel [data-positive-resonance-audition], .dev-lab-panel [data-positive-resonance-drive], .dev-lab-panel [data-positive-resonance-damping-floor]')).toHaveCount(23);
   await expect(page.locator('[data-feedback-all-engine]')).toHaveValue('legacy');
   await expect(page.locator('[data-feedback-all-source]')).toHaveValue('post-gain-sum');
   await expect(page.locator('[data-feedback-all-level]')).toHaveValue('raw');
@@ -38,8 +38,10 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
   await expect(page.locator('[data-feedback-all-level]')).toHaveValue('fortieth');
   expect(await page.locator('[data-feedback-all-engine] option').allTextContents()).toEqual(['LEGACY', 'COMMON BUS']);
   expect(await page.locator('[data-feedback-all-source] option').allTextContents()).toEqual(['PRE GAIN SUM', 'POST GAIN SUM']);
+  await expect(page.locator('[data-post-gain-feedback-weight]')).toHaveValue('current');
+  expect(await page.locator('[data-post-gain-feedback-weight] option').allTextContents()).toEqual(['CURRENT', 'SOFT KNEE']);
   expect(await page.locator('[data-feedback-all-level] option').allTextContents()).toEqual([
-    'RAW', '1 / SQRT(10)', '1 / 10', '1 / 20', '1 / 40', '1 / 80'
+    'RAW', '1 / SQRT(2)', '1 / 2', '1 / SQRT(10)', '1 / 10', '1 / 20', '1 / 40', '1 / 80'
   ]);
   expect(await page.locator('[data-feedback-all-resonance-curve] option').allTextContents()).toEqual(['CURRENT', 'SOFT KNEE']);
   expect(await page.locator('[data-feedback-all-saturation-return] option').allTextContents()).toEqual(['CURRENT', 'DRIVE 4 / RETURN 0.2']);
@@ -134,6 +136,8 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
     const legacyExplicit = await render({ feedbackAll: true, feedbackAllEngine: 'legacy' });
     const legacyLevel = await render({ feedbackAll: true, feedbackAllEngine: 'legacy', feedbackAllLevel: 'tenth' });
     const mainOnly = await render({ feedbackAll: true, feedbackAllEngine: 'common-bus' });
+    const mainSqrt2 = await render({ feedbackAll: true, feedbackAllEngine: 'common-bus', feedbackAllLevel: 'sqrt2' });
+    const mainHalf = await render({ feedbackAll: true, feedbackAllEngine: 'common-bus', feedbackAllLevel: 'half' });
     const mainSqrt = await render({ feedbackAll: true, feedbackAllEngine: 'common-bus', feedbackAllLevel: 'sqrt10' });
     const mainTenth = await render({ feedbackAll: true, feedbackAllEngine: 'common-bus', feedbackAllLevel: 'tenth' });
     const mainTwentieth = await render({ feedbackAll: true, feedbackAllEngine: 'common-bus', feedbackAllLevel: 'twentieth' });
@@ -182,6 +186,8 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
       localParity: maxDifference(localLegacyEngine.samples, localCommonEngine.samples),
       localLevelParity: maxDifference(localCommonEngine.samples, localTenth.samples),
       mainOnly: mainOnly.latest,
+      mainSqrt2: mainSqrt2.latest,
+      mainHalf: mainHalf.latest,
       mainSqrt: mainSqrt.latest,
       mainTenth: mainTenth.latest,
       mainTwentieth: mainTwentieth.latest,
@@ -201,7 +207,7 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
       extremeRaw: extremeRaw.latest,
       extremeSqrt: extremeSqrt.latest,
       extremeTenth: extremeTenth.latest,
-      finite: [mainOnly, mainSqrt, mainTenth, mainTwentieth, mainFortieth, mainEightieth, dual, preNeutral, postNeutral, preBoosted, postBoosted, referenceDelta, filterbankSum, zeroTail, switchedToLegacy, switchedToCommon, extremeRaw, extremeSqrt, extremeTenth]
+      finite: [mainOnly, mainSqrt2, mainHalf, mainSqrt, mainTenth, mainTwentieth, mainFortieth, mainEightieth, dual, preNeutral, postNeutral, preBoosted, postBoosted, referenceDelta, filterbankSum, zeroTail, switchedToLegacy, switchedToCommon, extremeRaw, extremeSqrt, extremeTenth]
         .every(item => item.finite && item.latest.left.finite && item.latest.right.finite)
     };
   });
@@ -214,11 +220,17 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
   expect(report.mainOnly.left.commonFeedbackReturnPeak).toBe(0);
   expect(report.mainOnly.right.mainCommonFeedbackReturnPeak).toBe(0);
   expect(report.mainOnly.left.mainFeedbackLevelScale).toBe(1);
+  expect(report.mainSqrt2.left.mainFeedbackLevelScale).toBeCloseTo(1 / Math.sqrt(2), 12);
+  expect(report.mainHalf.left.mainFeedbackLevelScale).toBe(0.5);
   expect(report.mainSqrt.left.mainFeedbackLevelScale).toBeCloseTo(1 / Math.sqrt(10), 12);
   expect(report.mainTenth.left.mainFeedbackLevelScale).toBe(0.1);
   expect(report.mainTwentieth.left.mainFeedbackLevelScale).toBe(0.05);
   expect(report.mainFortieth.left.mainFeedbackLevelScale).toBe(0.025);
   expect(report.mainEightieth.left.mainFeedbackLevelScale).toBe(0.0125);
+  expect(report.mainSqrt2.left.firstMainTapSum).toBeCloseTo(report.mainOnly.left.firstMainTapSum, 12);
+  expect(report.mainHalf.left.firstMainTapSum).toBeCloseTo(report.mainOnly.left.firstMainTapSum, 12);
+  expect(report.mainSqrt2.left.firstMainTapSumScaled).toBeCloseTo(report.mainOnly.left.firstMainTapSum / Math.sqrt(2), 12);
+  expect(report.mainHalf.left.firstMainTapSumScaled).toBeCloseTo(report.mainOnly.left.firstMainTapSum * 0.5, 12);
   expect(report.mainSqrt.left.firstMainTapSum).toBeCloseTo(report.mainOnly.left.firstMainTapSum, 12);
   expect(report.mainTenth.left.firstMainTapSum).toBeCloseTo(report.mainOnly.left.firstMainTapSum, 12);
   expect(report.mainSqrt.left.firstMainTapSumScaled).toBeCloseTo(report.mainOnly.left.firstMainTapSum / Math.sqrt(10), 12);
@@ -226,6 +238,12 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
   expect(report.mainTwentieth.left.firstMainTapSumScaled).toBeCloseTo(report.mainOnly.left.firstMainTapSum * 0.05, 12);
   expect(report.mainFortieth.left.firstMainTapSumScaled).toBeCloseTo(report.mainOnly.left.firstMainTapSum * 0.025, 12);
   expect(report.mainEightieth.left.firstMainTapSumScaled).toBeCloseTo(report.mainOnly.left.firstMainTapSum * 0.0125, 12);
+  expect(report.mainOnly.left.mainFeedbackLevelScale).toBeGreaterThan(report.mainSqrt2.left.mainFeedbackLevelScale);
+  expect(report.mainSqrt2.left.mainFeedbackLevelScale).toBeGreaterThan(report.mainHalf.left.mainFeedbackLevelScale);
+  expect(report.mainHalf.left.mainFeedbackLevelScale).toBeGreaterThan(report.mainSqrt.left.mainFeedbackLevelScale);
+  expect(report.mainSqrt.left.mainFeedbackLevelScale).toBeGreaterThan(report.mainTenth.left.mainFeedbackLevelScale);
+  expect(report.mainOnly.left.mainFeedbackLevelScale / report.mainSqrt2.left.mainFeedbackLevelScale).toBeCloseTo(Math.sqrt(2), 12);
+  expect(report.mainOnly.left.mainFeedbackLevelScale / report.mainHalf.left.mainFeedbackLevelScale).toBe(2);
   expect(report.dual.left.commonFeedbackReturnPeak).toBeGreaterThan(1e-5);
   expect(report.dual.left.mainCommonFeedbackReturnPeak).toBeGreaterThan(1e-5);
   expect(report.preNeutral.left.mainTapSumPeak).toBeCloseTo(report.postNeutral.left.mainTapSumPeak, 12);
