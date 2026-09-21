@@ -42,7 +42,8 @@ test('theme selector switches all themes and persists without resetting UI state
     'copper-circuit', 'ultraviolet', 'deep-ocean', 'amber-crt', 'ice-lab'
   ];
 
-  await expect(themeSelect.locator('option')).toHaveCount(16);
+  await expect(themeSelect.locator('option')).toHaveCount(17);
+  await expect(themeSelect.locator('option[value="custom"]')).toHaveAttribute('disabled', '');
   await expect(themeSelect.locator('option[value="soft-neutral"]')).toHaveCount(0);
   await expect(themeSelect).toHaveValue('current');
   await expect(page.locator('body')).toHaveAttribute('data-theme', 'current');
@@ -83,6 +84,49 @@ test('theme selector switches all themes and persists without resetting UI state
   expect(layout.themePickerHeight).toBeLessThanOrEqual(layout.headerHeight);
   expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
+});
+
+test('theme editor applies live overrides, resets them, and restores the saved custom slot', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const select = page.locator('[data-theme-select]');
+  await select.selectOption('forest');
+  await page.locator('[data-theme-editor-toggle]').click();
+  await expect(page.locator('[data-theme-editor-panel]')).toBeVisible();
+  await expect(page.locator('[data-theme-editor-base]')).toHaveText('Forest');
+
+  const original = await page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--cyan').trim());
+  await page.locator('[data-theme-field="accent"]').fill('#ff00aa');
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--cyan').trim())).not.toBe(original);
+  await page.locator('[data-theme-field="brightness"]').fill('30');
+  await page.locator('[data-theme-field="gradients"]').uncheck();
+  await page.locator('[data-theme-save]').click();
+  await expect(select).toHaveValue('custom');
+  await expect(select.locator('option[value="custom"]')).toBeEnabled();
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await expect(select).toHaveValue('custom');
+  await expect(page.locator('body')).toHaveAttribute('data-theme', 'forest');
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--cyan').trim())).not.toBe(original);
+
+  await select.selectOption('graphite');
+  await expect(select).toHaveValue('graphite');
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--cyan').trim())).not.toBe('#ff00aa');
+  await page.locator('[data-theme-editor-toggle]').click();
+  await page.locator('[data-theme-field="accent"]').fill('#00ffaa');
+  await page.locator('[data-theme-reset]').click();
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--cyan').trim())).toBe('#d3b28c');
+});
+
+test('theme editor popover remains reachable at tablet width', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 768 });
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.locator('[data-theme-editor-toggle]').click();
+  const box = await page.locator('[data-theme-editor-panel]').boundingBox();
+  expect(box).not.toBeNull();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(900);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeLessThan(768);
 });
 
 test('theme storage migrates the legacy project key without deleting it', async ({ page }) => {
