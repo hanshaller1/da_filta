@@ -143,6 +143,7 @@
       this.feedbackTopology = initialState?.feedbackTopology === 'common-bus'
         ? 'common-bus'
         : initialState?.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
+      this.feedbackCore = initialState?.feedbackCore === 'zdf' ? 'zdf' : 'current';
       this.localLoopTuning = normalizeLocalLoopTuning(initialState?.localLoopTuning);
       this.feedbackTap = initialState?.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
       this.wetModel = initialState?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
@@ -182,7 +183,7 @@
           maxBandCutDb: this.maxBandCutDb,
           referenceLevel: this.referenceLevel,
           positiveResonanceEngine: this.positiveResonanceEngine,
-          feedbackTopology: this.feedbackTopology, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel,
+          feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel,
           commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling,
           feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn,
           smoothingTime: PARAMETER_SMOOTHING_SECONDS,
@@ -334,6 +335,7 @@
     setBandCutDb(value) { if (!this.disposed) { this.maxBandCutDb = normalizeBandCutDb(value); this.workletNode.port.postMessage({ type: 'set-band-cut-db', value: this.maxBandCutDb }); } return this.maxBandCutDb; }
     setPositiveResonanceEngine(value) { if (!this.disposed) { this.positiveResonanceEngine = normalizePositiveResonanceEngine(value); this.workletNode.port.postMessage({ type: 'set-positive-resonance-engine', value: this.positiveResonanceEngine }); } return this.positiveResonanceEngine; }
     setFeedbackTopology(value) { if (!this.disposed) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt'; this.workletNode.port.postMessage({ type: 'set-feedback-topology', value: this.feedbackTopology }); } return this.feedbackTopology; }
+    setFeedbackCore(value) { if (!this.disposed) { this.feedbackCore = value === 'zdf' ? 'zdf' : 'current'; this.workletNode.port.postMessage({ type: 'set-feedback-core', value: this.feedbackCore }); } return this.feedbackCore; }
     setLocalLoopTuning(value) { if (!this.disposed) { this.localLoopTuning = normalizeLocalLoopTuning(value); this.workletNode.port.postMessage({ type: 'set-local-loop-tuning', value: this.localLoopTuning }); } return this.localLoopTuning; }
     setFeedbackTap(value) { if (!this.disposed) { this.feedbackTap = value === 'post-gain' ? 'post-gain' : 'pre-gain'; this.workletNode.port.postMessage({ type: 'set-feedback-tap', value: this.feedbackTap }); } return this.feedbackTap; }
     setWetModel(value) { if (!this.disposed) { this.wetModel = value === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta'; this.workletNode.port.postMessage({ type: 'set-wet-model', value: this.wetModel }); } return this.wetModel; }
@@ -369,6 +371,7 @@
       this.feedbackTopology = snapshot?.feedbackTopology === 'common-bus'
         ? 'common-bus'
         : snapshot?.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : this.feedbackTopology;
+      this.feedbackCore = snapshot?.feedbackCore === 'zdf' ? 'zdf' : 'current';
       this.localLoopTuning = normalizeLocalLoopTuning(snapshot?.localLoopTuning ?? this.localLoopTuning);
       this.feedbackTap = snapshot?.feedbackTap === 'post-gain' ? 'post-gain' : this.feedbackTap;
       this.wetModel = snapshot?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : this.wetModel;
@@ -394,7 +397,7 @@
         positiveResonanceLatencyMode: this.positiveResonanceLatencyMode,
         positiveResonanceCurve: this.positiveResonanceCurve
         , referenceLevel: this.referenceLevel, maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb, positiveResonanceEngine: this.positiveResonanceEngine
-        , feedbackTopology: this.feedbackTopology, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel
+        , feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
         , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
       });

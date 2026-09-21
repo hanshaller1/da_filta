@@ -27,6 +27,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.feedbackTopology = processorOptions.feedbackTopology === 'common-bus'
       ? 'common-bus'
       : processorOptions.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
+    this.feedbackCore = processorOptions.feedbackCore === 'zdf' ? 'zdf' : 'current';
     this.localLoopTuning = this.readLocalLoopTuning(processorOptions.localLoopTuning);
     this.feedbackTap = processorOptions.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
     this.wetModel = processorOptions.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
@@ -127,6 +128,16 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.mainCommonFeedbackReturns = { left: 0, right: 0 };
     this.mainCommonSaturationOutputs = { left: 0, right: 0 };
     this.mainCommonNonFiniteResetCounts = { left: 0, right: 0 };
+    this.zdfReturn = { left: 0, right: 0 };
+    this.zdfLocalReturn = { left: 0, right: 0 };
+    this.zdfMainReturn = { left: 0, right: 0 };
+    this.zdfLocalBus = { left: 0, right: 0 };
+    this.zdfMainBus = { left: 0, right: 0 };
+    this.zdfSolverIterations = { left: 0, right: 0 };
+    this.zdfSolverMaxIterations = { left: 0, right: 0 };
+    this.zdfSolverResidual = { left: 0, right: 0 };
+    this.zdfSolverFallbackCount = { left: 0, right: 0 };
+    this.zdfNonFiniteResetCount = { left: 0, right: 0 };
     this.bandOutputs = {
       left: Array(this.bandCount).fill(0),
       right: Array(this.bandCount).fill(0)
@@ -404,7 +415,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   applyLocalLoopTuning() {
     if (!this.baseFilters) return;
-    const useCompensatedFrequencies = this.feedbackTopology === 'local-loop-exp'
+    const useCompensatedFrequencies = this.feedbackCore !== 'zdf' && this.feedbackTopology === 'local-loop-exp'
       && this.positiveResonanceEngine === 'tpt'
       && this.localLoopTuning === 'compensated';
     for (const channel of ['left', 'right']) {
@@ -471,6 +482,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       nonlinearNonFiniteStateResets: Array(this.bandCount).fill(0),
       commonFeedbackReturn: 0,
       commonTapSum: 0,
+      commonTapSumPeak: 0,
       commonSaturationInput: 0,
       commonSaturationOutput: 0,
       commonFeedbackReturnPeak: 0,
@@ -493,6 +505,20 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       resonanceTarget: 0,
       smoothedResonance: 0,
       localLoopTuning: this.localLoopTuning,
+      feedbackCore: this.feedbackCore,
+      feedbackCoreEffective: 'current',
+      zdfLocalBus: 0,
+      zdfMainBus: 0,
+      zdfLocalBusPeak: 0,
+      zdfMainBusPeak: 0,
+      zdfTotalReturn: 0,
+      zdfSolverIterations: 0,
+      zdfSolverMaxIterations: 0,
+      zdfSolverResidual: 0,
+      zdfSolverLastResidual: 0,
+      zdfSolverFallbackCount: 0,
+      zdfNonFiniteResetCount: 0,
+      dominantBaseBand: -1,
       baseFilterFrequencies: this.baseFilters?.left.map(filter => filter.frequency) ?? [],
       sampleCount: 0
     };
@@ -510,6 +536,117 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   processBandpass(filter, input) {
     return filter.process(input);
+  }
+
+  // For the existing TPT: unitBand = baseK * (a1*ic1eq + a2*(input-ic2eq)).
+  // The two signed bus sums are therefore affine in the one shared return.
+  solveZdfReturn(source, channel, feedbackAllGate) {
+    const filters = this.baseFilters[channel];
+    const gates = this.feedbackGates[channel];
+    const gateTargets = this.feedbackGateTargets[channel];
+    const gains = this.deltaGains[channel];
+    const gainTargets = this.deltaTargets[channel];
+    const localPost = this.feedbackTopology === 'common-bus' && this.feedbackTap === 'post-gain';
+    const mainPost = this.feedbackAllSource === 'post-gain-sum';
+    const level = this.feedbackAllLevelScale();
+    let localA = 0; let localB = 0; let mainA = 0; let mainB = 0;
+    for (let band = 0; band < this.bandCount; band += 1) {
+      gates[band] = gateTargets[band] + this.feedbackGateSmoothingCoefficient * (gates[band] - gateTargets[band]);
+      gains[band] = gainTargets[band] + this.bandGainSmoothingCoefficient * (gains[band] - gainTargets[band]);
+      const filter = filters[band];
+      if (!Number.isFinite(filter.ic1eq) || !Number.isFinite(filter.ic2eq)) {
+        filter.reset();
+        this.zdfNonFiniteResetCount[channel] += 1;
+      }
+      const a = filter.baseK * filter.a2;
+      const b = filter.baseK * (filter.a1 * filter.ic1eq + filter.a2 * (source - filter.ic2eq));
+      const audibleGain = 1 + gains[band];
+      const localWeight = gates[band] * (localPost ? audibleGain : 1);
+      const mainWeight = feedbackAllGate * level * (mainPost ? this.mainPostGainFeedbackWeight(audibleGain) : 1);
+      localA += localWeight * a;
+      localB += localWeight * b;
+      mainA += mainWeight * a;
+      mainB += mainWeight * b;
+    }
+    const signedResonance = Math.sign(this.resonance) * this.resonance * this.resonance;
+    if (signedResonance === 0 || (localA === 0 && mainA === 0)) {
+      this.zdfReturn[channel] = 0;
+      this.zdfLocalReturn[channel] = 0;
+      this.zdfMainReturn[channel] = 0;
+      this.zdfLocalBus[channel] = localB;
+      this.zdfMainBus[channel] = mainB;
+      this.zdfSolverIterations[channel] = 0;
+      this.zdfSolverResidual[channel] = 0;
+      return 0;
+    }
+    const localGain = this.maxFeedbackGain * signedResonance;
+    const mainCurveGain = this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
+      ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : this.resonance * this.resonance;
+    const mainGain = Math.sign(this.resonance) * this.maxFeedbackGain * mainCurveGain;
+    const localConstantCeiling = this.feedbackTopology === 'common-bus'
+      && this.commonBusSaturationMode === 'constant-ceiling';
+    const localCeiling = localConstantCeiling ? this.commonBusCeiling : 1;
+    const specialMain = this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
+      && this.feedbackTopology === 'common-bus' && this.commonBusSaturationMode === 'current';
+    const mainCeiling = specialMain ? 0.2
+      : this.commonBusSaturationMode === 'constant-ceiling' ? this.commonBusCeiling : 1;
+    const localScale = localConstantCeiling ? this.commonBusDrive / localCeiling : 1;
+    const mainScale = specialMain ? 4
+      : this.commonBusSaturationMode === 'constant-ceiling' ? this.commonBusDrive / mainCeiling : 1;
+    const localSlope = localGain * localA * localScale * localCeiling;
+    const mainSlope = mainGain * mainA * mainScale * mainCeiling;
+    const bound = localCeiling + mainCeiling;
+    let lower = -bound; let upper = bound;
+    let value = Math.max(lower, Math.min(upper, this.zdfReturn[channel]));
+    let residual = Infinity; let iterations = 0; let fallback = false;
+    for (; iterations < 6; iterations += 1) {
+      const localTanh = Math.tanh(localScale * localGain * (localA * value + localB));
+      const mainTanh = Math.tanh(mainScale * mainGain * (mainA * value + mainB));
+      const error = value - localCeiling * localTanh - mainCeiling * mainTanh;
+      residual = Math.abs(error);
+      if (!Number.isFinite(error)) { fallback = true; break; }
+      if (error > 0) upper = value; else lower = value;
+      if (residual < 1e-8) { iterations += 1; break; }
+      const derivative = 1 - localSlope * (1 - localTanh * localTanh)
+        - mainSlope * (1 - mainTanh * mainTanh);
+      const candidate = Math.abs(derivative) > 1e-9 ? value - error / derivative : NaN;
+      if (!Number.isFinite(candidate) || candidate <= lower || candidate >= upper) {
+        value = 0.5 * (lower + upper);
+        fallback = true;
+      } else value = candidate;
+    }
+    if (residual >= 1e-8) {
+      fallback = true;
+      for (let step = 0; step < 20; step += 1) {
+        value = 0.5 * (lower + upper);
+        const localTanh = Math.tanh(localScale * localGain * (localA * value + localB));
+        const mainTanh = Math.tanh(mainScale * mainGain * (mainA * value + mainB));
+        const error = value - localCeiling * localTanh - mainCeiling * mainTanh;
+        if (!Number.isFinite(error)) break;
+        residual = Math.abs(error);
+        if (residual < 1e-8) break;
+        if (error > 0) upper = value; else lower = value;
+      }
+    }
+    if (!Number.isFinite(value) || !Number.isFinite(residual)) {
+      value = 0;
+      residual = 0;
+      this.zdfNonFiniteResetCount[channel] += 1;
+    }
+    const localBus = localA * value + localB;
+    const mainBus = mainA * value + mainB;
+    const localReturn = localCeiling * Math.tanh(localScale * localGain * localBus);
+    const mainReturn = mainCeiling * Math.tanh(mainScale * mainGain * mainBus);
+    this.zdfReturn[channel] = value;
+    this.zdfLocalReturn[channel] = Number.isFinite(localReturn) ? localReturn : 0;
+    this.zdfMainReturn[channel] = Number.isFinite(mainReturn) ? mainReturn : 0;
+    this.zdfLocalBus[channel] = Number.isFinite(localBus) ? localBus : 0;
+    this.zdfMainBus[channel] = Number.isFinite(mainBus) ? mainBus : 0;
+    this.zdfSolverIterations[channel] = iterations;
+    this.zdfSolverMaxIterations[channel] = Math.max(this.zdfSolverMaxIterations[channel], iterations);
+    this.zdfSolverResidual[channel] = residual;
+    if (fallback) this.zdfSolverFallbackCount[channel] += 1;
+    return value;
   }
 
   setBandControl(channel, index, value, immediate = false) {
@@ -654,6 +791,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.clearLocalFeedbackReturns();
     this.clearMainCommonFeedbackReturns();
     this.clearLegacyFeedbackReturns();
+    this.clearZdfReturns();
+    if (this.feedbackCore === 'zdf') {
+      for (const channel of ['left', 'right']) this.baseFilters[channel].forEach(filter => filter.reset());
+    }
   }
 
   applyCommonBusSaturation(drive) {
@@ -710,10 +851,30 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   setFeedbackTopology(value) {
     const nextTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
+    if (this.feedbackCore === 'zdf' && nextTopology !== this.feedbackTopology) this.clearZdfReturns();
     if (this.feedbackTopology === 'local-loop-exp' && nextTopology !== 'local-loop-exp') this.clearLocalFeedbackReturns();
     this.feedbackTopology = nextTopology;
     this.applyLocalLoopTuning();
     if (this.feedbackTopology === 'isolated-tpt') this.clearMainCommonFeedbackReturns();
+  }
+  clearZdfReturns() {
+    this.zdfReturn.left = this.zdfReturn.right = 0;
+    this.zdfLocalReturn.left = this.zdfLocalReturn.right = 0;
+    this.zdfMainReturn.left = this.zdfMainReturn.right = 0;
+    this.zdfLocalBus.left = this.zdfLocalBus.right = 0;
+    this.zdfMainBus.left = this.zdfMainBus.right = 0;
+  }
+  setFeedbackCore(value) {
+    const nextCore = value === 'zdf' ? 'zdf' : 'current';
+    if (nextCore === this.feedbackCore) return;
+    this.feedbackCore = nextCore;
+    this.clearZdfReturns();
+    this.clearLocalFeedbackReturns();
+    this.clearMainCommonFeedbackReturns();
+    this.clearLegacyFeedbackReturns();
+    this.commonFeedbackReturns.left = this.commonFeedbackReturns.right = 0;
+    for (const channel of ['left', 'right']) this.baseFilters[channel].forEach(filter => filter.reset());
+    this.applyLocalLoopTuning();
   }
   setLocalLoopTuning(value) {
     const nextTuning = this.readLocalLoopTuning(value);
@@ -773,6 +934,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.maxBandCutDb !== undefined) this.setBandCutDb(data.maxBandCutDb, true);
     if (data.positiveResonanceEngine !== undefined) this.setPositiveResonanceEngine(data.positiveResonanceEngine);
     if (data.feedbackTopology !== undefined) this.setFeedbackTopology(data.feedbackTopology);
+    if (data.feedbackCore !== undefined) this.setFeedbackCore(data.feedbackCore);
     if (data.localLoopTuning !== undefined) this.setLocalLoopTuning(data.localLoopTuning);
     if (data.feedbackTap !== undefined) this.setFeedbackTap(data.feedbackTap);
     if (data.wetModel !== undefined) this.setWetModel(data.wetModel);
@@ -835,6 +997,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-band-cut-db') { this.setBandCutDb(data.value); return; }
     if (data.type === 'set-positive-resonance-engine') { this.setPositiveResonanceEngine(data.value); return; }
     if (data.type === 'set-feedback-topology') { this.setFeedbackTopology(data.value); return; }
+    if (data.type === 'set-feedback-core') { this.setFeedbackCore(data.value); return; }
     if (data.type === 'set-local-loop-tuning') { this.setLocalLoopTuning(data.value); return; }
     if (data.type === 'set-feedback-tap') { this.setFeedbackTap(data.value); return; }
     if (data.type === 'set-wet-model') { this.setWetModel(data.value); return; }
@@ -873,22 +1036,23 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const resonatorMagnitudes = this.resonatorMagnitudes[channel];
     const resonatorAuditionGates = this.resonatorAuditionGates[channel];
     const source = Number.isFinite(input) ? input : 0;
+    const zdfActive = this.feedbackCore === 'zdf' && this.feedbackTopology !== 'isolated-tpt';
     const feedbackAllGate = this.feedbackAllGateTargets[channel] + this.feedbackGateSmoothingCoefficient * (this.feedbackAllGates[channel] - this.feedbackAllGateTargets[channel]);
     this.feedbackAllGates[channel] = feedbackAllGate;
     // A positive common-bus loop follows the already smoothed resonance
     // state on its way to zero. A negative target still leaves the positive
     // topology immediately, preserving the legacy negative-path handoff.
     const commonBusActive = this.feedbackTopology === 'common-bus'
-      && this.resonanceTarget >= 0
-      && this.resonance > COMMON_BUS_RESONANCE_EPSILON;
+      && (zdfActive ? Math.abs(this.resonance) > COMMON_BUS_RESONANCE_EPSILON
+        : this.resonanceTarget >= 0 && this.resonance > COMMON_BUS_RESONANCE_EPSILON);
     const localLoopActive = this.feedbackTopology === 'local-loop-exp'
-      && this.resonanceTarget >= 0
-      && this.resonance > COMMON_BUS_RESONANCE_EPSILON;
+      && (zdfActive ? Math.abs(this.resonance) > COMMON_BUS_RESONANCE_EPSILON
+        : this.resonanceTarget >= 0 && this.resonance > COMMON_BUS_RESONANCE_EPSILON);
     const usesCommonBusMainEngine = this.feedbackTopology !== 'isolated-tpt'
       && this.feedbackAllEngine === 'common-bus'
       && this.resonanceTarget >= 0;
     const mainCommonBusActive = (commonBusActive || localLoopActive)
-      && usesCommonBusMainEngine
+      && (zdfActive || usesCommonBusMainEngine)
       && feedbackAllGate > COMMON_BUS_RESONANCE_EPSILON;
     const localCommonReturn = commonBusActive && Number.isFinite(this.commonFeedbackReturns[channel])
       ? this.commonFeedbackReturns[channel]
@@ -901,13 +1065,15 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     let commonTapSum = 0;
     let mainTapSum = 0;
     let globalTapSum = 0;
-    const usesLegacyLocalResonance = (this.resonanceTarget < 0 && this.resonance < 0)
-      || (this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'phase2' && this.resonanceTarget > 0 && this.resonance > 0);
-    const usesLegacyFeedbackAll = feedbackAllGate > 1e-12 && !usesCommonBusMainEngine;
+    const zdfReturn = zdfActive ? this.solveZdfReturn(source, channel, feedbackAllGate) : 0;
+    const usesLegacyLocalResonance = !zdfActive && ((this.resonanceTarget < 0 && this.resonance < 0)
+      || (this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'phase2' && this.resonanceTarget > 0 && this.resonance > 0));
+    const usesLegacyFeedbackAll = !zdfActive && feedbackAllGate > 1e-12 && !usesCommonBusMainEngine;
     let hasActiveLegacyFeedbackGate = usesLegacyFeedbackAll;
 
     for (let band = 0; band < this.bandCount; band += 1) {
-      const localGate = feedbackGateTargets[band] + this.feedbackGateSmoothingCoefficient * (feedbackGates[band] - feedbackGateTargets[band]);
+      const localGate = zdfActive ? feedbackGates[band]
+        : feedbackGateTargets[band] + this.feedbackGateSmoothingCoefficient * (feedbackGates[band] - feedbackGateTargets[band]);
       feedbackGates[band] = localGate;
       if (usesLegacyLocalResonance && localGate > 1e-12) hasActiveLegacyFeedbackGate = true;
       const resonatorMagnitudeTarget = this.getResonatorMagnitudeTarget(localGate);
@@ -927,7 +1093,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const localLoopReturn = localLoopActive && Number.isFinite(this.localFeedbackReturns[channel][band])
         ? this.localFeedbackReturns[channel][band]
         : 0;
-      const bandInput = source + previousReturn + localCommonReturn + mainCommonReturn + localLoopReturn;
+      const bandInput = zdfActive ? source + zdfReturn
+        : source + previousReturn + localCommonReturn + mainCommonReturn + localLoopReturn;
       const bandOutput = this.processBandpass(baseFilters[band], bandInput);
       const resonatorBandOutput = this.processBandpass(resonatorFilters[band], source);
       const resonanceResidual = resonatorBandOutput - bandOutput;
@@ -1024,7 +1191,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
           && Number.isFinite(maximumState);
       }
       globalTapSum += bandOutput;
-      deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
+      if (!zdfActive) deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
       const audibleGain = 1 + deltaGains[band];
       const mainPostGainWeight = this.mainPostGainFeedbackWeight(audibleGain);
       if (this.collectResonatorDiagnostics) {
@@ -1065,27 +1232,27 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       }
     }
 
-    if (commonBusActive && resonanceMagnitudeSquared > 0) {
+    if (!zdfActive && commonBusActive && resonanceMagnitudeSquared > 0) {
       const feedbackGain = this.maxFeedbackGain * resonanceMagnitudeSquared;
       const drive = feedbackGain * commonTapSum;
       const feedbackReturn = this.applyCommonBusSaturation(drive);
       this.commonFeedbackReturns[channel] = feedbackReturn === null ? 0 : feedbackReturn;
-    } else {
+    } else if (!zdfActive) {
       this.commonFeedbackReturns[channel] = 0;
     }
 
-    if (localLoopActive && resonanceMagnitudeSquared > 0) {
+    if (!zdfActive && localLoopActive && resonanceMagnitudeSquared > 0) {
       const feedbackGain = this.maxFeedbackGain * resonanceMagnitudeSquared;
       for (let band = 0; band < this.bandCount; band += 1) {
         const feedbackDrive = feedbackGain * feedbackGates[band] * bandOutputs[band];
         const feedbackReturn = Number.isFinite(feedbackDrive) ? Math.tanh(feedbackDrive) : 0;
         this.localFeedbackReturns[channel][band] = Number.isFinite(feedbackReturn) ? feedbackReturn : 0;
       }
-    } else {
+    } else if (!zdfActive) {
       this.localFeedbackReturns[channel].fill(0);
     }
 
-    if (mainCommonBusActive && resonanceMagnitudeSquared > 0) {
+    if (!zdfActive && mainCommonBusActive && resonanceMagnitudeSquared > 0) {
       const feedbackGain = this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared);
       const mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
       const drive = feedbackGain * mainTapSumScaled;
@@ -1098,9 +1265,17 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         this.mainCommonFeedbackReturns[channel] = saturation.feedbackReturn;
         this.mainCommonSaturationOutputs[channel] = saturation.saturationOutput;
       }
-    } else {
+    } else if (!zdfActive) {
       this.mainCommonFeedbackReturns[channel] = 0;
       this.mainCommonSaturationOutputs[channel] = 0;
+    }
+
+    if (zdfActive) {
+      this.commonFeedbackReturns[channel] = this.zdfLocalReturn[channel];
+      this.mainCommonFeedbackReturns[channel] = this.zdfMainReturn[channel];
+      const specialMain = this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
+        && this.feedbackTopology === 'common-bus' && this.commonBusSaturationMode === 'current';
+      this.mainCommonSaturationOutputs[channel] = specialMain ? this.zdfMainReturn[channel] / 0.2 : this.zdfMainReturn[channel];
     }
 
     const wetOutput = Number.isFinite(mainOutput) ? mainOutput : source;
@@ -1135,8 +1310,11 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       diagnostics.positiveResonanceCurve = this.positiveResonanceCurve;
       diagnostics.commonFeedbackReturn = this.commonFeedbackReturns[channel];
       diagnostics.commonTapSum = commonTapSum;
-      diagnostics.commonSaturationInput = commonBusActive && resonanceMagnitudeSquared > 0
-        ? this.maxFeedbackGain * resonanceMagnitudeSquared * commonTapSum : 0;
+      diagnostics.commonTapSumPeak = Math.max(diagnostics.commonTapSumPeak, Math.abs(commonTapSum));
+      diagnostics.commonSaturationInput = zdfActive
+        ? this.maxFeedbackGain * Math.sign(this.resonance) * resonanceMagnitudeSquared * this.zdfLocalBus[channel]
+        : commonBusActive && resonanceMagnitudeSquared > 0
+          ? this.maxFeedbackGain * resonanceMagnitudeSquared * commonTapSum : 0;
       diagnostics.commonSaturationOutput = this.commonFeedbackReturns[channel];
       diagnostics.commonFeedbackReturnPeak = Math.max(
         diagnostics.commonFeedbackReturnPeak,
@@ -1152,8 +1330,13 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       diagnostics.mainTapSum = mainTapSum;
       diagnostics.mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
       diagnostics.mainPostGainFeedbackWeightMode = this.postGainFeedbackWeight;
-      diagnostics.mainSaturationInput = mainCommonBusActive && resonanceMagnitudeSquared > 0
-        ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared) * diagnostics.mainTapSumScaled : 0;
+      diagnostics.mainSaturationInput = zdfActive
+        ? Math.sign(this.resonance) * this.maxFeedbackGain
+          * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
+            ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
+          * this.zdfMainBus[channel]
+        : mainCommonBusActive && resonanceMagnitudeSquared > 0
+          ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared) * diagnostics.mainTapSumScaled : 0;
       diagnostics.mainSaturationOutput = this.mainCommonSaturationOutputs[channel];
       diagnostics.mainSaturationReturnMode = this.feedbackAllSaturationReturn;
       const localSatDelta = Math.abs(diagnostics.commonSaturationInput - diagnostics.commonSaturationOutput);
@@ -1169,8 +1352,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
       diagnostics.mainTapSumScaledPeak = Math.max(diagnostics.mainTapSumScaledPeak, Math.abs(mainTapSumScaled));
       diagnostics.mainFeedbackLevelScale = this.feedbackAllLevelScale();
-      diagnostics.mainFeedbackGain = mainCommonBusActive && resonanceMagnitudeSquared > 0
-        ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared) : 0;
+      diagnostics.mainFeedbackGain = zdfActive
+        ? Math.sign(this.resonance) * this.maxFeedbackGain
+          * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
+            ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
+        : mainCommonBusActive && resonanceMagnitudeSquared > 0
+          ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared) : 0;
       if (diagnostics.firstMainTapSum === null && Math.abs(mainTapSum) > 0) {
         diagnostics.firstMainTapSum = mainTapSum;
         diagnostics.firstMainTapSumScaled = mainTapSumScaled;
@@ -1178,6 +1365,26 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       diagnostics.mainCommonNonFiniteResets = this.mainCommonNonFiniteResetCounts[channel];
       diagnostics.resonanceTarget = this.resonanceTarget;
       diagnostics.smoothedResonance = this.resonance;
+      diagnostics.feedbackCore = this.feedbackCore;
+      diagnostics.feedbackCoreEffective = zdfActive ? 'zdf' : 'current';
+      diagnostics.zdfLocalBus = this.zdfLocalBus[channel];
+      diagnostics.zdfMainBus = this.zdfMainBus[channel];
+      diagnostics.zdfLocalBusPeak = Math.max(diagnostics.zdfLocalBusPeak, Math.abs(this.zdfLocalBus[channel]));
+      diagnostics.zdfMainBusPeak = Math.max(diagnostics.zdfMainBusPeak, Math.abs(this.zdfMainBus[channel]));
+      diagnostics.zdfTotalReturn = this.zdfReturn[channel];
+      diagnostics.zdfSolverIterations += zdfActive ? this.zdfSolverIterations[channel] : 0;
+      diagnostics.zdfSolverMaxIterations = Math.max(diagnostics.zdfSolverMaxIterations, zdfActive ? this.zdfSolverIterations[channel] : 0);
+      diagnostics.zdfSolverResidual = Math.max(diagnostics.zdfSolverResidual, zdfActive ? this.zdfSolverResidual[channel] : 0);
+      diagnostics.zdfSolverLastResidual = zdfActive ? this.zdfSolverResidual[channel] : 0;
+      diagnostics.zdfSolverFallbackCount = this.zdfSolverFallbackCount[channel];
+      diagnostics.zdfNonFiniteResetCount = this.zdfNonFiniteResetCount[channel];
+      let dominantEnergy = 0;
+      for (let band = 0; band < this.bandCount; band += 1) {
+        if (diagnostics.baseBandEnergy[band] > dominantEnergy) {
+          dominantEnergy = diagnostics.baseBandEnergy[band];
+          diagnostics.dominantBaseBand = band;
+        }
+      }
       diagnostics.finite = diagnostics.finite
         && Number.isFinite(source)
         && Number.isFinite(wetOutput);

@@ -85,6 +85,7 @@ test.describe('Sweetspots', () => {
       '[data-reference-level]': '0.5', '[data-positive-resonance-engine]': 'phase2',
       '[data-local-loop-tuning]': 'compensated',
       '[data-feedback-topology]': 'common-bus', '[data-feedback-tap]': 'post-gain',
+      '[data-feedback-core]': 'zdf',
       '[data-feedback-all-engine]': 'common-bus', '[data-feedback-all-source]': 'post-gain-sum',
       '[data-post-gain-feedback-weight]': 'soft-knee', '[data-feedback-all-level]': 'half',
       '[data-wet-model]': 'filterbank-sum', '[data-common-bus-saturation-mode]': 'constant-ceiling',
