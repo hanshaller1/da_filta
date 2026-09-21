@@ -505,6 +505,26 @@
       this.sample = sample;
     }
 
+    ensureInputSpectrumAnalysers() {
+      if (this.inputSpectrumAnalyserLeft && this.inputSpectrumAnalyserRight) return true;
+      if (!this.context || !this.inputPreampNode || typeof this.context.createChannelSplitter !== 'function' || typeof this.context.createAnalyser !== 'function') return false;
+      this.inputSpectrumSplitterNode = this.context.createChannelSplitter(2);
+      this.inputSpectrumAnalyserLeft = this.context.createAnalyser();
+      this.inputSpectrumAnalyserRight = this.context.createAnalyser();
+      [this.inputSpectrumAnalyserLeft, this.inputSpectrumAnalyserRight].forEach(analyser => {
+        analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0.75;
+        analyser.minDecibels = -90;
+        analyser.maxDecibels = 0;
+      });
+      // Passive pre-filterbank measurement branch. It has no route to the
+      // mix or destination and therefore cannot alter the audible path.
+      this.inputPreampNode.connect(this.inputSpectrumSplitterNode);
+      this.inputSpectrumSplitterNode.connect(this.inputSpectrumAnalyserLeft, 0);
+      this.inputSpectrumSplitterNode.connect(this.inputSpectrumAnalyserRight, 1);
+      return true;
+    }
+
     async start({ inputDeviceId, outputDeviceId, sourceMode = 'device', sample = null }) {
       if (this.status === 'STARTING' || this.status === 'ON') return;
       this.setStatus('STARTING');
@@ -586,7 +606,7 @@
     async cleanup() {
       this.stopInputNodes({ immediate: true });
       if (this.filterbank) { this.filterbank.dispose(); this.filterbank = null; }
-      [this.sourceBus, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
+      [this.sourceBus, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.inputSpectrumSplitterNode, this.inputSpectrumAnalyserLeft, this.inputSpectrumAnalyserRight, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
       this.source = null;
       this.sourceBus = null;
       this.activeInputGate = null;
@@ -595,6 +615,9 @@
       this.inputPreampNode = null;
       this.dryGainNode = null;
       this.wetGainNode = null;
+      this.inputSpectrumSplitterNode = null;
+      this.inputSpectrumAnalyserLeft = null;
+      this.inputSpectrumAnalyserRight = null;
       this.spectrumSplitterNode = null;
       this.spectrumAnalyserLeft = null;
       this.spectrumAnalyserRight = null;
