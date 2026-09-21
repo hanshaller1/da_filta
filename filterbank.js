@@ -77,6 +77,7 @@
   const normalizePostGainFeedbackWeight = value => value === 'soft-knee' ? 'soft-knee' : 'current';
   const normalizeFeedbackAllResonanceCurve = value => value === 'soft-knee' ? 'soft-knee' : 'current';
   const normalizeFeedbackAllSaturationReturn = value => value === 'drive-4-return-0.2' ? 'drive-4-return-0.2' : 'current';
+  const normalizeFeedbackAllAmount = value => Number.isFinite(Number(value)) ? Math.min(100, Math.max(0, Number(value))) : 100;
   const normalizePositiveResonanceEngine = value => value === 'phase2' ? value : 'tpt';
   const normalizeLocalLoopTuning = value => value === 'compensated' ? 'compensated' : 'current';
   const normalizeFeedbackCore = value => value === 'zdf-per-band' ? 'zdf-per-band' : value === 'zdf' ? 'zdf' : 'current';
@@ -155,6 +156,7 @@
       this.feedbackAllSource = initialState?.feedbackAllSource === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum';
       this.postGainFeedbackWeight = normalizePostGainFeedbackWeight(initialState?.postGainFeedbackWeight);
       this.feedbackAllLevel = normalizeFeedbackAllLevel(initialState?.feedbackAllLevel);
+      this.feedbackAllAmount = normalizeFeedbackAllAmount(initialState?.feedbackAllAmount);
       this.feedbackAllResonanceCurve = normalizeFeedbackAllResonanceCurve(initialState?.feedbackAllResonanceCurve);
       this.feedbackAllSaturationReturn = normalizeFeedbackAllSaturationReturn(initialState?.feedbackAllSaturationReturn);
       this.onDiagnostics = typeof initialState?.onDiagnostics === 'function' ? initialState.onDiagnostics : null;
@@ -186,7 +188,7 @@
           positiveResonanceEngine: this.positiveResonanceEngine,
           feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel,
           commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling,
-          feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn,
+          feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn,
           smoothingTime: PARAMETER_SMOOTHING_SECONDS,
           feedbackGateSmoothingTime: FEEDBACK_GATE_SMOOTHING_SECONDS,
           resonanceSmoothingTime: RESONANCE_SMOOTHING_SECONDS,
@@ -347,6 +349,7 @@
     setFeedbackAllSource(value) { if (!this.disposed) { this.feedbackAllSource = value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; this.workletNode.port.postMessage({ type: 'set-feedback-all-source', value: this.feedbackAllSource }); } return this.feedbackAllSource; }
     setPostGainFeedbackWeight(value) { if (!this.disposed) { this.postGainFeedbackWeight = normalizePostGainFeedbackWeight(value); this.workletNode.port.postMessage({ type: 'set-post-gain-feedback-weight', value: this.postGainFeedbackWeight }); } return this.postGainFeedbackWeight; }
     setFeedbackAllLevel(value) { if (!this.disposed) { this.feedbackAllLevel = normalizeFeedbackAllLevel(value); this.workletNode.port.postMessage({ type: 'set-feedback-all-level', value: this.feedbackAllLevel }); } return this.feedbackAllLevel; }
+    setFeedbackAllAmount(value) { if (!this.disposed) { this.feedbackAllAmount = normalizeFeedbackAllAmount(value); this.workletNode.port.postMessage({ type: 'set-feedback-all-amount', value: this.feedbackAllAmount }); } return this.feedbackAllAmount; }
     setFeedbackAllResonanceCurve(value) { if (!this.disposed) { this.feedbackAllResonanceCurve = normalizeFeedbackAllResonanceCurve(value); this.workletNode.port.postMessage({ type: 'set-feedback-all-resonance-curve', value: this.feedbackAllResonanceCurve }); } return this.feedbackAllResonanceCurve; }
     setFeedbackAllSaturationReturn(value) { if (!this.disposed) { this.feedbackAllSaturationReturn = normalizeFeedbackAllSaturationReturn(value); this.workletNode.port.postMessage({ type: 'set-feedback-all-saturation-return', value: this.feedbackAllSaturationReturn }); } return this.feedbackAllSaturationReturn; }
 
@@ -380,6 +383,7 @@
       this.feedbackAllSource = snapshot?.feedbackAllSource === 'pre-gain-sum' ? 'pre-gain-sum' : this.feedbackAllSource;
       this.postGainFeedbackWeight = normalizePostGainFeedbackWeight(snapshot?.postGainFeedbackWeight ?? this.postGainFeedbackWeight);
       if (snapshot?.feedbackAllLevel !== undefined) this.feedbackAllLevel = normalizeFeedbackAllLevel(snapshot.feedbackAllLevel);
+      if (snapshot?.feedbackAllAmount !== undefined) this.feedbackAllAmount = normalizeFeedbackAllAmount(snapshot.feedbackAllAmount);
       this.feedbackAllResonanceCurve = normalizeFeedbackAllResonanceCurve(snapshot?.feedbackAllResonanceCurve ?? this.feedbackAllResonanceCurve);
       this.feedbackAllSaturationReturn = normalizeFeedbackAllSaturationReturn(snapshot?.feedbackAllSaturationReturn ?? this.feedbackAllSaturationReturn);
       this.workletNode.port.postMessage({
@@ -400,7 +404,7 @@
         , referenceLevel: this.referenceLevel, maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb, positiveResonanceEngine: this.positiveResonanceEngine
         , feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
-        , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
+        , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
       });
     }
 

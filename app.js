@@ -653,7 +653,7 @@ const devLabTelemetry = (() => {
     const { left, right } = latest; const dominant = dominantBand(latest); const energyMetrics = getAnalyzerBandEnergyMetrics(latest); const frequencies = BAND_DEFINITIONS.map(band => band.frequency);
     const items = [
       ['RES TARGET', number(left.resonanceTarget)], ['RES SMOOTHED', number(left.smoothedResonance)], ['TOPOLOGY', left.feedbackTopology], ['TAP', left.feedbackTap], ['WET', left.wetModel], ['SAT', left.commonBusSaturationMode], ['DRIVE', number(left.commonBusDrive)], ['CEILING', number(left.commonBusCeiling)],
-      ['POST GAIN FB WEIGHT', left.mainPostGainFeedbackWeightMode],
+      ['POST GAIN FB WEIGHT', left.mainPostGainFeedbackWeightMode], ['FB ALL AMOUNT', `${number(left.feedbackAllAmount)} %`],
       ['CORE', left.feedbackCore !== 'current' && left.feedbackCoreEffective !== left.feedbackCore ? 'ZDF (INACTIVE: ISOLATED TPT)' : left.feedbackCore],
       ...(left.feedbackCoreEffective === 'zdf' ? [
         ['ZDF LOCAL BUS L/R', `${number(left.zdfLocalBus)} / ${number(right.zdfLocalBus)}`],
@@ -665,6 +665,15 @@ const devLabTelemetry = (() => {
         ['ZDF WORST RES L/R', `${number(left.zdfSolverResidual)} / ${number(right.zdfSolverResidual)}`],
         ['ZDF FALLBACKS L/R', `${left.zdfSolverFallbackCount} / ${right.zdfSolverFallbackCount}`],
         ['ZDF NONFINITE L/R', `${left.zdfNonFiniteResetCount} / ${right.zdfNonFiniteResetCount}`]
+      ] : []),
+      ...(left.feedbackCoreEffective === 'zdf-per-band' ? [
+        ['PER-BAND MAIN BUS L/R', `${number(left.zdfPerBandMainBus)} / ${number(right.zdfPerBandMainBus)}`],
+        ['PER-BAND MAIN RET L/R', `${number(left.zdfPerBandMainReturn)} / ${number(right.zdfPerBandMainReturn)}`],
+        ['PER-BAND SOLVER AVG L/R', `${number(finite(left.zdfPerBandCoupledSolverIterations) / Math.max(1, finite(left.frameCount)))} / ${number(finite(right.zdfPerBandCoupledSolverIterations) / Math.max(1, finite(right.frameCount)))}`],
+        ['PER-BAND SOLVER MAX L/R', `${left.zdfPerBandCoupledSolverMaxIterations} / ${right.zdfPerBandCoupledSolverMaxIterations}`],
+        ['PER-BAND RESIDUAL L/R', `${number(left.zdfPerBandCoupledSolverLastResidual)} / ${number(right.zdfPerBandCoupledSolverLastResidual)}`],
+        ['PER-BAND FALLBACKS L/R', `${left.zdfPerBandCoupledFallbackCount} / ${right.zdfPerBandCoupledFallbackCount}`],
+        ['PER-BAND NONFINITE L/R', `${left.zdfPerBandCoupledNonFiniteResetCount} / ${right.zdfPerBandCoupledNonFiniteResetCount}`]
       ] : []),
       ['LOCAL RET L/R', `${number(left.commonFeedbackReturn)} / ${number(right.commonFeedbackReturn)}`], ['LOCAL TAP L/R', `${number(left.commonTapSum)} / ${number(right.commonTapSum)}`], ['MAIN RET L/R', `${number(left.mainCommonFeedbackReturn)} / ${number(right.mainCommonFeedbackReturn)}`], ['MAIN TAP L/R', `${number(left.mainTapSum)} / ${number(right.mainTapSum)}`], ['MAIN SCALED L/R', `${number(left.mainTapSumScaled)} / ${number(right.mainTapSumScaled)}`], ['MAIN FB GAIN', number(left.mainFeedbackGain)], ['FB ALL SCALE', number(left.mainFeedbackLevelScale)],
       ['SOURCE PK L/R', `${number(left.sourcePeak)} / ${number(right.sourcePeak)}`], ['WET PK L/R', `${number(left.wetPeak)} / ${number(right.wetPeak)}`], ['LOCAL SAT IN/OUT L', `${number(left.commonSaturationInput)} / ${number(left.commonSaturationOutput)}`], ['LOCAL SAT IN/OUT R', `${number(right.commonSaturationInput)} / ${number(right.commonSaturationOutput)}`], ['MAIN SAT IN/OUT L', `${number(left.mainSaturationInput)} / ${number(left.mainSaturationOutput)}`], ['MAIN SAT IN/OUT R', `${number(right.mainSaturationInput)} / ${number(right.mainSaturationOutput)}`], ['MAIN RESETS L/R', `${Math.max(0, finite(left.mainCommonNonFiniteResets) - resetBaseline.left)} / ${Math.max(0, finite(right.mainCommonNonFiniteResets) - resetBaseline.right)}`]
@@ -779,6 +788,23 @@ const addDevLabSelector = (label, attribute, options) => {
   container.append(control);
   return select;
 };
+const addDevLabNumberControl = ({ label, attribute, min, max, step, suffix, tooltip, value, onChange, group = 'main' }) => {
+  const container = devLabGroups.get(group); if (!container) return null;
+  const control = document.createElement('label'); control.className = 'dev-lab-control';
+  const title = document.createElement('span'); title.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'number'; input.min = String(min); input.max = String(max); input.step = String(step); input.value = String(value());
+  input.setAttribute(attribute, ''); input.setAttribute('aria-label', `${label} ${suffix}`); input.title = tooltip;
+  const unit = document.createElement('em'); unit.textContent = suffix;
+  const apply = restoreInvalid => {
+    const numeric = Number(input.value);
+    if (input.value.trim() === '' || !Number.isFinite(numeric)) { if (restoreInvalid) input.value = String(value()); return; }
+    onChange(Math.min(max, Math.max(min, numeric))); input.value = String(value());
+  };
+  input.addEventListener('input', () => { if (input.value !== '') apply(false); });
+  input.addEventListener('change', () => apply(true)); input.addEventListener('blur', () => apply(true));
+  control.append(title, input, unit); container.append(control); return input;
+};
 const KEYBOARD_PREFERENCES_STORAGE_KEY = 'da-filta-keyboard-preferences-v1';
 const KEY_STEP_DEFAULT_PERCENT = 5;
 const KEY_SPEED_DEFAULT_HZ = 30;
@@ -858,6 +884,12 @@ const feedbackAllLevelSelect = addDevLabSelector('DEV FB ALL LEVEL', 'data-feedb
   ['fortieth', '1 / 40'],
   ['eightieth', '1 / 80']
 ]);
+const feedbackAllAmountInput = addDevLabNumberControl({
+  label: 'FB ALL AMOUNT', attribute: 'data-feedback-all-amount', min: 0, max: 100, step: 1, suffix: '%',
+  tooltip: 'Skaliert ausschließlich die Stärke des gemeinsamen FB-ALL/MAIN-Feedback-Loops. 100 % entspricht dem bisherigen Verhalten. LOCAL-Feedback bleibt unverändert.',
+  value: () => audioEngine?.feedbackAllAmount ?? 100,
+  onChange: value => audioEngine?.setFeedbackAllAmount(value)
+});
 const feedbackAllResonanceCurveSelect = addDevLabSelector('DEV RESONANCE CURVE', 'data-feedback-all-resonance-curve', [['current', 'CURRENT'], ['soft-knee', 'SOFT KNEE']]);
 const feedbackAllSaturationReturnSelect = addDevLabSelector('DEV MAIN SAT/RETURN', 'data-feedback-all-saturation-return', [['current', 'CURRENT'], ['drive-4-return-0.2', 'DRIVE 4 / RETURN 0.2']]);
 const inputPreampStageSelect = addDevLabSelector('DEV INPUT STAGE', 'data-input-preamp-stage', [
@@ -1023,6 +1055,12 @@ const DEV_LAB_HELP = {
     values: [['RAW', 'Faktor 1,0.'], ['1 / SQRT(2)', 'Faktor ≈ 0,7071 (≈ -3,01 dB).'], ['1 / 2', 'Faktor 0,5 (≈ -6,02 dB).'], ['1 / SQRT(10)', 'Faktor 1 / sqrt(10) ≈ 0,316227766.'], ['1 / 10', 'Faktor 0,1.'], ['1 / 20', 'Faktor 0,05.'], ['1 / 40', 'Faktor 0,025.'], ['1 / 80', 'Faktor 0,0125.']],
     default: 'RAW', note: 'Experimentelle feste COMMON-BUS-MAIN-Kalibrierung; keine automatische Normalisierung und keine finale Klangentscheidung.'
   },
+  'data-feedback-all-amount': {
+    title: 'FB ALL AMOUNT', what: 'Skaliert ausschließlich die Stärke des gemeinsamen FB-ALL/MAIN-Feedback-Loops.',
+    scope: 'Nur ZDF PER-BAND mit aktivem FB ALL / MAIN. Der Faktor wirkt im impliziten MAIN-Feedback-Gain vor der MAIN-Sättigung; LOCAL-Feedback bleibt unverändert.',
+    values: [['0 %', 'Kein rekursiver MAIN-Return; der günstige LOCAL-only-Pfad bleibt aktiv.'], ['100 %', 'Entspricht exakt dem bisherigen Phase-2-MAIN-Verhalten.']],
+    default: '100 %', note: 'Live geglättet; Resonance, FB ALL LEVEL und die LOCAL-Semantik werden nicht verändert.'
+  },
   'data-positive-resonance-audition': {
     title: 'CAL DEV RES AUD', what: 'Bestimmt den zusätzlichen Audition-Anteil der positiven lokalen Resonance.',
     scope: 'Nur im positiven lokalen Pfad außerhalb des COMMON-BUS-Modus; wird mit dem hörbaren Residualanteil addiert.',
@@ -1084,7 +1122,7 @@ const DEV_LAB_GROUP_HELP = {
   keyboard: ['data-key-step-percent', 'data-key-speed-hz'],
   filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-spread-curve', 'data-spread-max-offset-db', 'data-wet-model'],
   'local-feedback': ['data-feedback-topology', 'data-feedback-core', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
-  main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-post-gain-feedback-weight', 'data-feedback-all-level', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
+  main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-post-gain-feedback-weight', 'data-feedback-all-level', 'data-feedback-all-amount', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
   resonator: ['data-positive-resonance-audition', 'data-positive-resonance-drive', 'data-positive-resonance-damping-floor', 'data-positive-resonance-output', 'data-positive-resonance-latency', 'data-positive-resonance-curve', 'data-positive-resonance-engine']
 };
 const RESPONSE_DEV_LAB_HELP = [
@@ -1491,7 +1529,7 @@ const showAnalyzerHover = (index, anchor, collapsed = false) => {
 const refreshStatusStrip = () => {
   if (!liveStatusStrip) return;
   const engine = audioEngine || {};
-  const mainActive = engine.feedbackCore !== 'zdf-per-band' && (state.feedbackAllLeft || state.feedbackAllRight);
+  const mainActive = state.feedbackAllLeft || state.feedbackAllRight;
   const activeBands = state.feedbackBandLeft.map((enabled, index) => enabled || state.feedbackBandRight[index] ? index + 1 : null).filter(Boolean);
   const packet = getAnalyzerTelemetry();
   const sat = packet && ((Number(packet.left?.saturationActiveFrames) || 0) > 0 || (Number(packet.right?.saturationActiveFrames) || 0) > 0);
@@ -2031,7 +2069,6 @@ bindDevLabSelect(spreadMaxOffsetSelect, value => {
 }, '6');
 const updateLocalLoopTuningRelevance = () => {
   const zdf = feedbackCoreSelect?.value === 'zdf' || feedbackCoreSelect?.value === 'zdf-per-band';
-  const perBandZdf = feedbackCoreSelect?.value === 'zdf-per-band';
   if (localLoopTuningSelect) {
     localLoopTuningSelect.disabled = zdf;
     localLoopTuningSelect.title = zdf ? 'COMPENSATED gilt nur im CURRENT-Core.' : '';
@@ -2039,11 +2076,11 @@ const updateLocalLoopTuningRelevance = () => {
   if (feedbackCoreSelect) feedbackCoreSelect.title = zdf && feedbackTopologySelect?.value === 'isolated-tpt'
     ? 'ZDF wirkt nur bei COMMON BUS oder LOCAL LOOP EXP; ISOLATED TPT bleibt unverändert.' : '';
   if (fbAllButton) {
-    fbAllButton.disabled = perBandZdf;
-    fbAllButton.classList.toggle('is-phase-one-inactive', perBandZdf);
-    fbAllButton.title = perBandZdf ? 'MAIN / FB ALL is inactive for ZDF PER-BAND Phase 1.' : '';
-    fbAllButton.textContent = perBandZdf ? 'N/A' : state.feedbackAllLeft ? 'ON' : 'OFF';
-    fbAllButton.setAttribute('aria-pressed', String(perBandZdf ? false : state.feedbackAllLeft));
+    fbAllButton.disabled = false;
+    fbAllButton.classList.remove('is-phase-one-inactive');
+    fbAllButton.title = '';
+    fbAllButton.textContent = state.feedbackAllLeft ? 'ON' : 'OFF';
+    fbAllButton.setAttribute('aria-pressed', String(state.feedbackAllLeft));
   }
 };
 bindDevLabSelect(feedbackTopologySelect, value => { audioEngine.setFeedbackTopology(value); updateLocalLoopTuningRelevance(); }, 'isolated-tpt');
@@ -2173,6 +2210,7 @@ const syncUiFromAudioState = snapshot => {
     select.value = numeric?.value ?? textValue;
   };
   selectValues.forEach(([select, value]) => setSelectValue(select, value));
+  if (feedbackAllAmountInput && snapshot.feedbackAllAmount !== undefined) feedbackAllAmountInput.value = String(snapshot.feedbackAllAmount);
   setSelectValue(inputPreampStageSelect, snapshot.inputPreampStage);
   if (inputCharacterAmountSlider && snapshot.inputCharacterAmount !== undefined) {
     state.inputCharacterAmount = Number(snapshot.inputCharacterAmount);
@@ -2208,6 +2246,7 @@ const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
   ['feedbackAllSource', value => audioEngine.setFeedbackAllSource(value)],
   ['postGainFeedbackWeight', value => audioEngine.setPostGainFeedbackWeight(value)],
   ['feedbackAllLevel', value => audioEngine.setFeedbackAllLevel(value)],
+  ['feedbackAllAmount', value => audioEngine.setFeedbackAllAmount(value)],
   ['feedbackAllResonanceCurve', value => audioEngine.setFeedbackAllResonanceCurve(value)],
   ['feedbackAllSaturationReturn', value => audioEngine.setFeedbackAllSaturationReturn(value)],
   ['positiveResonanceAuditionGain', value => audioEngine.setPositiveResonanceAuditionGain(value)],

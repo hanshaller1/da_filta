@@ -40,6 +40,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.feedbackAllSource = this.readFeedbackAllSource(processorOptions.feedbackAllSource);
     this.postGainFeedbackWeight = this.readPostGainFeedbackWeight(processorOptions.postGainFeedbackWeight);
     this.feedbackAllLevel = this.readFeedbackAllLevel(processorOptions.feedbackAllLevel);
+    this.feedbackAllAmount = this.readFeedbackAllAmount(processorOptions.feedbackAllAmount);
+    this.feedbackAllAmountTarget = this.feedbackAllAmount;
     this.feedbackAllResonanceCurve = this.readFeedbackAllResonanceCurve(processorOptions.feedbackAllResonanceCurve);
     this.feedbackAllSaturationReturn = this.readFeedbackAllSaturationReturn(processorOptions.feedbackAllSaturationReturn);
     this.maxFeedbackGain = this.readPositiveOption(processorOptions.maxFeedbackGain, 1.25);
@@ -155,6 +157,21 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       left: Array(this.bandCount).fill(0),
       right: Array(this.bandCount).fill(0)
     };
+    // Phase 2 keeps the Per-Band LOCAL histories private, and adds a
+    // completely separate shared MAIN history per channel. None of these
+    // buffers is shared with Unified ZDF or the delayed CURRENT main bus.
+    this.zdfPerBandMainReturns = { left: 0, right: 0 };
+    this.zdfPerBandMainBuses = { left: 0, right: 0 };
+    this.zdfPerBandMainSaturationOutputs = { left: 0, right: 0 };
+    this.zdfPerBandCoupledIterations = { left: 0, right: 0 };
+    this.zdfPerBandCoupledResiduals = { left: 0, right: 0 };
+    this.zdfPerBandCoupledMaxIterations = { left: 0, right: 0 };
+    this.zdfPerBandCoupledFallbackCounts = { left: 0, right: 0 };
+    this.zdfPerBandCoupledNonFiniteCounts = { left: 0, right: 0 };
+    this.zdfPerBandWorkspaces = {
+      left: this.createZdfPerBandWorkspace(),
+      right: this.createZdfPerBandWorkspace()
+    };
     this.zdfSolverIterations = { left: 0, right: 0 };
     this.zdfSolverMaxIterations = { left: 0, right: 0 };
     this.zdfSolverResidual = { left: 0, right: 0 };
@@ -250,6 +267,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   readPostGainFeedbackWeight(value) { return value === 'soft-knee' ? 'soft-knee' : 'current'; }
   readFeedbackAllLevel(value) {
     return ['sqrt2', 'half', 'sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth'].includes(value) ? value : 'raw';
+  }
+  readFeedbackAllAmount(value) {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? Math.min(100, Math.max(0, numericValue)) : 100;
   }
   readFeedbackAllResonanceCurve(value) { return value === 'soft-knee' ? 'soft-knee' : 'current'; }
   readFeedbackAllSaturationReturn(value) { return value === 'drive-4-return-0.2' ? 'drive-4-return-0.2' : 'current'; }
@@ -524,6 +545,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       mainTapSumPeak: 0,
       mainTapSumScaledPeak: 0,
       mainFeedbackLevelScale: this.feedbackAllLevelScale(),
+      feedbackAllAmount: this.feedbackAllAmount,
+      feedbackAllAmountTarget: this.feedbackAllAmountTarget,
       mainFeedbackGain: 0,
       mainPostGainFeedbackWeightMode: this.postGainFeedbackWeight,
       mainPostGainFeedbackWeightDb: Array(this.bandCount).fill(0),
@@ -552,6 +575,16 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       zdfPerBandSolverIterations: Array(this.bandCount).fill(0),
       zdfPerBandSolverResidual: Array(this.bandCount).fill(0),
       zdfPerBandSolverFallbackCount: Array(this.bandCount).fill(0),
+      zdfPerBandMainReturn: 0,
+      zdfPerBandMainReturnPeak: 0,
+      zdfPerBandMainBus: 0,
+      zdfPerBandMainBusPeak: 0,
+      zdfPerBandCoupledSolverIterations: 0,
+      zdfPerBandCoupledSolverMaxIterations: 0,
+      zdfPerBandCoupledSolverResidual: 0,
+      zdfPerBandCoupledSolverLastResidual: 0,
+      zdfPerBandCoupledFallbackCount: 0,
+      zdfPerBandCoupledNonFiniteResetCount: 0,
       dominantBaseBand: -1,
       baseFilterFrequencies: this.baseFilters?.left.map(filter => filter.frequency) ?? [],
       sampleCount: 0
@@ -616,7 +649,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const localGain = this.maxFeedbackGain * signedResonance;
     const mainCurveGain = this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
       ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : this.resonance * this.resonance;
-    const mainGain = Math.sign(this.resonance) * this.maxFeedbackGain * mainCurveGain;
+    // FB ALL AMOUNT is intentionally inside the implicit MAIN loop, before
+    // its saturation. LOCAL gain and all LOCAL equations remain untouched.
+    const mainGain = Math.sign(this.resonance) * this.maxFeedbackGain * mainCurveGain
+      * (this.feedbackAllAmount / 100);
     const localConstantCeiling = this.feedbackTopology === 'common-bus'
       && this.commonBusSaturationMode === 'constant-ceiling';
     const localCeiling = localConstantCeiling ? this.commonBusCeiling : 1;
@@ -787,6 +823,378 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       if (fallback) fallbacksByBand[band] += 1;
       this.zdfSolverMaxIterations[channel] = Math.max(this.zdfSolverMaxIterations[channel], iterations);
     }
+    return returns;
+  }
+
+  createZdfPerBandWorkspace() {
+    const length = this.bandCount;
+    return {
+      p: new Float64Array(length), d: new Float64Array(length),
+      localWeights: new Float64Array(length), mainWeights: new Float64Array(length),
+      locals: new Float64Array(length), warmLocals: new Float64Array(length),
+      candidateLocals: new Float64Array(length), trialLocals: new Float64Array(length),
+      bestLocals: new Float64Array(length), deltas: new Float64Array(length),
+      residuals: new Float64Array(length), diagonal: new Float64Array(length),
+      localToMain: new Float64Array(length), mainToLocal: new Float64Array(length),
+      active: new Int32Array(length), y: new Float64Array(length),
+      activeCount: 0, main: 0, warmMain: 0, bestMain: 0,
+      mainResidual: 0, mainDiagonal: 1, mainBus: 0, mainReturn: 0,
+      mainSaturationOutput: 0, residual: 0, bestResidual: Infinity,
+      scalarResidual: Infinity, scalarIterations: 0, scalarFallback: false
+    };
+  }
+
+  clampZdfPerBandReturn(value, ceiling) {
+    const finite = Number.isFinite(value) ? value : 0;
+    return Math.max(-ceiling, Math.min(ceiling, finite));
+  }
+
+  // Scalar safeguarded Newton/Bisection used only by the Phase-2 fallback.
+  // It deliberately mirrors the Phase-1 numerical constants, but operates on
+  // already-prepared affine coefficients so it cannot advance any smoother.
+  solveZdfPerBandPreparedScalar(p, d, coefficient, ceiling, initial, workspace) {
+    let lower = -ceiling;
+    let upper = ceiling;
+    let value = this.clampZdfPerBandReturn(initial, ceiling);
+    let residual = Infinity;
+    let iterations = 0;
+    let fallback = false;
+    for (; iterations < 6; iterations += 1) {
+      const tanhValue = Math.tanh(coefficient * (p + d * value));
+      const error = value - ceiling * tanhValue;
+      residual = Math.abs(error);
+      if (!Number.isFinite(error)) { fallback = true; break; }
+      if (error > 0) upper = value;
+      else lower = value;
+      if (residual < 1e-8) { iterations += 1; break; }
+      const derivative = 1 - ceiling * coefficient * d * (1 - tanhValue * tanhValue);
+      const candidate = Math.abs(derivative) > 1e-9 ? value - error / derivative : NaN;
+      if (!Number.isFinite(candidate) || candidate <= lower || candidate >= upper) {
+        value = 0.5 * (lower + upper);
+        fallback = true;
+      } else value = candidate;
+    }
+    if (residual >= 1e-8) {
+      fallback = true;
+      for (let step = 0; step < 20; step += 1) {
+        value = 0.5 * (lower + upper);
+        const tanhValue = Math.tanh(coefficient * (p + d * value));
+        const error = value - ceiling * tanhValue;
+        if (!Number.isFinite(error)) break;
+        residual = Math.abs(error);
+        if (residual < 1e-8) break;
+        if (error > 0) upper = value;
+        else lower = value;
+      }
+    }
+    workspace.scalarResidual = residual;
+    workspace.scalarIterations = iterations;
+    workspace.scalarFallback = fallback;
+    return Number.isFinite(value) && Number.isFinite(residual) ? value : NaN;
+  }
+
+  evaluateZdfPerBandCoupled(workspace, locals, main, localGain, mainGain, feedbackAllGate, level,
+    localCeiling, localScale, mainCeiling, mainScale, withJacobian = false) {
+    let mainSum = 0;
+    let maximum = 0;
+    for (let band = 0; band < this.bandCount; band += 1) {
+      const y = workspace.p[band] + workspace.d[band] * (locals[band] + main);
+      workspace.y[band] = y;
+      mainSum += workspace.mainWeights[band] * y;
+      if (!Number.isFinite(y)) return Infinity;
+    }
+    const mainBus = feedbackAllGate * level * mainSum;
+    const mainTanh = Math.tanh(mainScale * mainGain * mainBus);
+    const mainReturn = mainCeiling * mainTanh;
+    const mainError = main - mainReturn;
+    if (!Number.isFinite(mainBus) || !Number.isFinite(mainError)) return Infinity;
+    workspace.mainBus = mainBus;
+    workspace.mainReturn = mainReturn;
+    workspace.mainSaturationOutput = mainTanh;
+    workspace.mainResidual = mainError;
+    maximum = Math.abs(mainError);
+    for (let activeIndex = 0; activeIndex < workspace.activeCount; activeIndex += 1) {
+      const band = workspace.active[activeIndex];
+      const localTanh = Math.tanh(localScale * localGain * workspace.localWeights[band] * workspace.y[band]);
+      const error = locals[band] - localCeiling * localTanh;
+      if (!Number.isFinite(error)) return Infinity;
+      workspace.residuals[band] = error;
+      maximum = Math.max(maximum, Math.abs(error));
+      if (withJacobian) {
+        const alpha = localCeiling * localScale * (1 - localTanh * localTanh)
+          * localGain * workspace.localWeights[band] * workspace.d[band];
+        workspace.diagonal[band] = 1 - alpha;
+        workspace.localToMain[band] = -alpha;
+      }
+    }
+    if (withJacobian) {
+      const mainSlope = mainCeiling * mainScale * (1 - mainTanh * mainTanh)
+        * mainGain * feedbackAllGate * level;
+      let mainDiagonal = 1;
+      for (let band = 0; band < this.bandCount; band += 1) {
+        const beta = mainSlope * workspace.mainWeights[band] * workspace.d[band];
+        mainDiagonal -= beta;
+        workspace.mainToLocal[band] = -beta;
+      }
+      workspace.mainDiagonal = mainDiagonal;
+    }
+    return maximum;
+  }
+
+  copyZdfPerBandLocals(source, target) {
+    for (let band = 0; band < this.bandCount; band += 1) target[band] = source[band];
+  }
+
+  considerZdfPerBandCoupledBest(workspace, locals, main, residual) {
+    if (!Number.isFinite(residual) || residual >= workspace.bestResidual) return;
+    workspace.bestResidual = residual;
+    workspace.bestMain = main;
+    this.copyZdfPerBandLocals(locals, workspace.bestLocals);
+  }
+
+  // Evaluates a fixed-M branch for the nested fallback. LOCAL roots are
+  // always seeded from the previous sample, making its branch selection
+  // deterministic and continuous whenever the system permits it.
+  evaluateZdfPerBandNestedMain(workspace, main, localGain, mainGain, feedbackAllGate, level,
+    localCeiling, localScale, mainCeiling, mainScale) {
+    for (let band = 0; band < this.bandCount; band += 1) workspace.trialLocals[band] = 0;
+    for (let activeIndex = 0; activeIndex < workspace.activeCount; activeIndex += 1) {
+      const band = workspace.active[activeIndex];
+      const coefficient = localScale * localGain * workspace.localWeights[band];
+      const local = this.solveZdfPerBandPreparedScalar(
+        workspace.p[band] + workspace.d[band] * main,
+        workspace.d[band], coefficient, localCeiling, workspace.warmLocals[band], workspace
+      );
+      if (!Number.isFinite(local)) return Infinity;
+      workspace.trialLocals[band] = local;
+    }
+    return this.evaluateZdfPerBandCoupled(
+      workspace, workspace.trialLocals, main, localGain, mainGain, feedbackAllGate, level,
+      localCeiling, localScale, mainCeiling, mainScale, true
+    );
+  }
+
+  solveZdfPerBandCoupledReturns(source, channel, feedbackAllGate) {
+    const filters = this.baseFilters[channel];
+    const gates = this.feedbackGates[channel];
+    const gateTargets = this.feedbackGateTargets[channel];
+    const gains = this.deltaGains[channel];
+    const gainTargets = this.deltaTargets[channel];
+    const returns = this.zdfPerBandLocalReturns[channel];
+    const buses = this.zdfPerBandLocalBuses[channel];
+    const workspace = this.zdfPerBandWorkspaces[channel];
+    const signedResonance = Math.sign(this.resonance) * this.resonance * this.resonance;
+    const localGain = this.maxFeedbackGain * signedResonance;
+    const mainCurveGain = this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
+      ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : this.resonance * this.resonance;
+    const mainGain = Math.sign(this.resonance) * this.maxFeedbackGain * mainCurveGain;
+    const localConstantCeiling = this.feedbackTopology === 'common-bus'
+      && this.commonBusSaturationMode === 'constant-ceiling';
+    const localCeiling = localConstantCeiling ? this.commonBusCeiling : 1;
+    const localScale = localConstantCeiling ? this.commonBusDrive / localCeiling : 1;
+    const specialMain = this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
+      && this.feedbackTopology === 'common-bus' && this.commonBusSaturationMode === 'current';
+    const mainCeiling = specialMain ? 0.2
+      : this.commonBusSaturationMode === 'constant-ceiling' ? this.commonBusCeiling : 1;
+    const mainScale = specialMain ? 4
+      : this.commonBusSaturationMode === 'constant-ceiling' ? this.commonBusDrive / mainCeiling : 1;
+    const level = this.feedbackAllLevelScale();
+    workspace.activeCount = 0;
+
+    for (let band = 0; band < this.bandCount; band += 1) {
+      gates[band] = gateTargets[band] + this.feedbackGateSmoothingCoefficient * (gates[band] - gateTargets[band]);
+      gains[band] = gainTargets[band] + this.bandGainSmoothingCoefficient * (gains[band] - gainTargets[band]);
+      const filter = filters[band];
+      if (!Number.isFinite(filter.ic1eq) || !Number.isFinite(filter.ic2eq)) {
+        filter.reset();
+        this.zdfNonFiniteResetCount[channel] += 1;
+      }
+      const p = filter.baseK * (filter.a1 * filter.ic1eq + filter.a2 * (source - filter.ic2eq));
+      const d = filter.baseK * filter.a2;
+      const audibleGain = 1 + gains[band];
+      const localWeight = gates[band] * (this.feedbackTap === 'post-gain' ? audibleGain : 1);
+      const mainWeight = this.feedbackAllSource === 'post-gain-sum'
+        ? this.mainPostGainFeedbackWeight(audibleGain) : 1;
+      workspace.p[band] = p;
+      workspace.d[band] = d;
+      workspace.localWeights[band] = localWeight;
+      workspace.mainWeights[band] = mainWeight;
+      workspace.locals[band] = 0;
+      workspace.warmLocals[band] = 0;
+      if (!Number.isFinite(p) || !Number.isFinite(d) || !Number.isFinite(localWeight) || !Number.isFinite(mainWeight)) {
+        this.zdfPerBandCoupledNonFiniteCounts[channel] += 1;
+        continue;
+      }
+      if (localWeight > COMMON_BUS_RESONANCE_EPSILON) {
+        workspace.active[workspace.activeCount] = band;
+        workspace.activeCount += 1;
+        const warm = this.clampZdfPerBandReturn(returns[band], localCeiling);
+        workspace.locals[band] = warm;
+        workspace.warmLocals[band] = warm;
+      }
+    }
+
+    const warmMain = this.clampZdfPerBandReturn(this.zdfPerBandMainReturns[channel], mainCeiling);
+    workspace.main = warmMain;
+    workspace.warmMain = warmMain;
+    workspace.bestResidual = Infinity;
+    let residual = this.evaluateZdfPerBandCoupled(
+      workspace, workspace.locals, workspace.main, localGain, mainGain, feedbackAllGate, level,
+      localCeiling, localScale, mainCeiling, mainScale, true
+    );
+    this.considerZdfPerBandCoupledBest(workspace, workspace.locals, workspace.main, residual);
+    let iterations = 0;
+    let converged = residual < 1e-8;
+    let fallback = false;
+
+    for (; !converged && iterations < 6; iterations += 1) {
+      if (!Number.isFinite(residual)) { fallback = true; break; }
+      let schur = workspace.mainDiagonal;
+      let numerator = -workspace.mainResidual;
+      let valid = Number.isFinite(schur);
+      for (let activeIndex = 0; activeIndex < workspace.activeCount; activeIndex += 1) {
+        const band = workspace.active[activeIndex];
+        const diagonal = workspace.diagonal[band];
+        if (!Number.isFinite(diagonal) || Math.abs(diagonal) <= 1e-9) { valid = false; break; }
+        const mainToLocal = workspace.mainToLocal[band];
+        schur -= mainToLocal * workspace.localToMain[band] / diagonal;
+        numerator += mainToLocal * workspace.residuals[band] / diagonal;
+      }
+      if (!valid || !Number.isFinite(schur) || Math.abs(schur) <= 1e-9) { fallback = true; break; }
+      const deltaMain = numerator / schur;
+      if (!Number.isFinite(deltaMain)) { fallback = true; break; }
+      for (let activeIndex = 0; activeIndex < workspace.activeCount; activeIndex += 1) {
+        const band = workspace.active[activeIndex];
+        workspace.deltas[band] = (-workspace.residuals[band] - workspace.localToMain[band] * deltaMain)
+          / workspace.diagonal[band];
+        if (!Number.isFinite(workspace.deltas[band])) { valid = false; break; }
+      }
+      if (!valid) { fallback = true; break; }
+      let accepted = false;
+      let lambda = 1;
+      for (let backtrack = 0; backtrack < 4; backtrack += 1) {
+        for (let band = 0; band < this.bandCount; band += 1) workspace.candidateLocals[band] = 0;
+        for (let activeIndex = 0; activeIndex < workspace.activeCount; activeIndex += 1) {
+          const band = workspace.active[activeIndex];
+          workspace.candidateLocals[band] = this.clampZdfPerBandReturn(
+            workspace.locals[band] + lambda * workspace.deltas[band], localCeiling
+          );
+        }
+        const candidateMain = this.clampZdfPerBandReturn(workspace.main + lambda * deltaMain, mainCeiling);
+        const candidateResidual = this.evaluateZdfPerBandCoupled(
+          workspace, workspace.candidateLocals, candidateMain, localGain, mainGain, feedbackAllGate, level,
+          localCeiling, localScale, mainCeiling, mainScale, false
+        );
+        this.considerZdfPerBandCoupledBest(workspace, workspace.candidateLocals, candidateMain, candidateResidual);
+        if (Number.isFinite(candidateResidual) && candidateResidual < residual) {
+          this.copyZdfPerBandLocals(workspace.candidateLocals, workspace.locals);
+          workspace.main = candidateMain;
+          residual = candidateResidual;
+          accepted = true;
+          if (residual < 1e-8) converged = true;
+          break;
+        }
+        lambda *= 0.5;
+      }
+      if (!accepted) { fallback = true; break; }
+    }
+    if (converged) iterations += 1;
+
+    if (!converged) {
+      fallback = true;
+      let lower = -mainCeiling;
+      let upper = mainCeiling;
+      let value = warmMain;
+      let nestedResidual = this.evaluateZdfPerBandNestedMain(
+        workspace, value, localGain, mainGain, feedbackAllGate, level,
+        localCeiling, localScale, mainCeiling, mainScale
+      );
+      this.considerZdfPerBandCoupledBest(workspace, workspace.trialLocals, value, nestedResidual);
+      let signedError = workspace.mainResidual;
+      for (let step = 0; step < 6 && nestedResidual >= 1e-8; step += 1) {
+        let schur = workspace.mainDiagonal;
+        for (let activeIndex = 0; activeIndex < workspace.activeCount; activeIndex += 1) {
+          const band = workspace.active[activeIndex];
+          const diagonal = workspace.diagonal[band];
+          if (!Number.isFinite(diagonal) || Math.abs(diagonal) <= 1e-9) { schur = NaN; break; }
+          schur -= workspace.mainToLocal[band] * workspace.localToMain[band] / diagonal;
+        }
+        const candidate = Number.isFinite(schur) && Math.abs(schur) > 1e-9
+          ? value - signedError / schur : NaN;
+        const next = Number.isFinite(candidate) && candidate > lower && candidate < upper
+          ? candidate : 0.5 * (lower + upper);
+        nestedResidual = this.evaluateZdfPerBandNestedMain(
+          workspace, next, localGain, mainGain, feedbackAllGate, level,
+          localCeiling, localScale, mainCeiling, mainScale
+        );
+        this.considerZdfPerBandCoupledBest(workspace, workspace.trialLocals, next, nestedResidual);
+        signedError = workspace.mainResidual;
+        if (!Number.isFinite(signedError)) break;
+        if (signedError > 0) upper = next;
+        else lower = next;
+        value = next;
+      }
+      for (let step = 0; step < 20 && nestedResidual >= 1e-8; step += 1) {
+        value = 0.5 * (lower + upper);
+        nestedResidual = this.evaluateZdfPerBandNestedMain(
+          workspace, value, localGain, mainGain, feedbackAllGate, level,
+          localCeiling, localScale, mainCeiling, mainScale
+        );
+        this.considerZdfPerBandCoupledBest(workspace, workspace.trialLocals, value, nestedResidual);
+        signedError = workspace.mainResidual;
+        if (!Number.isFinite(signedError)) break;
+        if (signedError > 0) upper = value;
+        else lower = value;
+      }
+      if (workspace.bestResidual < Infinity) {
+        this.copyZdfPerBandLocals(workspace.bestLocals, workspace.locals);
+        workspace.main = workspace.bestMain;
+        residual = this.evaluateZdfPerBandCoupled(
+          workspace, workspace.locals, workspace.main, localGain, mainGain, feedbackAllGate, level,
+          localCeiling, localScale, mainCeiling, mainScale, false
+        );
+      }
+    }
+
+    if (!Number.isFinite(residual)) {
+      // A failed MAIN solve must not reset any TPT state. Keep the private
+      // Phase-1-style LOCAL roots as the last safe degradation.
+      workspace.main = 0;
+      for (let band = 0; band < this.bandCount; band += 1) workspace.locals[band] = 0;
+      for (let activeIndex = 0; activeIndex < workspace.activeCount; activeIndex += 1) {
+        const band = workspace.active[activeIndex];
+        const local = this.solveZdfPerBandPreparedScalar(
+          workspace.p[band], workspace.d[band], localScale * localGain * workspace.localWeights[band],
+          localCeiling, workspace.warmLocals[band], workspace
+        );
+        workspace.locals[band] = Number.isFinite(local) ? local : 0;
+      }
+      residual = this.evaluateZdfPerBandCoupled(
+        workspace, workspace.locals, workspace.main, localGain, mainGain, feedbackAllGate, level,
+        localCeiling, localScale, mainCeiling, mainScale, false
+      );
+      this.zdfPerBandCoupledNonFiniteCounts[channel] += 1;
+    }
+
+    for (let band = 0; band < this.bandCount; band += 1) {
+      const local = workspace.locals[band];
+      returns[band] = Number.isFinite(local) ? local : 0;
+      const bus = workspace.localWeights[band] * (workspace.p[band] + workspace.d[band] * (returns[band] + workspace.main));
+      buses[band] = Number.isFinite(bus) ? bus : 0;
+      const active = workspace.localWeights[band] > COMMON_BUS_RESONANCE_EPSILON;
+      this.zdfPerBandSolverIterations[channel][band] = active ? iterations : 0;
+      this.zdfPerBandSolverResiduals[channel][band] = active && Number.isFinite(workspace.residuals[band])
+        ? Math.abs(workspace.residuals[band]) : 0;
+      if (active && fallback) this.zdfPerBandSolverFallbackCounts[channel][band] += 1;
+    }
+    this.zdfPerBandMainReturns[channel] = Number.isFinite(workspace.main) ? workspace.main : 0;
+    this.zdfPerBandMainBuses[channel] = Number.isFinite(workspace.mainBus) ? workspace.mainBus : 0;
+    this.zdfPerBandMainSaturationOutputs[channel] = Number.isFinite(workspace.mainSaturationOutput)
+      ? (specialMain ? workspace.mainSaturationOutput : this.zdfPerBandMainReturns[channel]) : 0;
+    this.zdfPerBandCoupledIterations[channel] = iterations;
+    this.zdfPerBandCoupledMaxIterations[channel] = Math.max(this.zdfPerBandCoupledMaxIterations[channel], iterations);
+    this.zdfPerBandCoupledResiduals[channel] = Number.isFinite(residual) ? residual : 0;
+    if (fallback) this.zdfPerBandCoupledFallbackCounts[channel] += 1;
     return returns;
   }
 
@@ -1014,6 +1422,24 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       this.zdfPerBandSolverIterations[channel].fill(0);
       this.zdfPerBandSolverResiduals[channel].fill(0);
       this.zdfPerBandSolverFallbackCounts[channel].fill(0);
+      this.zdfPerBandMainReturns[channel] = 0;
+      this.zdfPerBandMainBuses[channel] = 0;
+      this.zdfPerBandMainSaturationOutputs[channel] = 0;
+      this.zdfPerBandCoupledIterations[channel] = 0;
+      this.zdfPerBandCoupledResiduals[channel] = 0;
+      this.zdfPerBandCoupledMaxIterations[channel] = 0;
+      this.zdfPerBandCoupledFallbackCounts[channel] = 0;
+      this.zdfPerBandCoupledNonFiniteCounts[channel] = 0;
+      const workspace = this.zdfPerBandWorkspaces[channel];
+      workspace.locals.fill(0);
+      workspace.warmLocals.fill(0);
+      workspace.candidateLocals.fill(0);
+      workspace.trialLocals.fill(0);
+      workspace.bestLocals.fill(0);
+      workspace.main = 0;
+      workspace.warmMain = 0;
+      workspace.bestMain = 0;
+      workspace.bestResidual = Infinity;
     }
   }
   setFeedbackCore(value) {
@@ -1050,6 +1476,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   setFeedbackAllSource(value) { this.feedbackAllSource = this.readFeedbackAllSource(value); }
   setPostGainFeedbackWeight(value) { this.postGainFeedbackWeight = this.readPostGainFeedbackWeight(value); }
   setFeedbackAllLevel(value) { this.feedbackAllLevel = this.readFeedbackAllLevel(value); }
+  setFeedbackAllAmount(value, immediate = false) {
+    this.feedbackAllAmountTarget = this.readFeedbackAllAmount(value);
+    if (immediate) this.feedbackAllAmount = this.feedbackAllAmountTarget;
+  }
   setFeedbackAllResonanceCurve(value) { this.feedbackAllResonanceCurve = this.readFeedbackAllResonanceCurve(value); }
   setFeedbackAllSaturationReturn(value) { this.feedbackAllSaturationReturn = this.readFeedbackAllSaturationReturn(value); }
 
@@ -1095,6 +1525,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.feedbackAllSource !== undefined) this.setFeedbackAllSource(data.feedbackAllSource);
     if (data.postGainFeedbackWeight !== undefined) this.setPostGainFeedbackWeight(data.postGainFeedbackWeight);
     if (data.feedbackAllLevel !== undefined) this.setFeedbackAllLevel(data.feedbackAllLevel);
+    if (data.feedbackAllAmount !== undefined) this.setFeedbackAllAmount(data.feedbackAllAmount, true);
     if (data.feedbackAllResonanceCurve !== undefined) this.setFeedbackAllResonanceCurve(data.feedbackAllResonanceCurve);
     if (data.feedbackAllSaturationReturn !== undefined) this.setFeedbackAllSaturationReturn(data.feedbackAllSaturationReturn);
     this.initializeResonatorMagnitudes();
@@ -1158,6 +1589,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-feedback-all-source') { this.setFeedbackAllSource(data.value); return; }
     if (data.type === 'set-post-gain-feedback-weight') { this.setPostGainFeedbackWeight(data.value); return; }
     if (data.type === 'set-feedback-all-level') { this.setFeedbackAllLevel(data.value); return; }
+    if (data.type === 'set-feedback-all-amount') { this.setFeedbackAllAmount(data.value); return; }
     if (data.type === 'set-feedback-all-resonance-curve') { this.setFeedbackAllResonanceCurve(data.value); return; }
     if (data.type === 'set-feedback-all-saturation-return') { this.setFeedbackAllSaturationReturn(data.value); return; }
     if (data.type === 'panic') { this.panic(); return; }
@@ -1210,6 +1642,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const mainCommonBusActive = !perBandZdfActive && (commonBusActive || localLoopActive)
       && (zdfActive || usesCommonBusMainEngine)
       && feedbackAllGate > COMMON_BUS_RESONANCE_EPSILON;
+    // Per-Band Phase 2 has a separate implicit MAIN path. `feedbackAllEngine`
+    // deliberately cannot select the delayed legacy return in either ZDF core.
+    const perBandCoupledMainActive = perBandZdfActive
+      && Math.abs(this.resonance) > COMMON_BUS_RESONANCE_EPSILON
+      && feedbackAllGate > COMMON_BUS_RESONANCE_EPSILON
+      && this.feedbackAllAmount > COMMON_BUS_RESONANCE_EPSILON;
     const localCommonReturn = commonBusActive && Number.isFinite(this.commonFeedbackReturns[channel])
       ? this.commonFeedbackReturns[channel]
       : 0;
@@ -1222,7 +1660,20 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     let mainTapSum = 0;
     let globalTapSum = 0;
     const zdfReturn = unifiedZdfActive ? this.solveZdfReturn(source, channel, feedbackAllGate) : 0;
-    const zdfPerBandReturns = perBandZdfActive ? this.solveZdfPerBandLocalReturns(source, channel) : null;
+    let zdfPerBandReturns = null;
+    let zdfPerBandMainReturn = 0;
+    if (perBandZdfActive) {
+      if (perBandCoupledMainActive) {
+        zdfPerBandReturns = this.solveZdfPerBandCoupledReturns(source, channel, feedbackAllGate);
+        zdfPerBandMainReturn = this.zdfPerBandMainReturns[channel];
+      } else {
+        // This is intentionally the original Phase-1 call, untouched.
+        this.zdfPerBandMainReturns[channel] = 0;
+        this.zdfPerBandMainBuses[channel] = 0;
+        this.zdfPerBandMainSaturationOutputs[channel] = 0;
+        zdfPerBandReturns = this.solveZdfPerBandLocalReturns(source, channel);
+      }
+    }
     const usesLegacyLocalResonance = !zdfActive && ((this.resonanceTarget < 0 && this.resonance < 0)
       || (this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'phase2' && this.resonanceTarget > 0 && this.resonance > 0));
     const usesLegacyFeedbackAll = !zdfActive && feedbackAllGate > 1e-12 && !usesCommonBusMainEngine;
@@ -1251,7 +1702,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         ? this.localFeedbackReturns[channel][band]
         : 0;
       const bandInput = unifiedZdfActive ? source + zdfReturn
-        : perBandZdfActive ? source + zdfPerBandReturns[band]
+        : perBandZdfActive ? perBandCoupledMainActive
+          ? (source + zdfPerBandReturns[band]) + zdfPerBandMainReturn
+          : source + zdfPerBandReturns[band]
           : perBandZdfSelected ? source
         : source + previousReturn + localCommonReturn + mainCommonReturn + localLoopReturn;
       const bandOutput = this.processBandpass(baseFilters[band], bandInput);
@@ -1361,7 +1814,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       if (commonBusActive && localGate > 1e-12) {
         commonTapSum += localGate * (this.feedbackTap === 'post-gain' ? audibleGain * bandOutput : bandOutput);
       }
-      if (mainCommonBusActive) {
+      if (mainCommonBusActive || perBandCoupledMainActive) {
         mainTapSum += feedbackAllGate * (this.feedbackAllSource === 'post-gain-sum'
           ? mainPostGainWeight * bandOutput
           : bandOutput);
@@ -1437,12 +1890,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const commonFeedbackReturn = unifiedZdfActive ? this.zdfLocalReturn[channel]
         : perBandZdfSelected ? 0 : this.commonFeedbackReturns[channel];
       const mainCommonFeedbackReturn = unifiedZdfActive ? this.zdfMainReturn[channel]
-        : perBandZdfSelected ? 0 : this.mainCommonFeedbackReturns[channel];
+        : perBandZdfSelected ? this.zdfPerBandMainReturns[channel] : this.mainCommonFeedbackReturns[channel];
       const specialZdfMainReturn = this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
         && this.feedbackTopology === 'common-bus' && this.commonBusSaturationMode === 'current';
       const mainSaturationOutput = unifiedZdfActive
         ? (specialZdfMainReturn ? this.zdfMainReturn[channel] / 0.2 : this.zdfMainReturn[channel])
-        : perBandZdfSelected ? 0 : this.mainCommonSaturationOutputs[channel];
+        : perBandZdfSelected ? this.zdfPerBandMainSaturationOutputs[channel] : this.mainCommonSaturationOutputs[channel];
       diagnostics.frameCount += 1;
       diagnostics.sourcePeak = Math.max(diagnostics.sourcePeak, Math.abs(source));
       diagnostics.sourceEnergy += source * source;
@@ -1500,16 +1953,48 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
           diagnostics.zdfPerBandSolverFallbackCount[band] = this.zdfPerBandSolverFallbackCounts[channel][band];
         }
       }
+      if (perBandZdfActive) {
+        diagnostics.zdfPerBandMainReturn = this.zdfPerBandMainReturns[channel];
+        diagnostics.zdfPerBandMainReturnPeak = Math.max(
+          diagnostics.zdfPerBandMainReturnPeak, Math.abs(this.zdfPerBandMainReturns[channel])
+        );
+        diagnostics.zdfPerBandMainBus = this.zdfPerBandMainBuses[channel];
+        diagnostics.zdfPerBandMainBusPeak = Math.max(
+          diagnostics.zdfPerBandMainBusPeak, Math.abs(this.zdfPerBandMainBuses[channel])
+        );
+        diagnostics.zdfPerBandCoupledSolverIterations += perBandCoupledMainActive
+          ? this.zdfPerBandCoupledIterations[channel] : 0;
+        diagnostics.zdfPerBandCoupledSolverMaxIterations = Math.max(
+          diagnostics.zdfPerBandCoupledSolverMaxIterations,
+          perBandCoupledMainActive ? this.zdfPerBandCoupledIterations[channel] : 0
+        );
+        diagnostics.zdfPerBandCoupledSolverResidual = Math.max(
+          diagnostics.zdfPerBandCoupledSolverResidual,
+          perBandCoupledMainActive ? this.zdfPerBandCoupledResiduals[channel] : 0
+        );
+        diagnostics.zdfPerBandCoupledSolverLastResidual = perBandCoupledMainActive
+          ? this.zdfPerBandCoupledResiduals[channel] : 0;
+        diagnostics.zdfPerBandCoupledFallbackCount = this.zdfPerBandCoupledFallbackCounts[channel];
+        diagnostics.zdfPerBandCoupledNonFiniteResetCount = this.zdfPerBandCoupledNonFiniteCounts[channel];
+      }
       diagnostics.mainCommonFeedbackReturn = mainCommonFeedbackReturn;
       diagnostics.mainTapSum = mainTapSum;
       diagnostics.mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
+      diagnostics.feedbackAllAmount = this.feedbackAllAmount;
+      diagnostics.feedbackAllAmountTarget = this.feedbackAllAmountTarget;
       diagnostics.mainPostGainFeedbackWeightMode = this.postGainFeedbackWeight;
       diagnostics.mainSaturationInput = unifiedZdfActive
         ? Math.sign(this.resonance) * this.maxFeedbackGain
           * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
             ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
           * this.zdfMainBus[channel]
-        : mainCommonBusActive && resonanceMagnitudeSquared > 0
+        : perBandCoupledMainActive
+          ? Math.sign(this.resonance) * this.maxFeedbackGain
+            * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
+              ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
+            * (this.feedbackAllAmount / 100)
+            * this.zdfPerBandMainBuses[channel]
+          : mainCommonBusActive && resonanceMagnitudeSquared > 0
           ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared) * diagnostics.mainTapSumScaled : 0;
       diagnostics.mainSaturationOutput = mainSaturationOutput;
       diagnostics.mainSaturationReturnMode = this.feedbackAllSaturationReturn;
@@ -1530,13 +2015,20 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         ? Math.sign(this.resonance) * this.maxFeedbackGain
           * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
             ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
-        : mainCommonBusActive && resonanceMagnitudeSquared > 0
+        : perBandCoupledMainActive
+          ? Math.sign(this.resonance) * this.maxFeedbackGain
+            * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
+              ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
+            * (this.feedbackAllAmount / 100)
+          : mainCommonBusActive && resonanceMagnitudeSquared > 0
           ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared) : 0;
       if (diagnostics.firstMainTapSum === null && Math.abs(mainTapSum) > 0) {
         diagnostics.firstMainTapSum = mainTapSum;
         diagnostics.firstMainTapSumScaled = mainTapSumScaled;
       }
-      diagnostics.mainCommonNonFiniteResets = this.mainCommonNonFiniteResetCounts[channel];
+      diagnostics.mainCommonNonFiniteResets = perBandZdfSelected
+        ? this.zdfPerBandCoupledNonFiniteCounts[channel]
+        : this.mainCommonNonFiniteResetCounts[channel];
       diagnostics.resonanceTarget = this.resonanceTarget;
       diagnostics.smoothedResonance = this.resonance;
       diagnostics.feedbackCore = this.feedbackCore;
@@ -1592,6 +2084,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       );
       this.commonBusDrive = this.commonBusDriveTarget + this.commonBusSmoothingCoefficient * (this.commonBusDrive - this.commonBusDriveTarget);
       this.commonBusCeiling = this.commonBusCeilingTarget + this.commonBusSmoothingCoefficient * (this.commonBusCeiling - this.commonBusCeilingTarget);
+      this.feedbackAllAmount = this.feedbackAllAmountTarget + this.feedbackGateSmoothingCoefficient * (
+        this.feedbackAllAmount - this.feedbackAllAmountTarget
+      );
       for (let index = 0; index < 3; index += 1) {
         this.positiveResonanceOutputWeights[index] = this.positiveResonanceOutputTargets[index]
           + this.devModeSmoothingCoefficient * (

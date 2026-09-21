@@ -4,7 +4,7 @@ const expectedGroups = {
   input: ['DEV INPUT STAGE', 'DEV CHARACTER'],
   filterbank: ['DEV REFERENCE', 'DEV BAND BOOST', 'DEV BAND CUT', 'SPREAD CURVE', 'DEV SPREAD MAX OFFSET', 'DEV WET MODEL'],
   'local-feedback': ['DEV FB TOPOLOGY', 'FEEDBACK CORE', 'DEV LOCAL LOOP TUNING', 'DEV FB TAP', 'DEV FB SAT', 'DEV FB DRIVE', 'DEV FB CEILING'],
-  main: ['DEV FB ALL ENGINE', 'DEV FB ALL SOURCE', 'DEV POST GAIN FB WEIGHT', 'DEV FB ALL LEVEL', 'DEV RESONANCE CURVE', 'DEV MAIN SAT/RETURN'],
+  main: ['DEV FB ALL ENGINE', 'DEV FB ALL SOURCE', 'DEV POST GAIN FB WEIGHT', 'DEV FB ALL LEVEL', 'FB ALL AMOUNT', 'DEV RESONANCE CURVE', 'DEV MAIN SAT/RETURN'],
   resonator: ['CAL DEV RES AUD', 'CAL DEV RES DRIVE', 'CAL DEV RES FLOOR', 'DEV RES OUTPUT', 'DEV RES LATENCY', 'DEV RES CURVE', 'DEV RES ENGINE']
 };
 
@@ -14,7 +14,7 @@ test('DEV-LAB replaces per-control hover help with five complete click-open grou
 
   const tooltip = page.locator('#dev-lab-tooltip');
   await expect(tooltip).toBeHidden();
-  await expect(page.locator('.dev-lab-group-header .dev-lab-info-button')).toHaveCount(5);
+  await expect(page.locator('.dev-lab-group-header .dev-lab-info-button')).toHaveCount(6);
 
   await page.locator('[data-input-preamp-stage]').hover();
   await expect(tooltip).toBeHidden();

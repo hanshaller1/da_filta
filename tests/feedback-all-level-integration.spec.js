@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('DEV FB ALL LEVEL and POST GAIN FB WEIGHT survive the UI, AudioEngine, Filterbank, and Worklet handoff', async ({ page }) => {
+test('DEV FB ALL LEVEL, AMOUNT and POST GAIN FB WEIGHT survive the UI, AudioEngine, Filterbank, and Worklet handoff', async ({ page }) => {
   await page.addInitScript(() => {
     window.__feedbackAllLevelTestState = { nodes: [] };
     const mediaDevices = navigator.mediaDevices || {};
@@ -67,6 +67,11 @@ test('DEV FB ALL LEVEL and POST GAIN FB WEIGHT survive the UI, AudioEngine, Filt
     .find(node => node.name === window.Filterbank.PROCESSOR_NAME)
     .options.processorOptions.postGainFeedbackWeight);
   expect(initialWeight).toBe('current');
+  const initialAmount = await page.evaluate(() => window.__feedbackAllLevelTestState.nodes
+    .find(node => node.name === window.Filterbank.PROCESSOR_NAME)
+    .options.processorOptions.feedbackAllAmount);
+  expect(initialAmount).toBe(100);
+  const initialWorkletNodeCount = await page.evaluate(() => window.__feedbackAllLevelTestState.nodes.length);
   for (const value of ['current', 'soft-knee']) {
     await page.locator('[data-post-gain-feedback-weight]').selectOption(value);
     const received = await page.evaluate(() => {
@@ -75,6 +80,7 @@ test('DEV FB ALL LEVEL and POST GAIN FB WEIGHT survive the UI, AudioEngine, Filt
     });
     expect(received).toBe(value);
   }
+  expect(await page.evaluate(() => window.__feedbackAllLevelTestState.nodes.length)).toBe(initialWorkletNodeCount);
 
   for (const [value] of expectedLevels) {
     await page.locator('[data-feedback-all-level]').selectOption(value);
@@ -85,17 +91,30 @@ test('DEV FB ALL LEVEL and POST GAIN FB WEIGHT survive the UI, AudioEngine, Filt
     expect(received).toBe(value);
   }
 
+  for (const value of [0, 25, 50, 75, 100]) {
+    await page.locator('[data-feedback-all-amount]').fill(String(value));
+    await page.locator('[data-feedback-all-amount]').dispatchEvent('change');
+    const received = await page.evaluate(() => {
+      const node = window.__feedbackAllLevelTestState.nodes.find(candidate => candidate.name === window.Filterbank.PROCESSOR_NAME);
+      return [...node.messages].reverse().find(message => message.type === 'set-feedback-all-amount')?.value;
+    });
+    expect(received).toBe(value);
+  }
+  expect(await page.evaluate(() => window.__feedbackAllLevelTestState.nodes.length)).toBe(initialWorkletNodeCount);
+
   const fallback = await page.evaluate(() => {
     const audioEngine = new window.AudioEngine({});
-    let audioEngineForwarded;
+    let audioEngineForwarded; let audioEngineAmountForwarded;
     let audioEngineWeightForwarded;
-    audioEngine.filterbank = { setFeedbackAllLevel: value => { audioEngineForwarded = value; }, setPostGainFeedbackWeight: value => { audioEngineWeightForwarded = value; } };
+    audioEngine.filterbank = { setFeedbackAllLevel: value => { audioEngineForwarded = value; }, setFeedbackAllAmount: value => { audioEngineAmountForwarded = value; }, setPostGainFeedbackWeight: value => { audioEngineWeightForwarded = value; } };
     const context = new AudioContext();
-    const filterbank = new window.Filterbank(context, { feedbackAllLevel: 'invalid-value', postGainFeedbackWeight: 'invalid-value' });
+    const filterbank = new window.Filterbank(context, { feedbackAllLevel: 'invalid-value', feedbackAllAmount: 'invalid-value', postGainFeedbackWeight: 'invalid-value' });
     const constructorValue = filterbank.feedbackAllLevel;
     const constructorWeight = filterbank.postGainFeedbackWeight;
+    const constructorAmount = filterbank.feedbackAllAmount;
     const setterValue = filterbank.setFeedbackAllLevel('invalid-value');
     const setterWeight = filterbank.setPostGainFeedbackWeight('invalid-value');
+    const setterAmount = filterbank.setFeedbackAllAmount('invalid-value');
     return {
       audioEngineWeightValue: audioEngine.setPostGainFeedbackWeight('invalid-value'),
       audioEngineWeightForwarded,
@@ -103,14 +122,20 @@ test('DEV FB ALL LEVEL and POST GAIN FB WEIGHT survive the UI, AudioEngine, Filt
       setterWeight,
       audioEngineValue: audioEngine.setFeedbackAllLevel('invalid-value'),
       audioEngineForwarded,
+      audioEngineAmountValue: audioEngine.setFeedbackAllAmount('invalid-value'),
+      audioEngineAmountForwarded,
+      constructorAmount,
+      setterAmount,
       constructorValue,
       setterValue,
-      workletValue: filterbank.workletNode.messages.at(-2).value,
-      workletWeightValue: filterbank.workletNode.messages.at(-1).value
+      workletValue: filterbank.workletNode.messages.at(-3).value,
+      workletWeightValue: filterbank.workletNode.messages.at(-2).value,
+      workletAmountValue: filterbank.workletNode.messages.at(-1).value
     };
   });
   expect(fallback).toEqual({
     audioEngineValue: 'raw', audioEngineForwarded: 'raw', constructorValue: 'raw', setterValue: 'raw', workletValue: 'raw',
+    audioEngineAmountValue: 100, audioEngineAmountForwarded: 100, constructorAmount: 100, setterAmount: 100, workletAmountValue: 100,
     audioEngineWeightValue: 'current', audioEngineWeightForwarded: 'current', constructorWeight: 'current', setterWeight: 'current', workletWeightValue: 'current'
   });
 

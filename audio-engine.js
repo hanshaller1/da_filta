@@ -60,6 +60,7 @@
       this.feedbackAllEngine = 'legacy'; this.feedbackAllSource = 'post-gain-sum';
       this.postGainFeedbackWeight = 'current';
       this.feedbackAllLevel = 'raw';
+      this.feedbackAllAmount = 100;
       this.feedbackAllResonanceCurve = 'current';
       this.feedbackAllSaturationReturn = 'current';
       this.dryWet = 50;
@@ -232,6 +233,7 @@
     setFeedbackAllSource(value) { this.feedbackAllSource = value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; this.filterbank?.setFeedbackAllSource(this.feedbackAllSource); return this.feedbackAllSource; }
     setPostGainFeedbackWeight(value) { this.postGainFeedbackWeight = value === 'soft-knee' ? 'soft-knee' : 'current'; this.filterbank?.setPostGainFeedbackWeight(this.postGainFeedbackWeight); return this.postGainFeedbackWeight; }
     setFeedbackAllLevel(value) { this.feedbackAllLevel = FEEDBACK_ALL_LEVELS.includes(value) ? value : 'raw'; this.filterbank?.setFeedbackAllLevel(this.feedbackAllLevel); return this.feedbackAllLevel; }
+    setFeedbackAllAmount(value) { this.feedbackAllAmount = Number.isFinite(Number(value)) ? Math.min(100, Math.max(0, Number(value))) : 100; this.filterbank?.setFeedbackAllAmount(this.feedbackAllAmount); return this.feedbackAllAmount; }
     setFeedbackAllResonanceCurve(value) { this.feedbackAllResonanceCurve = value === 'soft-knee' ? 'soft-knee' : 'current'; this.filterbank?.setFeedbackAllResonanceCurve(this.feedbackAllResonanceCurve); return this.feedbackAllResonanceCurve; }
     setFeedbackAllSaturationReturn(value) { this.feedbackAllSaturationReturn = value === 'drive-4-return-0.2' ? 'drive-4-return-0.2' : 'current'; this.filterbank?.setFeedbackAllSaturationReturn(this.feedbackAllSaturationReturn); return this.feedbackAllSaturationReturn; }
 
@@ -316,7 +318,7 @@
         , referenceLevel: this.referenceLevel, maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb, positiveResonanceEngine: this.positiveResonanceEngine
         , feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
-        , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
+        , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
         , onDiagnostics: this.onDiagnostics
       };
     }
@@ -379,6 +381,7 @@
       this.setFeedbackAllSource(snapshot?.feedbackAllSource ?? this.feedbackAllSource);
       this.setPostGainFeedbackWeight(snapshot?.postGainFeedbackWeight ?? this.postGainFeedbackWeight);
       this.setFeedbackAllLevel(snapshot?.feedbackAllLevel ?? this.feedbackAllLevel);
+      this.setFeedbackAllAmount(snapshot?.feedbackAllAmount ?? this.feedbackAllAmount);
       this.setFeedbackAllResonanceCurve(snapshot?.feedbackAllResonanceCurve ?? this.feedbackAllResonanceCurve);
       this.setFeedbackAllSaturationReturn(snapshot?.feedbackAllSaturationReturn ?? this.feedbackAllSaturationReturn);
       if (this.filterbank) this.filterbank.applyState(this.getFilterbankState());
