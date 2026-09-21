@@ -635,6 +635,12 @@ const DEV_LAB_HELP = {
     values: [['ISOLATED TPT', 'Ältere separate Resonator-/TPT-Architektur.'], ['COMMON BUS', 'Aktive lokale Taps werden gemeinsam zurückgeführt und können dadurch alle Base-Bänder erneut anregen.'], ['LOCAL LOOP EXP', 'Jedes aktive Band besitzt einen getrennten lokalen äußeren Loop; MAIN/FB ALL kann zusätzlich weiterlaufen.']],
     default: 'ISOLATED TPT', note: 'Experimenteller Reverse-Engineering-Hörvergleich. Keine Schaltung wird als bewiesen behauptet.'
   },
+  'data-feedback-core': {
+    title: 'FEEDBACK CORE', what: 'Wählt den experimentellen Feedback-Core, ohne die normale Filterbank-Konfiguration zu ersetzen.',
+    scope: 'CURRENT verwendet den bestehenden Feedback-Core. ZDF verwendet den alternativen Zero-Delay-Feedback-Core in den unterstützten Feedback-Topologien.',
+    values: [['CURRENT', 'Bestehender CURRENT-Feedback-Core.'], ['ZDF', 'Alternativer ZDF-Feedback-Core für den direkten DEV/LAB-Vergleich.']],
+    default: 'CURRENT', note: 'Experimentelle Core-Auswahl; Band-Gains, MAIN/FB ALL und die übrigen normalen Bedienelemente werden nicht durch diese Auswahl gespeichert.'
+  },
   'data-local-loop-tuning': {
     title: 'DEV LOCAL LOOP TUNING', what: 'Wählt die interne Stimmung des experimentellen lokalen Feedback-Loops.',
     scope: 'Wirkt ausschließlich bei LOCAL LOOP EXP. CURRENT lässt die Base-Bandzentren unverändert; COMPENSATED verschiebt nur die Testbänder 218 Hz, 777 Hz, 1.5 kHz und 2.8 kHz abhängig von der tatsächlichen Worklet-Sample-Rate und dem vorhandenen TPT-Q.',
@@ -748,7 +754,7 @@ const DEV_LAB_HELP = {
 const DEV_LAB_GROUP_HELP = {
   input: ['data-input-preamp-stage', 'data-input-character-amount'],
   filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-spread-curve', 'data-spread-max-offset-db', 'data-wet-model'],
-  'local-feedback': ['data-feedback-topology', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
+  'local-feedback': ['data-feedback-topology', 'data-feedback-core', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
   main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-post-gain-feedback-weight', 'data-feedback-all-level', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
   resonator: ['data-positive-resonance-audition', 'data-positive-resonance-drive', 'data-positive-resonance-damping-floor', 'data-positive-resonance-output', 'data-positive-resonance-latency', 'data-positive-resonance-curve', 'data-positive-resonance-engine']
 };
@@ -1339,6 +1345,51 @@ const syncUiFromAudioState = snapshot => {
   updateLocalLoopTuningRelevance();
   renderBandSliderValues();
 };
+// This is the complete, explicit DEV/LAB snapshot contract. Normal app state
+// is intentionally absent: DEV/LAB snapshots are experimental configurations,
+// not production presets.
+const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
+  ['inputPreampStage', value => audioEngine.setInputPreampStage(value)],
+  ['inputCharacterAmount', value => setInputCharacterAmount(value)],
+  ['referenceLevel', value => audioEngine.setReferenceLevel(value)],
+  ['maxBandBoostDb', value => audioEngine.setBandBoostDb(value)],
+  ['maxBandCutDb', value => audioEngine.setBandCutDb(value)],
+  ['spreadCurve', value => { state.spreadCurve = audioEngine.setSpreadCurve(value); }],
+  ['spreadMaxOffsetDb', value => { state.spreadMaxOffsetDb = audioEngine.setSpreadMaxOffsetDb(value); }],
+  ['positiveResonanceEngine', value => audioEngine.setPositiveResonanceEngine(value)],
+  ['feedbackTopology', value => audioEngine.setFeedbackTopology(value)],
+  ['feedbackCore', value => audioEngine.setFeedbackCore(value)],
+  ['localLoopTuning', value => audioEngine.setLocalLoopTuning(value)],
+  ['feedbackTap', value => audioEngine.setFeedbackTap(value)],
+  ['wetModel', value => audioEngine.setWetModel(value)],
+  ['commonBusSaturationMode', value => audioEngine.setCommonBusSaturationMode(value)],
+  ['commonBusDrive', value => audioEngine.setCommonBusDrive(value)],
+  ['commonBusCeiling', value => audioEngine.setCommonBusCeiling(value)],
+  ['feedbackAllEngine', value => audioEngine.setFeedbackAllEngine(value)],
+  ['feedbackAllSource', value => audioEngine.setFeedbackAllSource(value)],
+  ['postGainFeedbackWeight', value => audioEngine.setPostGainFeedbackWeight(value)],
+  ['feedbackAllLevel', value => audioEngine.setFeedbackAllLevel(value)],
+  ['feedbackAllResonanceCurve', value => audioEngine.setFeedbackAllResonanceCurve(value)],
+  ['feedbackAllSaturationReturn', value => audioEngine.setFeedbackAllSaturationReturn(value)],
+  ['positiveResonanceAuditionGain', value => audioEngine.setPositiveResonanceAuditionGain(value)],
+  ['positiveResonanceDrive', value => audioEngine.setPositiveResonanceDrive(value)],
+  ['positiveResonanceDampingFloor', value => audioEngine.setPositiveResonanceDampingFloor(value)],
+  ['positiveResonanceOutputMode', value => audioEngine.setPositiveResonanceOutputMode(value)],
+  ['positiveResonanceLatencyMode', value => audioEngine.setPositiveResonanceLatencyMode(value)],
+  ['positiveResonanceCurve', value => audioEngine.setPositiveResonanceCurve(value)]
+].map(([key, apply]) => Object.freeze({ key, apply })));
+const createDevLabSnapshot = () => {
+  const currentState = audioEngine?.getState?.();
+  if (!currentState) return null;
+  return Object.fromEntries(DEV_LAB_SNAPSHOT_PROPERTIES.map(({ key }) => [key, currentState[key]]));
+};
+const applyDevLabSnapshot = snapshot => {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
+  DEV_LAB_SNAPSHOT_PROPERTIES.forEach(({ key, apply }) => {
+    if (Object.prototype.hasOwnProperty.call(snapshot, key)) apply(snapshot[key]);
+  });
+  syncUiFromAudioState(audioEngine.getState());
+};
 const renderSweetspots = () => SWEETSPOT_SLOTS.forEach(slot => {
   const entry = sweetspots[slot]; const row = sweetspotRows.get(slot); if (!row) return;
   const nameInput = row.querySelector(`[data-sweetspot-name="${slot}"]`);
@@ -1350,16 +1401,15 @@ SWEETSPOT_SLOTS.forEach(slot => {
   const row = sweetspotRows.get(slot); const nameInput = row.querySelector(`[data-sweetspot-name="${slot}"]`);
   nameInput.addEventListener('input', () => { sweetspots[slot].name = nameInput.value; persistSweetspots(); });
   row.querySelector(`[data-sweetspot-save="${slot}"]`).addEventListener('click', () => {
-    const currentState = audioEngine?.getState?.();
-    if (!currentState) return;
-    sweetspots[slot] = { name: nameInput.value || sweetspotDefaultName(slot), state: cloneSnapshot(currentState) };
+    const snapshot = createDevLabSnapshot();
+    if (!snapshot) return;
+    sweetspots[slot] = { name: nameInput.value || sweetspotDefaultName(slot), state: cloneSnapshot(snapshot) };
     persistSweetspots(); renderSweetspots();
   });
   row.querySelector(`[data-sweetspot-load="${slot}"]`).addEventListener('click', () => {
     const savedState = sweetspots[slot]?.state; if (!savedState) return;
     const snapshot = cloneSnapshot(savedState);
-    audioEngine.applyState(snapshot);
-    syncUiFromAudioState(audioEngine.getState());
+    applyDevLabSnapshot(snapshot);
   });
   row.querySelector(`[data-sweetspot-clear="${slot}"]`).addEventListener('click', () => {
     sweetspots[slot].state = null; persistSweetspots(); renderSweetspots();
