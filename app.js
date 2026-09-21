@@ -1457,13 +1457,17 @@ const renderTelemetryIndicators = () => {
   const saturated = Math.max(Number(left?.saturationActiveFrames) || 0, Number(right?.saturationActiveFrames) || 0) / frames > .01 || Math.max(Math.abs(Number(left?.wetPeak) || 0), Math.abs(Number(right?.wetPeak) || 0)) >= .995;
   analyzerSaturationBadge.hidden = !analyzerDisplay.saturationIndicators || !saturated;
 };
+const COLLAPSED_PREVIEW_SILENCE_ENERGY = 1e-8;
 const renderCollapsedPreview = index => {
   const button = collapsedPreview.querySelector(`[data-collapsed-band="${index}"]`);
   if (!button) return;
   const motion = analyzerMotion[index];
   const packet = getAnalyzerTelemetry();
-  const peakEnergy = packet ? Math.max(1e-9, ...Array.from({ length: BAND_COUNT }, (_, band) => getEnergyPair(packet, band))) : 1;
-  const audioLevel = packet ? Math.min(1, Math.sqrt(getEnergyPair(packet, index) / peakEnergy)) : 0;
+  const energies = packet ? Array.from({ length: BAND_COUNT }, (_, band) => getEnergyPair(packet, band)) : [];
+  const peakEnergy = packet ? Math.max(...energies) : 0;
+  const audioLevel = peakEnergy >= COLLAPSED_PREVIEW_SILENCE_ENERGY
+    ? Math.min(1, Math.sqrt(energies[index] / peakEnergy))
+    : 0;
   const targetLevel = packet ? Math.min(1, Math.max(Math.abs(motion.left), Math.abs(motion.right)) / 260 + audioLevel * .82) : 0;
   const previousLevel = collapsedPreviewLevels[index];
   const level = targetLevel >= previousLevel ? targetLevel : previousLevel + (targetLevel - previousLevel) * .13;
@@ -1477,7 +1481,8 @@ const renderCollapsedPreviewLine = () => {
   const path = collapsedPreview.querySelector('svg path');
   if (!path) return;
   const points = collapsedPreviewLevels.map((level, index) => ({ x: (index + .5) * 100, y: 35 - level * 28 }));
-  const d = points.reduce((result, point, index) => `${result}${index ? ' L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`, 'M0 35') + ' L1000 35';
+  const edgePoints = [{ x: 0, y: points[0].y }, ...points, { x: 1000, y: points.at(-1).y }];
+  const d = edgePoints.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
   path.setAttribute('d', d);
 };
 const animateAnalyzer = now => {

@@ -76,12 +76,21 @@ test('Analyzer display layers, status strip and collapsed preview remain UI-only
   await expect.poll(() => page.locator('.analyzer-footer').evaluate(element => getComputedStyle(element, '::before').display)).toBe('none');
   await expect(page.locator('.analyzer-band-detail')).toBeHidden();
   await expect(page.locator('.collapsed-analyzer-preview')).toBeVisible();
+  await expect.poll(() => page.locator('.collapsed-analyzer-preview svg path').getAttribute('d')).toBe('M0.0 35.0 L50.0 35.0 L150.0 35.0 L250.0 35.0 L350.0 35.0 L450.0 35.0 L550.0 35.0 L650.0 35.0 L750.0 35.0 L850.0 35.0 L950.0 35.0 L1000.0 35.0');
+  await page.evaluate(() => window.FilterbankDebugConsole.receive({
+    left: { frameCount: 64, bandEnergy: Array(10).fill(1e-12) },
+    right: { frameCount: 64, bandEnergy: Array(10).fill(1e-12) }
+  }));
+  await expect.poll(() => page.locator('[data-collapsed-band="9"]').evaluate(element => getComputedStyle(element).getPropertyValue('--preview-level'))).toBe('0.000');
   await page.evaluate(() => window.FilterbankDebugConsole.receive({
     left: { frameCount: 64, bandEnergy: [0, 0, 0, .16, 0, 0, 0, 0, 0, 0], commonFeedbackReturn: .2, mainCommonFeedbackReturn: .1, saturationActiveFrames: 0, wetPeak: .2 },
     right: { frameCount: 64, bandEnergy: [0, 0, 0, .12, 0, 0, 0, 0, 0, 0], commonFeedbackReturn: .1, mainCommonFeedbackReturn: .05, saturationActiveFrames: 0, wetPeak: .2 }
   }));
   await expect.poll(() => page.locator('[data-collapsed-band="3"]').evaluate(element => getComputedStyle(element).getPropertyValue('--preview-level'))).not.toBe('0.000');
-  await expect.poll(() => page.locator('.collapsed-analyzer-preview svg path').getAttribute('d')).toMatch(/L/);
+  await expect.poll(() => page.locator('.collapsed-analyzer-preview svg path').getAttribute('d')).toMatch(/^M0\.0 [\d.]+(?: L\d+\.0 [\d.]+){11}$/);
+  const pathPoints = await page.locator('.collapsed-analyzer-preview svg path').evaluate(path => [...path.getAttribute('d').matchAll(/[ML](\d+\.\d) (\d+\.\d)/g)].map(match => ({ x: Number(match[1]), y: Number(match[2]) })));
+  expect(pathPoints[0]).toEqual({ x: 0, y: pathPoints[1].y });
+  expect(pathPoints.at(-1)).toEqual({ x: 1000, y: pathPoints.at(-2).y });
   await expect(page.locator('[data-collapsed-band="3"]')).toHaveAttribute('title', /218 Hz/);
   await page.locator('[data-collapsed-band="3"]').hover();
   await expect(page.locator('.collapsed-analyzer-detail')).toBeVisible();
