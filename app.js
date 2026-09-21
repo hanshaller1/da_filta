@@ -114,8 +114,14 @@ if (analyzerHeaderControls && analyzerLegend) analyzerHeaderControls.prepend(ana
 const analyzer = document.querySelector('.analyzer');
 let analyzerFooter = null;
 let collapsedPreview = null;
+let clearAnalyzerHover = () => {};
 const analyzerAxisX = document.querySelector('.chart-grid .axis-x');
 if (analyzer && analyzerAxisX) {
+  analyzerAxisX.replaceChildren(...BAND_DEFINITIONS.map(band => {
+    const label = document.createElement('span');
+    label.textContent = band.label;
+    return label;
+  }));
   analyzerFooter = document.createElement('div');
   analyzerFooter.className = 'analyzer-footer';
   analyzerFooter.append(analyzerAxisX);
@@ -131,6 +137,7 @@ const setFilterbankResponseCollapsed = collapsed => {
   responseCollapseButton.setAttribute('aria-label', collapsed ? 'Filterbank response ausklappen' : 'Filterbank response einklappen');
   if (collapsedPreview) {
     collapsedPreview.hidden = !collapsed || !analyzerDisplay.collapsedPreview;
+    clearAnalyzerHover();
     if (collapsed) scheduleAnalyzerRender();
   }
   responseCollapseButton.textContent = collapsed ? '▾' : '▴';
@@ -187,8 +194,8 @@ const setAnalyzerOptionsOpen = open => {
   analyzerOptionsPopover.hidden = !open;
   analyzerOptionsToggle.setAttribute('aria-expanded', String(open));
 };
-analyzerOptionsToggle.addEventListener('click', () => setAnalyzerOptionsOpen(analyzerOptionsPopover.hidden));
-document.addEventListener('pointerdown', event => { if (!analyzerOptions.contains(event.target)) setAnalyzerOptionsOpen(false); });
+analyzerOptionsToggle.addEventListener('click', () => { clearAnalyzerHover(); setAnalyzerOptionsOpen(analyzerOptionsPopover.hidden); });
+document.addEventListener('pointerdown', event => { if (!analyzerOptions.contains(event.target)) { clearAnalyzerHover(); setAnalyzerOptionsOpen(false); } });
 document.addEventListener('keydown', event => { if (event.key === 'Escape') setAnalyzerOptionsOpen(false); });
 analyzerHeaderControls?.prepend(analyzerOptions);
 
@@ -1016,16 +1023,21 @@ analyzerSaturationBadge.className = 'analyzer-saturation-indicator';
 analyzerSaturationBadge.hidden = true;
 analyzerSaturationBadge.textContent = 'SAT';
 responseChart?.append(analyzerSaturationBadge);
+const collapsedAnalyzerDetail = document.createElement('div');
+collapsedAnalyzerDetail.className = 'collapsed-analyzer-detail';
+collapsedAnalyzerDetail.hidden = true;
 collapsedPreview = document.createElement('div');
 collapsedPreview.className = 'collapsed-analyzer-preview';
 collapsedPreview.hidden = true;
-collapsedPreview.innerHTML = Array.from({ length: BAND_COUNT }, (_, index) => `<button type="button" data-collapsed-band="${index}" aria-label="Band ${index + 1}, ${BAND_DEFINITIONS[index].label}"><i></i><span>${index + 1}</span></button>`).join('');
-analyzerFooter?.append(collapsedPreview);
+collapsedPreview.innerHTML = '<svg viewBox="0 0 1000 42" preserveAspectRatio="none" aria-hidden="true"><path></path></svg>' + Array.from({ length: BAND_COUNT }, (_, index) => `<button type="button" data-collapsed-band="${index}" aria-label="Band ${index + 1}, ${BAND_DEFINITIONS[index].label}"><i></i><span>${index + 1}</span></button>`).join('');
+analyzerFooter?.append(collapsedPreview, collapsedAnalyzerDetail);
 const analyzerMotion = Array.from({ length: BAND_COUNT }, () => ({ left: 0, right: 0, peakLeft: 0, peakRight: 0, peakLeftAt: 0, peakRightAt: 0 }));
 const analyzerOscillation = Array.from({ length: BAND_COUNT }, () => ({ since: 0, active: false }));
+const collapsedPreviewLevels = Array(BAND_COUNT).fill(0);
 let analyzerAnimationFrame = 0;
 let analyzerLastFrame = performance.now();
 let liveDetailTimeout = 0;
+let hoveredAnalyzerBand = null;
 const toDb = value => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)} dB`;
 const getAnalyzerEffective = index => audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, { maxBandBoostDb: getBandBoostDb(), maxBandCutDb: getBandCutDb() });
 const getAnalyzerTelemetry = () => devLabTelemetry.getLatest?.() || null;
@@ -1043,16 +1055,31 @@ const analyzerBandInfo = index => {
 };
 const detailText = index => {
   const info = analyzerBandInfo(index);
-  return [`BAND ${index + 1} · ${BAND_DEFINITIONS[index].label}`, `L ${toDb(info.effective.leftDb)}`, `R ${toDb(info.effective.rightDb)}`, ...(analyzerDisplay.spreadDelta ? [`Δ ${toDb(info.delta)}`] : []), ...(info.feedback ? ['FB ON'] : []), ...(info.dominant ? ['DOM'] : []), ...(info.oscillating ? ['OSC'] : [])];
+  return [`BAND ${index + 1} · ${BAND_DEFINITIONS[index].label}`, `L ${toDb(info.effective.leftDb)}`, `R ${toDb(info.effective.rightDb)}`, ...(analyzerDisplay.spreadDelta || Math.abs(info.delta) > .005 ? [`Δ ${toDb(info.delta)}`] : []), info.feedback ? 'FB ON' : 'FB OFF', ...(state.feedbackAllLeft || state.feedbackAllRight ? ['MAIN'] : []), ...(info.dominant ? ['DOM'] : []), ...(info.oscillating ? ['OSC'] : [])];
 };
-const showAnalyzerDetail = (index, anchor, persistent = false) => {
+clearAnalyzerHover = () => {
+  hoveredAnalyzerBand = null;
+  clearTimeout(liveDetailTimeout);
+  analyzerDetail.hidden = true;
+  collapsedAnalyzerDetail.hidden = true;
+  bars.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
+  collapsedPreview?.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
+};
+const showAnalyzerDetail = (index, anchor, persistent = false, collapsed = false) => {
   if ((!persistent && !analyzerDisplay.hoverValues) || (persistent && !analyzerDisplay.liveEditValues)) return;
-  analyzerDetail.replaceChildren(...detailText(index).map((line, lineIndex) => { const row = document.createElement(lineIndex === 0 ? 'strong' : 'span'); row.textContent = line; return row; }));
-  analyzerDetail.hidden = false;
-  const chartRect = responseChart.getBoundingClientRect();
-  const rect = anchor?.getBoundingClientRect?.() || chartRect;
-  analyzerDetail.style.left = `${Math.max(4, Math.min(chartRect.width - 116, rect.left - chartRect.left + rect.width / 2 - 58))}px`;
-  analyzerDetail.style.top = `${Math.max(4, Math.min(chartRect.height - 82, rect.top - chartRect.top + 8))}px`;
+  const detail = collapsed ? collapsedAnalyzerDetail : analyzerDetail;
+  const container = collapsed ? analyzerFooter : responseChart;
+  if (!persistent) {
+    clearAnalyzerHover();
+    hoveredAnalyzerBand = index;
+    anchor?.classList.add('is-hovered');
+  }
+  detail.replaceChildren(...detailText(index).map((line, lineIndex) => { const row = document.createElement(lineIndex === 0 ? 'strong' : 'span'); row.textContent = line; return row; }));
+  detail.hidden = false;
+  const containerRect = container.getBoundingClientRect();
+  const rect = anchor?.getBoundingClientRect?.() || containerRect;
+  detail.style.left = `${Math.max(4, Math.min(containerRect.width - 116, rect.left - containerRect.left + rect.width / 2 - 58))}px`;
+  detail.style.top = collapsed ? '2px' : `${Math.max(4, Math.min(containerRect.height - 82, rect.top - containerRect.top + 8))}px`;
   if (persistent) { clearTimeout(liveDetailTimeout); liveDetailTimeout = window.setTimeout(() => { analyzerDetail.hidden = true; }, 1250); }
 };
 const refreshStatusStrip = () => {
@@ -1110,11 +1137,21 @@ const renderCollapsedPreview = index => {
   const packet = getAnalyzerTelemetry();
   const peakEnergy = packet ? Math.max(1e-9, ...Array.from({ length: BAND_COUNT }, (_, band) => getEnergyPair(packet, band))) : 1;
   const audioLevel = packet ? Math.min(1, Math.sqrt(getEnergyPair(packet, index) / peakEnergy)) : 0;
-  const level = Math.min(1, Math.max(Math.abs(motion.left), Math.abs(motion.right)) / 260 + audioLevel * .82);
+  const targetLevel = Math.min(1, Math.max(Math.abs(motion.left), Math.abs(motion.right)) / 260 + audioLevel * .82);
+  const previousLevel = collapsedPreviewLevels[index];
+  const level = targetLevel >= previousLevel ? targetLevel : previousLevel + (targetLevel - previousLevel) * .13;
+  collapsedPreviewLevels[index] = level;
   button.style.setProperty('--preview-level', level.toFixed(3));
   const info = analyzerBandInfo(index);
   button.classList.toggle('is-active', info.feedback || info.dominant || info.oscillating);
   button.title = detailText(index).join('\n');
+};
+const renderCollapsedPreviewLine = () => {
+  const path = collapsedPreview.querySelector('svg path');
+  if (!path) return;
+  const points = collapsedPreviewLevels.map((level, index) => ({ x: (index + .5) * 100, y: 35 - level * 28 }));
+  const d = points.reduce((result, point, index) => `${result}${index ? ' L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`, 'M0 35') + ' L1000 35';
+  path.setAttribute('d', d);
 };
 const animateAnalyzer = now => {
   analyzerAnimationFrame = 0;
@@ -1147,11 +1184,12 @@ const animateAnalyzer = now => {
       pair.querySelector('.analyzer-peak-left').style.setProperty('--peak-level', (Math.sign(motion.left || 1) * motion.peakLeft / 2).toFixed(2));
       pair.querySelector('.analyzer-peak-right').style.setProperty('--peak-level', (Math.sign(motion.right || 1) * motion.peakRight / 2).toFixed(2));
     }
-    renderCollapsedPreview(index);
+    if (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview) renderCollapsedPreview(index);
   }
+  if (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview) renderCollapsedPreviewLine();
   refreshStatusStrip();
   renderTelemetryIndicators();
-  if (needsFrame || filterbankWorkspace?.classList.contains('is-collapsed')) analyzerAnimationFrame = requestAnimationFrame(animateAnalyzer);
+  if (needsFrame || (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview)) analyzerAnimationFrame = requestAnimationFrame(animateAnalyzer);
 };
 const scheduleAnalyzerRender = () => { if (!analyzerAnimationFrame) analyzerAnimationFrame = requestAnimationFrame(animateAnalyzer); };
 const setAnalyzerDisplayOption = (key, enabled) => {
@@ -1160,6 +1198,7 @@ const setAnalyzerDisplayOption = (key, enabled) => {
   analyzerOptionsPopover.querySelector(`[data-analyzer-option="${key}"]`).checked = analyzerDisplay[key];
   responseChart?.classList.toggle(`hide-${key.replace(/[A-Z]/g, match => `-${match.toLowerCase()}`)}`, !analyzerDisplay[key]);
   if (key === 'liveStatusStrip') refreshStatusStrip();
+  if (key === 'hoverValues' && !analyzerDisplay[key]) clearAnalyzerHover();
   if (key === 'frequencyLabels') analyzerFooter?.classList.toggle('hide-frequency-labels', !analyzerDisplay[key]);
   if (key === 'bandRegions') responseChart?.classList.toggle('hide-band-regions', !analyzerDisplay[key]);
   if (key === 'grid') responseChart?.classList.toggle('hide-grid', !analyzerDisplay[key]);
@@ -1240,22 +1279,24 @@ faders.forEach((slider,index) => {
   slider.addEventListener('dblclick', () => setBandBaseGain('left', index, BAND_GAIN_NEUTRAL));
   renderBand(index);
 });
-bars.addEventListener('pointerover', event => {
-  const pair = event.target.closest('[data-analyzer-band]');
-  if (pair) showAnalyzerDetail(Number(pair.dataset.analyzerBand), pair);
-});
-bars.addEventListener('pointerout', event => {
-  if (!event.relatedTarget?.closest?.('[data-analyzer-band]')) analyzerDetail.hidden = true;
+bars.querySelectorAll('[data-analyzer-band]').forEach(pair => {
+  pair.addEventListener('pointerenter', () => showAnalyzerDetail(Number(pair.dataset.analyzerBand), pair));
+  pair.addEventListener('pointerleave', clearAnalyzerHover);
 });
 bars.addEventListener('focusin', event => {
   const pair = event.target.closest('[data-analyzer-band]');
   if (pair) showAnalyzerDetail(Number(pair.dataset.analyzerBand), pair);
 });
-bars.addEventListener('focusout', () => { analyzerDetail.hidden = true; });
-collapsedPreview.addEventListener('pointerover', event => {
-  const button = event.target.closest('[data-collapsed-band]');
-  if (button && analyzerDisplay.collapsedPreview) button.title = detailText(Number(button.dataset.collapsedBand)).join('\n');
+bars.addEventListener('focusout', clearAnalyzerHover);
+collapsedPreview.querySelectorAll('[data-collapsed-band]').forEach(button => {
+  button.addEventListener('pointerenter', () => {
+    if (analyzerDisplay.collapsedPreview && filterbankWorkspace?.classList.contains('is-collapsed')) showAnalyzerDetail(Number(button.dataset.collapsedBand), button, false, true);
+  });
+  button.addEventListener('pointerleave', clearAnalyzerHover);
 });
+window.addEventListener('blur', clearAnalyzerHover);
+normalResponseButton.addEventListener('click', clearAnalyzerHover);
+devResponseButton.addEventListener('click', clearAnalyzerHover);
 document.addEventListener('input', () => { refreshStatusStrip(); scheduleAnalyzerRender(); });
 document.addEventListener('change', () => { refreshStatusStrip(); scheduleAnalyzerRender(); });
 
