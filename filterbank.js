@@ -79,6 +79,7 @@
   const normalizeFeedbackAllSaturationReturn = value => value === 'drive-4-return-0.2' ? 'drive-4-return-0.2' : 'current';
   const normalizePositiveResonanceEngine = value => value === 'phase2' ? value : 'tpt';
   const normalizeLocalLoopTuning = value => value === 'compensated' ? 'compensated' : 'current';
+  const normalizeFeedbackCore = value => value === 'zdf-per-band' ? 'zdf-per-band' : value === 'zdf' ? 'zdf' : 'current';
   const normalizeChannel = channel => {
     if (channel === 'left' || channel === 'L') return 'left';
     if (channel === 'right' || channel === 'R') return 'right';
@@ -143,7 +144,7 @@
       this.feedbackTopology = initialState?.feedbackTopology === 'common-bus'
         ? 'common-bus'
         : initialState?.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
-      this.feedbackCore = initialState?.feedbackCore === 'zdf' ? 'zdf' : 'current';
+      this.feedbackCore = normalizeFeedbackCore(initialState?.feedbackCore);
       this.localLoopTuning = normalizeLocalLoopTuning(initialState?.localLoopTuning);
       this.feedbackTap = initialState?.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
       this.wetModel = initialState?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
@@ -335,7 +336,7 @@
     setBandCutDb(value) { if (!this.disposed) { this.maxBandCutDb = normalizeBandCutDb(value); this.workletNode.port.postMessage({ type: 'set-band-cut-db', value: this.maxBandCutDb }); } return this.maxBandCutDb; }
     setPositiveResonanceEngine(value) { if (!this.disposed) { this.positiveResonanceEngine = normalizePositiveResonanceEngine(value); this.workletNode.port.postMessage({ type: 'set-positive-resonance-engine', value: this.positiveResonanceEngine }); } return this.positiveResonanceEngine; }
     setFeedbackTopology(value) { if (!this.disposed) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt'; this.workletNode.port.postMessage({ type: 'set-feedback-topology', value: this.feedbackTopology }); } return this.feedbackTopology; }
-    setFeedbackCore(value) { if (!this.disposed) { this.feedbackCore = value === 'zdf' ? 'zdf' : 'current'; this.workletNode.port.postMessage({ type: 'set-feedback-core', value: this.feedbackCore }); } return this.feedbackCore; }
+    setFeedbackCore(value) { if (!this.disposed) { this.feedbackCore = normalizeFeedbackCore(value); this.workletNode.port.postMessage({ type: 'set-feedback-core', value: this.feedbackCore }); } return this.feedbackCore; }
     setLocalLoopTuning(value) { if (!this.disposed) { this.localLoopTuning = normalizeLocalLoopTuning(value); this.workletNode.port.postMessage({ type: 'set-local-loop-tuning', value: this.localLoopTuning }); } return this.localLoopTuning; }
     setFeedbackTap(value) { if (!this.disposed) { this.feedbackTap = value === 'post-gain' ? 'post-gain' : 'pre-gain'; this.workletNode.port.postMessage({ type: 'set-feedback-tap', value: this.feedbackTap }); } return this.feedbackTap; }
     setWetModel(value) { if (!this.disposed) { this.wetModel = value === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta'; this.workletNode.port.postMessage({ type: 'set-wet-model', value: this.wetModel }); } return this.wetModel; }
@@ -371,7 +372,7 @@
       this.feedbackTopology = snapshot?.feedbackTopology === 'common-bus'
         ? 'common-bus'
         : snapshot?.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : this.feedbackTopology;
-      this.feedbackCore = snapshot?.feedbackCore === 'zdf' ? 'zdf' : 'current';
+      this.feedbackCore = normalizeFeedbackCore(snapshot?.feedbackCore ?? this.feedbackCore);
       this.localLoopTuning = normalizeLocalLoopTuning(snapshot?.localLoopTuning ?? this.localLoopTuning);
       this.feedbackTap = snapshot?.feedbackTap === 'post-gain' ? 'post-gain' : this.feedbackTap;
       this.wetModel = snapshot?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : this.wetModel;

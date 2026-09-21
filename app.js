@@ -615,7 +615,7 @@ const devLabTelemetry = (() => {
   };
   const push = (history, value) => { history.push(value); if (history.length > maxHistory) history.shift(); };
   const dominantBand = packet => {
-    const zdf = packet?.left?.feedbackCoreEffective === 'zdf';
+    const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band';
     const left = (zdf ? packet?.left?.baseBandEnergy : packet?.left?.bandEnergy) || [];
     const right = (zdf ? packet?.right?.baseBandEnergy : packet?.right?.bandEnergy) || [];
     let index = 0; let energy = -1; let total = 0;
@@ -642,7 +642,7 @@ const devLabTelemetry = (() => {
     const items = [
       ['RES TARGET', number(left.resonanceTarget)], ['RES SMOOTHED', number(left.smoothedResonance)], ['TOPOLOGY', left.feedbackTopology], ['TAP', left.feedbackTap], ['WET', left.wetModel], ['SAT', left.commonBusSaturationMode], ['DRIVE', number(left.commonBusDrive)], ['CEILING', number(left.commonBusCeiling)],
       ['POST GAIN FB WEIGHT', left.mainPostGainFeedbackWeightMode],
-      ['CORE', left.feedbackCore === 'zdf' && left.feedbackCoreEffective !== 'zdf' ? 'ZDF (INACTIVE: ISOLATED TPT)' : left.feedbackCore],
+      ['CORE', left.feedbackCore !== 'current' && left.feedbackCoreEffective !== left.feedbackCore ? 'ZDF (INACTIVE: ISOLATED TPT)' : left.feedbackCore],
       ...(left.feedbackCoreEffective === 'zdf' ? [
         ['ZDF LOCAL BUS L/R', `${number(left.zdfLocalBus)} / ${number(right.zdfLocalBus)}`],
         ['ZDF MAIN BUS L/R', `${number(left.zdfMainBus)} / ${number(right.zdfMainBus)}`],
@@ -663,8 +663,8 @@ const devLabTelemetry = (() => {
     const sourceCrestR = metrics.sourceRmsRight > 1e-9 ? right.sourcePeak / metrics.sourceRmsRight : 0;
     const wetCrestL = metrics.wetRmsLeft > 1e-9 ? left.wetPeak / metrics.wetRmsLeft : 0;
     const wetCrestR = metrics.wetRmsRight > 1e-9 ? right.wetPeak / metrics.wetRmsRight : 0;
-    detail.innerHTML = `<strong>${left.feedbackCoreEffective === 'zdf' ? 'DOMINANT BASE BAND' : 'DOMINANT BAND'}</strong><b>${frequencies[dominant.index]} Hz</b><span>DOMINANCE ${(dominant.dominance * 100).toFixed(0)} %</span><span>DOM STABLE ${((performance.now() - dominant.startedAt) / 1000).toFixed(1)} s</span><span>SAT ACT ${(metrics.sat * 100).toFixed(0)} % · RETURN/TAP ${metrics.feedbackRatio === null ? 'N/A' : metrics.feedbackRatio.toFixed(2)}</span><span>DC L/R ${number(metrics.dcLeft)} / ${number(metrics.dcRight)}</span><span>SRC CREST ${sourceCrestL.toFixed(2)} / ${sourceCrestR.toFixed(2)}</span><span>WET CREST ${wetCrestL.toFixed(2)} / ${wetCrestR.toFixed(2)}</span>`;
-    bands.replaceChildren(...frequencies.map((frequency, index) => { const zdf = left.feedbackCoreEffective === 'zdf'; const energy = finite((zdf ? left.baseBandEnergy : left.bandEnergy)?.[index]) + finite((zdf ? right.baseBandEnergy : right.bandEnergy)?.[index]); const maxEnergy = Math.max(1e-12, dominant.energy); const row = document.createElement('div'); const gain = Math.max(audioEngine?.effectiveBandGainDbLeft?.[index] ?? 0, audioEngine?.effectiveBandGainDbRight?.[index] ?? 0); row.className = index === dominant.index ? 'is-dominant' : ''; row.innerHTML = `<span>${frequency >= 1000 ? `${(frequency / 1000).toFixed(1)} kHz` : `${frequency} Hz`}</span><i><b style="width:${Math.min(100, energy / maxEnergy * 100)}%"></b></i><em>${number(Math.max(finite((zdf ? left.baseBandPeak : left.bandPeak)?.[index]), finite((zdf ? right.baseBandPeak : right.bandPeak)?.[index])))}</em><small>${left.localGates?.[index] > .5 || right.localGates?.[index] > .5 ? 'FB ON' : 'FB OFF'} · ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} dB</small>`; return row; }));
+    detail.innerHTML = `<strong>${left.feedbackCoreEffective === 'zdf' || left.feedbackCoreEffective === 'zdf-per-band' ? 'DOMINANT BASE BAND' : 'DOMINANT BAND'}</strong><b>${frequencies[dominant.index]} Hz</b><span>DOMINANCE ${(dominant.dominance * 100).toFixed(0)} %</span><span>DOM STABLE ${((performance.now() - dominant.startedAt) / 1000).toFixed(1)} s</span><span>SAT ACT ${(metrics.sat * 100).toFixed(0)} % · RETURN/TAP ${metrics.feedbackRatio === null ? 'N/A' : metrics.feedbackRatio.toFixed(2)}</span><span>DC L/R ${number(metrics.dcLeft)} / ${number(metrics.dcRight)}</span><span>SRC CREST ${sourceCrestL.toFixed(2)} / ${sourceCrestR.toFixed(2)}</span><span>WET CREST ${wetCrestL.toFixed(2)} / ${wetCrestR.toFixed(2)}</span>`;
+    bands.replaceChildren(...frequencies.map((frequency, index) => { const zdf = left.feedbackCoreEffective === 'zdf' || left.feedbackCoreEffective === 'zdf-per-band'; const energy = finite((zdf ? left.baseBandEnergy : left.bandEnergy)?.[index]) + finite((zdf ? right.baseBandEnergy : right.bandEnergy)?.[index]); const maxEnergy = Math.max(1e-12, dominant.energy); const row = document.createElement('div'); const gain = Math.max(audioEngine?.effectiveBandGainDbLeft?.[index] ?? 0, audioEngine?.effectiveBandGainDbRight?.[index] ?? 0); row.className = index === dominant.index ? 'is-dominant' : ''; row.innerHTML = `<span>${frequency >= 1000 ? `${(frequency / 1000).toFixed(1)} kHz` : `${frequency} Hz`}</span><i><b style="width:${Math.min(100, energy / maxEnergy * 100)}%"></b></i><em>${number(Math.max(finite((zdf ? left.baseBandPeak : left.bandPeak)?.[index]), finite((zdf ? right.baseBandPeak : right.bandPeak)?.[index])))}</em><small>${left.localGates?.[index] > .5 || right.localGates?.[index] > .5 ? 'FB ON' : 'FB OFF'} · ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} dB</small>`; return row; }));
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="common"]'), histories.common, ['left', 'right']);
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="main"]'), histories.main, ['left', 'right']);
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="resonance"]'), histories.resonance, ['target', 'smoothed'], 1);
@@ -681,7 +681,7 @@ const devLabTelemetry = (() => {
     const resetCount = Math.max(finite(packet.left.mainCommonNonFiniteResets), finite(packet.right.mainCommonNonFiniteResets));
     if (resetCount > sessionMax.resets) log('WARNING NON-FINITE RESET / MAIN COMMON BUS', { warning: true });
     sessionMax.resets = Math.max(sessionMax.resets, resetCount); sessionMax.local = Math.max(sessionMax.local, Math.abs(finite(packet.left.commonFeedbackReturn)), Math.abs(finite(packet.right.commonFeedbackReturn))); sessionMax.main = Math.max(sessionMax.main, Math.abs(finite(packet.left.mainCommonFeedbackReturn)), Math.abs(finite(packet.right.mainCommonFeedbackReturn))); sessionMax.saturator = Math.max(sessionMax.saturator, Math.abs(finite(packet.left.commonSaturationInput)), Math.abs(finite(packet.right.commonSaturationInput)), Math.abs(finite(packet.left.mainSaturationInput)), Math.abs(finite(packet.right.mainSaturationInput))); sessionMax.satActivity = Math.max(sessionMax.satActivity, metrics.sat);
-    const baseEnergy = packet.left.feedbackCoreEffective === 'zdf';
+    const baseEnergy = packet.left.feedbackCoreEffective === 'zdf' || packet.left.feedbackCoreEffective === 'zdf-per-band';
     const leftEnergy = baseEnergy ? packet.left.baseBandEnergy : packet.left.bandEnergy;
     const rightEnergy = baseEnergy ? packet.right.baseBandEnergy : packet.right.bandEnergy;
     const energy = Math.max(...(leftEnergy || []).map((value, index) => finite(value) + finite(rightEnergy?.[index]))); if (energy > sessionMax.bandEnergy) { sessionMax.bandEnergy = energy; sessionMax.bandIndex = nextDominant.index; }
@@ -770,7 +770,7 @@ const spreadMaxOffsetSelect = addDevLabSelector('DEV SPREAD MAX OFFSET', 'data-s
 if (spreadCurveSelect) spreadCurveSelect.value = 'linear';
 if (spreadMaxOffsetSelect) spreadMaxOffsetSelect.value = '6';
 const feedbackTopologySelect = addDevLabSelector('DEV FB TOPOLOGY', 'data-feedback-topology', [['isolated-tpt', 'ISOLATED TPT'], ['common-bus', 'COMMON BUS'], ['local-loop-exp', 'LOCAL LOOP EXP']]);
-const feedbackCoreSelect = addDevLabSelector('FEEDBACK CORE', 'data-feedback-core', [['current', 'CURRENT'], ['zdf', 'ZDF']]);
+const feedbackCoreSelect = addDevLabSelector('FEEDBACK CORE', 'data-feedback-core', [['current', 'CURRENT'], ['zdf', 'ZDF UNIFIED'], ['zdf-per-band', 'ZDF PER-BAND']]);
 const localLoopTuningSelect = addDevLabSelector('DEV LOCAL LOOP TUNING', 'data-local-loop-tuning', [['current', 'CURRENT'], ['compensated', 'COMPENSATED']]);
 const feedbackTapSelect = addDevLabSelector('DEV FB TAP', 'data-feedback-tap', [['pre-gain', 'PRE GAIN'], ['post-gain', 'POST GAIN']]);
 const wetModelSelect = addDevLabSelector('DEV WET MODEL', 'data-wet-model', [['reference-delta', 'REFERENCE + DELTA'], ['filterbank-sum', 'FILTERBANK SUM']]);
@@ -1356,7 +1356,7 @@ const toDb = value => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1
 const getAnalyzerEffective = index => audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, { maxBandBoostDb: getBandBoostDb(), maxBandCutDb: getBandCutDb() });
 const getAnalyzerTelemetry = () => devLabTelemetry.getLatest?.() || null;
 const getEnergyPair = (packet, index) => {
-  const zdf = packet?.left?.feedbackCoreEffective === 'zdf';
+  const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band';
   const left = zdf ? packet?.left?.baseBandEnergy : packet?.left?.bandEnergy;
   const right = zdf ? packet?.right?.baseBandEnergy : packet?.right?.bandEnergy;
   return (Number(left?.[index]) || 0) + (Number(right?.[index]) || 0);
@@ -1411,6 +1411,7 @@ const showAnalyzerHover = (index, anchor, collapsed = false) => {
 const refreshStatusStrip = () => {
   if (!liveStatusStrip) return;
   const engine = audioEngine || {};
+  const mainActive = engine.feedbackCore !== 'zdf-per-band' && (state.feedbackAllLeft || state.feedbackAllRight);
   const activeBands = state.feedbackBandLeft.map((enabled, index) => enabled || state.feedbackBandRight[index] ? index + 1 : null).filter(Boolean);
   const packet = getAnalyzerTelemetry();
   const sat = packet && ((Number(packet.left?.saturationActiveFrames) || 0) > 0 || (Number(packet.right?.saturationActiveFrames) || 0) > 0);
@@ -1422,7 +1423,7 @@ const refreshStatusStrip = () => {
     `SPREAD ${state.spread >= 0 ? '+' : ''}${Math.round(state.spread * 100)}`,
     `OUT ${Number(state.volume).toFixed(1)} dB`,
     engine.feedbackTap ? (engine.feedbackTap === 'post-gain' ? 'POST' : 'PRE') : null,
-    state.feedbackAllLeft || state.feedbackAllRight ? 'MAIN' : null,
+    mainActive ? 'MAIN' : null,
     activeBands.length ? `FB ${activeBands.join(' ')}` : null,
     sat ? 'SAT' : null
   ].filter(Boolean);
@@ -1536,14 +1537,17 @@ const setAnalyzerDisplayOption = (key, enabled) => {
   spectrumRenderer.refresh(); scheduleAnalyzerRender();
 };
 window.FilterbankAnalyzer = { getDisplayState: () => ({ ...analyzerDisplay }), getDetailState: () => ({ mode: analyzerDetailMode, hoveredBand: hoveredAnalyzerBand }), setDisplayOption: setAnalyzerDisplayOption, getBandInfo: index => analyzerBandInfo(index), refresh: scheduleAnalyzerRender, getSpectrumLayers: () => spectrumRenderer.getLayers() };
+const ANALYZER_ZERO_EPSILON = 1e-9;
 const renderAnalyzerBar = (bar, value) => {
   const numericValue = Number(value);
+  const isZero = Math.abs(numericValue) < ANALYZER_ZERO_EPSILON;
   const height = numericValue > BAND_GAIN_NEUTRAL
     ? (numericValue / BAND_GAIN_MAX) * 50
     : numericValue < BAND_GAIN_NEUTRAL
       ? (Math.abs(numericValue) / Math.abs(BAND_GAIN_MIN)) * 50
       : 0;
   bar.classList.toggle('negative', numericValue < BAND_GAIN_NEUTRAL);
+  bar.classList.toggle('is-zero', isZero);
   bar.style.height = `${height}%`;
 };
 const updateAnalyzerBand = index => {
@@ -1656,6 +1660,7 @@ const FADER_UP_CODES = ['KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI',
 const FADER_DOWN_CODES = ['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK','KeyL','Semicolon'];
 const FADER_NEUTRAL_CODES = ['KeyZ','KeyX','KeyC','KeyV','KeyB','KeyN','KeyM','Comma','Period','Slash'];
 const BAND_GAIN_STEP = (BAND_GAIN_MAX - BAND_GAIN_MIN) * 0.05;
+const FADER_KEY_REPEAT_INTERVAL_MS = 1000 / 30;
 const DRIVE_UP_CODE = 'Equal';
 const DRIVE_DOWN_CODE = 'Minus';
 const RESONANCE_UP_CODE = 'BracketRight';
@@ -1680,6 +1685,43 @@ const setGlobalControlValue = (name, value) => {
   if (!slider) return;
   slider.dispatchEvent(new Event('input', { bubbles: true }));
 };
+const pressedFaderKeys = new Set();
+let faderKeyboardAnimationFrame = 0;
+let faderKeyboardLastStepAt = 0;
+const getFaderKeyDelta = code => {
+  const upIndex = FADER_UP_CODES.indexOf(code);
+  if (upIndex !== -1) return { index: upIndex, delta: BAND_GAIN_STEP };
+  const downIndex = FADER_DOWN_CODES.indexOf(code);
+  return downIndex !== -1 ? { index: downIndex, delta: -BAND_GAIN_STEP } : null;
+};
+const applyPressedFaderKeys = () => {
+  const deltas = Array.from({ length: BAND_COUNT }, () => 0);
+  pressedFaderKeys.forEach(code => {
+    const movement = getFaderKeyDelta(code);
+    if (movement) deltas[movement.index] += movement.delta;
+  });
+  deltas.forEach((delta, index) => {
+    if (delta) setBandBaseGain('left', index, state.bandGainLeft[index] + delta);
+  });
+};
+const animatePressedFaderKeys = now => {
+  faderKeyboardAnimationFrame = 0;
+  if (!pressedFaderKeys.size) return;
+  if (now - faderKeyboardLastStepAt >= FADER_KEY_REPEAT_INTERVAL_MS) {
+    applyPressedFaderKeys();
+    faderKeyboardLastStepAt = now;
+  }
+  faderKeyboardAnimationFrame = requestAnimationFrame(animatePressedFaderKeys);
+};
+const startPressedFaderKeyAnimation = () => {
+  if (!faderKeyboardAnimationFrame) faderKeyboardAnimationFrame = requestAnimationFrame(animatePressedFaderKeys);
+};
+const clearPressedFaderKeys = () => {
+  pressedFaderKeys.clear();
+  faderKeyboardLastStepAt = 0;
+  if (faderKeyboardAnimationFrame) cancelAnimationFrame(faderKeyboardAnimationFrame);
+  faderKeyboardAnimationFrame = 0;
+};
 document.addEventListener('keydown', event => {
   if (isEditableTarget(event.target)) return;
   if (event.code === 'Space' || event.code === 'Enter' || event.code === 'NumpadEnter') {
@@ -1695,13 +1737,23 @@ document.addEventListener('keydown', event => {
   if (event.code === VOLUME_DOWN_CODE) { setGlobalControlValue('volume', state.volume - 0.5); event.preventDefault(); return; }
   const bandIndex = FB_CODES.indexOf(event.code);
   if (bandIndex !== -1) { if(event.shiftKey) document.querySelector(`[data-mod-band="${bandIndex}"]`).click(); else document.querySelector(`[data-feedback-band="${bandIndex}"]`).click(); event.preventDefault(); return; }
-  const upIndex = FADER_UP_CODES.indexOf(event.code);
-  if (upIndex !== -1) { setBandBaseGain('left', upIndex, state.bandGainLeft[upIndex] + BAND_GAIN_STEP); event.preventDefault(); return; }
-  const downIndex = FADER_DOWN_CODES.indexOf(event.code);
-  if (downIndex !== -1) { setBandBaseGain('left', downIndex, state.bandGainLeft[downIndex] - BAND_GAIN_STEP); event.preventDefault(); return; }
+  if (getFaderKeyDelta(event.code)) {
+    if (!pressedFaderKeys.has(event.code)) {
+      pressedFaderKeys.add(event.code);
+      applyPressedFaderKeys();
+      faderKeyboardLastStepAt = performance.now();
+      startPressedFaderKeyAnimation();
+    }
+    event.preventDefault();
+    return;
+  }
   const neutralIndex = FADER_NEUTRAL_CODES.indexOf(event.code);
   if (neutralIndex !== -1) { setBandBaseGain('left', neutralIndex, BAND_GAIN_NEUTRAL); event.preventDefault(); }
 });
+document.addEventListener('keyup', event => {
+  if (pressedFaderKeys.delete(event.code) && !pressedFaderKeys.size) clearPressedFaderKeys();
+});
+window.addEventListener('blur', clearPressedFaderKeys);
 
 const inputDeviceSelect = document.querySelector('[data-audio-input]');
 const outputDeviceSelect = document.querySelector('[data-audio-output]');
@@ -1883,13 +1935,21 @@ bindDevLabSelect(spreadMaxOffsetSelect, value => {
   renderBandSliderValues();
 }, '6');
 const updateLocalLoopTuningRelevance = () => {
-  const zdf = feedbackCoreSelect?.value === 'zdf';
+  const zdf = feedbackCoreSelect?.value === 'zdf' || feedbackCoreSelect?.value === 'zdf-per-band';
+  const perBandZdf = feedbackCoreSelect?.value === 'zdf-per-band';
   if (localLoopTuningSelect) {
     localLoopTuningSelect.disabled = zdf;
     localLoopTuningSelect.title = zdf ? 'COMPENSATED gilt nur im CURRENT-Core.' : '';
   }
   if (feedbackCoreSelect) feedbackCoreSelect.title = zdf && feedbackTopologySelect?.value === 'isolated-tpt'
     ? 'ZDF wirkt nur bei COMMON BUS oder LOCAL LOOP EXP; ISOLATED TPT bleibt unverändert.' : '';
+  if (fbAllButton) {
+    fbAllButton.disabled = perBandZdf;
+    fbAllButton.classList.toggle('is-phase-one-inactive', perBandZdf);
+    fbAllButton.title = perBandZdf ? 'MAIN / FB ALL is inactive for ZDF PER-BAND Phase 1.' : '';
+    fbAllButton.textContent = perBandZdf ? 'N/A' : state.feedbackAllLeft ? 'ON' : 'OFF';
+    fbAllButton.setAttribute('aria-pressed', String(perBandZdf ? false : state.feedbackAllLeft));
+  }
 };
 bindDevLabSelect(feedbackTopologySelect, value => { audioEngine.setFeedbackTopology(value); updateLocalLoopTuningRelevance(); }, 'isolated-tpt');
 bindDevLabSelect(feedbackCoreSelect, value => { audioEngine.setFeedbackCore(value); updateLocalLoopTuningRelevance(); }, 'current');

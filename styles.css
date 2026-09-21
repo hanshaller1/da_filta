@@ -401,6 +401,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .chart-grid:not(.hide-enhanced-bars) .bar-pair i[data-channel] { opacity: .82; border-top: 1px solid color-mix(in srgb, var(--strong-text) 52%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--strong-text) 42%, transparent), inset 0 -7px 9px color-mix(in srgb, #000 18%, transparent); }
 .chart-grid:not(.hide-enhanced-bars) .bar-pair i[data-channel=left] { background: linear-gradient(to top, color-mix(in srgb, var(--graph-left-color) 78%, #000), var(--graph-left-color)); }
 .chart-grid:not(.hide-enhanced-bars) .bar-pair i[data-channel=right] { background: linear-gradient(to top, color-mix(in srgb, var(--graph-right-color) 78%, #000), var(--graph-right-color)); }
+.bar-pair i[data-channel].is-zero { border: 0 !important; box-shadow: none !important; background: transparent !important; }
 .bar-pair.hide-lr-bars i[data-channel] { opacity: 0; }
 .bar-pair.has-glow i[data-channel] { box-shadow: 0 0 7px color-mix(in srgb, var(--cyan) 70%, transparent); }
 .bar-pair.is-dominant { outline: 1px solid color-mix(in srgb, var(--cyan) 44%, transparent); outline-offset: -1px; }

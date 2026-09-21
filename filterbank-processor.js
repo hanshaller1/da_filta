@@ -27,7 +27,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.feedbackTopology = processorOptions.feedbackTopology === 'common-bus'
       ? 'common-bus'
       : processorOptions.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
-    this.feedbackCore = processorOptions.feedbackCore === 'zdf' ? 'zdf' : 'current';
+    this.feedbackCore = this.readFeedbackCore(processorOptions.feedbackCore);
     this.localLoopTuning = this.readLocalLoopTuning(processorOptions.localLoopTuning);
     this.feedbackTap = processorOptions.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
     this.wetModel = processorOptions.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
@@ -133,6 +133,28 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.zdfMainReturn = { left: 0, right: 0 };
     this.zdfLocalBus = { left: 0, right: 0 };
     this.zdfMainBus = { left: 0, right: 0 };
+    // Kept entirely separate from the Unified ZDF return history so switching
+    // cores never turns into an implicit feedback reset.
+    this.zdfPerBandLocalReturns = {
+      left: Array(this.bandCount).fill(0),
+      right: Array(this.bandCount).fill(0)
+    };
+    this.zdfPerBandLocalBuses = {
+      left: Array(this.bandCount).fill(0),
+      right: Array(this.bandCount).fill(0)
+    };
+    this.zdfPerBandSolverIterations = {
+      left: Array(this.bandCount).fill(0),
+      right: Array(this.bandCount).fill(0)
+    };
+    this.zdfPerBandSolverResiduals = {
+      left: Array(this.bandCount).fill(0),
+      right: Array(this.bandCount).fill(0)
+    };
+    this.zdfPerBandSolverFallbackCounts = {
+      left: Array(this.bandCount).fill(0),
+      right: Array(this.bandCount).fill(0)
+    };
     this.zdfSolverIterations = { left: 0, right: 0 };
     this.zdfSolverMaxIterations = { left: 0, right: 0 };
     this.zdfSolverResidual = { left: 0, right: 0 };
@@ -216,6 +238,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   readPositiveResonanceEngine(value) {
     return value === 'phase2' ? 'phase2' : 'tpt';
   }
+  readFeedbackCore(value) {
+    return value === 'zdf-per-band' ? 'zdf-per-band' : value === 'zdf' ? 'zdf' : 'current';
+  }
+  isUnifiedZdfCore() { return this.feedbackCore === 'zdf'; }
+  isPerBandZdfCore() { return this.feedbackCore === 'zdf-per-band'; }
+  isAnyZdfCore() { return this.isUnifiedZdfCore() || this.isPerBandZdfCore(); }
   readLocalLoopTuning(value) { return value === 'compensated' ? 'compensated' : 'current'; }
   readFeedbackAllEngine(value) { return value === 'common-bus' ? 'common-bus' : 'legacy'; }
   readFeedbackAllSource(value) { return value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; }
@@ -415,7 +443,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   applyLocalLoopTuning() {
     if (!this.baseFilters) return;
-    const useCompensatedFrequencies = this.feedbackCore !== 'zdf' && this.feedbackTopology === 'local-loop-exp'
+    const useCompensatedFrequencies = this.feedbackCore === 'current' && this.feedbackTopology === 'local-loop-exp'
       && this.positiveResonanceEngine === 'tpt'
       && this.localLoopTuning === 'compensated';
     for (const channel of ['left', 'right']) {
@@ -518,6 +546,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       zdfSolverLastResidual: 0,
       zdfSolverFallbackCount: 0,
       zdfNonFiniteResetCount: 0,
+      zdfPerBandLocalReturn: Array(this.bandCount).fill(0),
+      zdfPerBandLocalReturnPeak: Array(this.bandCount).fill(0),
+      zdfPerBandLocalBus: Array(this.bandCount).fill(0),
+      zdfPerBandSolverIterations: Array(this.bandCount).fill(0),
+      zdfPerBandSolverResidual: Array(this.bandCount).fill(0),
+      zdfPerBandSolverFallbackCount: Array(this.bandCount).fill(0),
       dominantBaseBand: -1,
       baseFilterFrequencies: this.baseFilters?.left.map(filter => filter.frequency) ?? [],
       sampleCount: 0
@@ -647,6 +681,113 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.zdfSolverResidual[channel] = residual;
     if (fallback) this.zdfSolverFallbackCount[channel] += 1;
     return value;
+  }
+
+  // Phase 1: every active LOCAL band has its own scalar, zero-delay loop.
+  // No MAIN contribution is accepted here; it is intentionally deferred to
+  // the later coupled LOCAL + MAIN design.
+  solveZdfPerBandLocalReturns(source, channel) {
+    const filters = this.baseFilters[channel];
+    const gates = this.feedbackGates[channel];
+    const gateTargets = this.feedbackGateTargets[channel];
+    const gains = this.deltaGains[channel];
+    const gainTargets = this.deltaTargets[channel];
+    const returns = this.zdfPerBandLocalReturns[channel];
+    const buses = this.zdfPerBandLocalBuses[channel];
+    const iterationsByBand = this.zdfPerBandSolverIterations[channel];
+    const residualsByBand = this.zdfPerBandSolverResiduals[channel];
+    const fallbacksByBand = this.zdfPerBandSolverFallbackCounts[channel];
+    const signedResonance = Math.sign(this.resonance) * this.resonance * this.resonance;
+    const feedbackGain = this.maxFeedbackGain * signedResonance;
+    const constantCeiling = this.feedbackTopology === 'common-bus'
+      && this.commonBusSaturationMode === 'constant-ceiling';
+    const ceiling = constantCeiling ? this.commonBusCeiling : 1;
+    const scale = constantCeiling ? this.commonBusDrive / ceiling : 1;
+
+    for (let band = 0; band < this.bandCount; band += 1) {
+      // Keep the established smoother cadence: exactly once per band/sample,
+      // before either the implicit solve or the audible gain use.
+      gates[band] = gateTargets[band] + this.feedbackGateSmoothingCoefficient * (gates[band] - gateTargets[band]);
+      gains[band] = gainTargets[band] + this.bandGainSmoothingCoefficient * (gains[band] - gainTargets[band]);
+
+      const gate = gates[band];
+      const audibleGain = 1 + gains[band];
+      const weight = gate * (this.feedbackTap === 'post-gain' ? audibleGain : 1);
+      if (Math.abs(signedResonance) <= COMMON_BUS_RESONANCE_EPSILON || weight <= COMMON_BUS_RESONANCE_EPSILON) {
+        returns[band] = 0;
+        buses[band] = 0;
+        iterationsByBand[band] = 0;
+        residualsByBand[band] = 0;
+        continue;
+      }
+
+      const filter = filters[band];
+      if (!Number.isFinite(filter.ic1eq) || !Number.isFinite(filter.ic2eq)) {
+        filter.reset();
+        this.zdfNonFiniteResetCount[channel] += 1;
+      }
+      // Pure affine read from the old TPT states. Do not call filter.process
+      // here: the one and only state commit happens in the band loop below.
+      const p = filter.baseK * (filter.a1 * filter.ic1eq + filter.a2 * (source - filter.ic2eq));
+      const d = filter.baseK * filter.a2;
+      const coefficient = scale * feedbackGain * weight;
+      if (!Number.isFinite(p) || !Number.isFinite(d) || !Number.isFinite(coefficient)) {
+        returns[band] = 0;
+        buses[band] = 0;
+        iterationsByBand[band] = 0;
+        residualsByBand[band] = 0;
+        this.zdfNonFiniteResetCount[channel] += 1;
+        continue;
+      }
+
+      let lower = -ceiling;
+      let upper = ceiling;
+      let value = Math.max(lower, Math.min(upper, Number.isFinite(returns[band]) ? returns[band] : 0));
+      let residual = Infinity;
+      let iterations = 0;
+      let fallback = false;
+      for (; iterations < 6; iterations += 1) {
+        const tanhValue = Math.tanh(coefficient * (p + d * value));
+        const error = value - ceiling * tanhValue;
+        residual = Math.abs(error);
+        if (!Number.isFinite(error)) { fallback = true; break; }
+        if (error > 0) upper = value;
+        else lower = value;
+        if (residual < 1e-8) { iterations += 1; break; }
+        const derivative = 1 - ceiling * coefficient * d * (1 - tanhValue * tanhValue);
+        const candidate = Math.abs(derivative) > 1e-9 ? value - error / derivative : NaN;
+        if (!Number.isFinite(candidate) || candidate <= lower || candidate >= upper) {
+          value = 0.5 * (lower + upper);
+          fallback = true;
+        } else value = candidate;
+      }
+      if (residual >= 1e-8) {
+        fallback = true;
+        for (let step = 0; step < 20; step += 1) {
+          value = 0.5 * (lower + upper);
+          const tanhValue = Math.tanh(coefficient * (p + d * value));
+          const error = value - ceiling * tanhValue;
+          if (!Number.isFinite(error)) break;
+          residual = Math.abs(error);
+          if (residual < 1e-8) break;
+          if (error > 0) upper = value;
+          else lower = value;
+        }
+      }
+      if (!Number.isFinite(value) || !Number.isFinite(residual)) {
+        value = 0;
+        residual = 0;
+        this.zdfNonFiniteResetCount[channel] += 1;
+      }
+      const bus = weight * (p + d * value);
+      returns[band] = value;
+      buses[band] = Number.isFinite(bus) ? bus : 0;
+      iterationsByBand[band] = iterations;
+      residualsByBand[band] = residual;
+      if (fallback) fallbacksByBand[band] += 1;
+      this.zdfSolverMaxIterations[channel] = Math.max(this.zdfSolverMaxIterations[channel], iterations);
+    }
+    return returns;
   }
 
   setBandControl(channel, index, value, immediate = false) {
@@ -792,7 +933,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.clearMainCommonFeedbackReturns();
     this.clearLegacyFeedbackReturns();
     this.clearZdfReturns();
-    if (this.feedbackCore === 'zdf') {
+    this.clearZdfPerBandReturns();
+    if (this.isAnyZdfCore()) {
       for (const channel of ['left', 'right']) this.baseFilters[channel].forEach(filter => filter.reset());
     }
   }
@@ -851,7 +993,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   setFeedbackTopology(value) {
     const nextTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
-    if (this.feedbackCore === 'zdf' && nextTopology !== this.feedbackTopology) this.clearZdfReturns();
+    if (this.isUnifiedZdfCore() && nextTopology !== this.feedbackTopology) this.clearZdfReturns();
+    if (this.isPerBandZdfCore() && nextTopology !== this.feedbackTopology) this.clearZdfPerBandReturns();
     if (this.feedbackTopology === 'local-loop-exp' && nextTopology !== 'local-loop-exp') this.clearLocalFeedbackReturns();
     this.feedbackTopology = nextTopology;
     this.applyLocalLoopTuning();
@@ -864,8 +1007,17 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.zdfLocalBus.left = this.zdfLocalBus.right = 0;
     this.zdfMainBus.left = this.zdfMainBus.right = 0;
   }
+  clearZdfPerBandReturns() {
+    for (const channel of ['left', 'right']) {
+      this.zdfPerBandLocalReturns[channel].fill(0);
+      this.zdfPerBandLocalBuses[channel].fill(0);
+      this.zdfPerBandSolverIterations[channel].fill(0);
+      this.zdfPerBandSolverResiduals[channel].fill(0);
+      this.zdfPerBandSolverFallbackCounts[channel].fill(0);
+    }
+  }
   setFeedbackCore(value) {
-    const nextCore = value === 'zdf' ? 'zdf' : 'current';
+    const nextCore = this.readFeedbackCore(value);
     if (nextCore === this.feedbackCore) return;
     this.feedbackCore = nextCore;
     // A core switch is not a panic: CURRENT and ZDF retain their own return
@@ -1034,22 +1186,28 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const resonatorMagnitudes = this.resonatorMagnitudes[channel];
     const resonatorAuditionGates = this.resonatorAuditionGates[channel];
     const source = Number.isFinite(input) ? input : 0;
-    const zdfActive = this.feedbackCore === 'zdf' && this.feedbackTopology !== 'isolated-tpt';
+    const unifiedZdfActive = this.isUnifiedZdfCore() && this.feedbackTopology !== 'isolated-tpt';
+    const perBandZdfSelected = this.isPerBandZdfCore();
+    const perBandZdfActive = perBandZdfSelected && this.feedbackTopology !== 'isolated-tpt';
+    // Unlike the retained Unified core, the experimental Per-Band core must
+    // never fall through to a CURRENT feedback architecture when its topology
+    // is inactive. It simply supplies no LOCAL return in that situation.
+    const zdfActive = unifiedZdfActive || perBandZdfSelected;
     const feedbackAllGate = this.feedbackAllGateTargets[channel] + this.feedbackGateSmoothingCoefficient * (this.feedbackAllGates[channel] - this.feedbackAllGateTargets[channel]);
     this.feedbackAllGates[channel] = feedbackAllGate;
     // A positive common-bus loop follows the already smoothed resonance
     // state on its way to zero. A negative target still leaves the positive
     // topology immediately, preserving the legacy negative-path handoff.
-    const commonBusActive = this.feedbackTopology === 'common-bus'
+    const commonBusActive = !perBandZdfActive && this.feedbackTopology === 'common-bus'
       && (zdfActive ? Math.abs(this.resonance) > COMMON_BUS_RESONANCE_EPSILON
         : this.resonanceTarget >= 0 && this.resonance > COMMON_BUS_RESONANCE_EPSILON);
-    const localLoopActive = this.feedbackTopology === 'local-loop-exp'
+    const localLoopActive = !perBandZdfActive && this.feedbackTopology === 'local-loop-exp'
       && (zdfActive ? Math.abs(this.resonance) > COMMON_BUS_RESONANCE_EPSILON
         : this.resonanceTarget >= 0 && this.resonance > COMMON_BUS_RESONANCE_EPSILON);
-    const usesCommonBusMainEngine = this.feedbackTopology !== 'isolated-tpt'
+    const usesCommonBusMainEngine = !perBandZdfActive && this.feedbackTopology !== 'isolated-tpt'
       && this.feedbackAllEngine === 'common-bus'
       && this.resonanceTarget >= 0;
-    const mainCommonBusActive = (commonBusActive || localLoopActive)
+    const mainCommonBusActive = !perBandZdfActive && (commonBusActive || localLoopActive)
       && (zdfActive || usesCommonBusMainEngine)
       && feedbackAllGate > COMMON_BUS_RESONANCE_EPSILON;
     const localCommonReturn = commonBusActive && Number.isFinite(this.commonFeedbackReturns[channel])
@@ -1063,7 +1221,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     let commonTapSum = 0;
     let mainTapSum = 0;
     let globalTapSum = 0;
-    const zdfReturn = zdfActive ? this.solveZdfReturn(source, channel, feedbackAllGate) : 0;
+    const zdfReturn = unifiedZdfActive ? this.solveZdfReturn(source, channel, feedbackAllGate) : 0;
+    const zdfPerBandReturns = perBandZdfActive ? this.solveZdfPerBandLocalReturns(source, channel) : null;
     const usesLegacyLocalResonance = !zdfActive && ((this.resonanceTarget < 0 && this.resonance < 0)
       || (this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'phase2' && this.resonanceTarget > 0 && this.resonance > 0));
     const usesLegacyFeedbackAll = !zdfActive && feedbackAllGate > 1e-12 && !usesCommonBusMainEngine;
@@ -1081,7 +1240,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       resonatorMagnitudes[band] = resonatorMagnitude;
       const resonatorDampingScale = this.getResonatorDampingScale(resonatorMagnitude);
       resonatorFilters[band].setDampingScale(this.getLinearResonatorDampingScale(resonatorMagnitude));
-      const resonatorAuditionTarget = this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'tpt' && this.resonanceTarget > 0 && localGate > 1e-12 ? 1 : 0;
+      const resonatorAuditionTarget = !perBandZdfSelected && this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'tpt' && this.resonanceTarget > 0 && localGate > 1e-12 ? 1 : 0;
       const resonatorAuditionGate = resonatorAuditionTarget + this.resonanceSmoothingCoefficient * (
         resonatorAuditionGates[band] - resonatorAuditionTarget
       );
@@ -1091,7 +1250,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const localLoopReturn = localLoopActive && Number.isFinite(this.localFeedbackReturns[channel][band])
         ? this.localFeedbackReturns[channel][band]
         : 0;
-      const bandInput = zdfActive ? source + zdfReturn
+      const bandInput = unifiedZdfActive ? source + zdfReturn
+        : perBandZdfActive ? source + zdfPerBandReturns[band]
+          : perBandZdfSelected ? source
         : source + previousReturn + localCommonReturn + mainCommonReturn + localLoopReturn;
       const bandOutput = this.processBandpass(baseFilters[band], bandInput);
       const resonatorBandOutput = this.processBandpass(resonatorFilters[band], source);
@@ -1099,7 +1260,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       let nonlinearResonatorBandOutput = 0;
       let nonlinearResidual = 0;
       let nonlinearBaseResidual = 0;
-      const useAudibleNonlinearResidual = this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'tpt' && this.enableNonlinearPositiveResonator
+      const useAudibleNonlinearResidual = !perBandZdfSelected && this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'tpt' && this.enableNonlinearPositiveResonator
         && (resonatorMagnitude > 1e-12 || resonatorAuditionGate > 1e-12);
       if (nonlinearResonatorFilters && (this.collectResonatorDiagnostics || resonatorMagnitude > 1e-12 || resonatorAuditionGate > 1e-12)) {
         const nonlinearFilter = nonlinearResonatorFilters[band];
@@ -1131,7 +1292,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const audibleResidual = this.positiveResonanceOutputWeights[0] * currentResidual
         + this.positiveResonanceOutputWeights[1] * baseResidual
         + this.positiveResonanceOutputWeights[2] * fullOutput;
-      if (localGate > 1e-12 && this.resonance > 0 && this.feedbackTopology === 'isolated-tpt') {
+      if (!perBandZdfSelected && localGate > 1e-12 && this.resonance > 0 && this.feedbackTopology === 'isolated-tpt') {
         mainOutput += resonatorAuditionGate * this.positiveResonanceAuditionGain * audibleResidual;
       }
       if (this.collectResonatorDiagnostics) {
@@ -1273,13 +1434,15 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const wetOutput = Number.isFinite(mainOutput) ? mainOutput : source;
     if (this.collectResonatorDiagnostics) {
       const diagnostics = this.resonatorDiagnostics[channel];
-      const commonFeedbackReturn = zdfActive ? this.zdfLocalReturn[channel] : this.commonFeedbackReturns[channel];
-      const mainCommonFeedbackReturn = zdfActive ? this.zdfMainReturn[channel] : this.mainCommonFeedbackReturns[channel];
+      const commonFeedbackReturn = unifiedZdfActive ? this.zdfLocalReturn[channel]
+        : perBandZdfSelected ? 0 : this.commonFeedbackReturns[channel];
+      const mainCommonFeedbackReturn = unifiedZdfActive ? this.zdfMainReturn[channel]
+        : perBandZdfSelected ? 0 : this.mainCommonFeedbackReturns[channel];
       const specialZdfMainReturn = this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
         && this.feedbackTopology === 'common-bus' && this.commonBusSaturationMode === 'current';
-      const mainSaturationOutput = zdfActive
+      const mainSaturationOutput = unifiedZdfActive
         ? (specialZdfMainReturn ? this.zdfMainReturn[channel] / 0.2 : this.zdfMainReturn[channel])
-        : this.mainCommonSaturationOutputs[channel];
+        : perBandZdfSelected ? 0 : this.mainCommonSaturationOutputs[channel];
       diagnostics.frameCount += 1;
       diagnostics.sourcePeak = Math.max(diagnostics.sourcePeak, Math.abs(source));
       diagnostics.sourceEnergy += source * source;
@@ -1310,7 +1473,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       diagnostics.commonFeedbackReturn = commonFeedbackReturn;
       diagnostics.commonTapSum = commonTapSum;
       diagnostics.commonTapSumPeak = Math.max(diagnostics.commonTapSumPeak, Math.abs(commonTapSum));
-      diagnostics.commonSaturationInput = zdfActive
+      diagnostics.commonSaturationInput = unifiedZdfActive
         ? this.maxFeedbackGain * Math.sign(this.resonance) * resonanceMagnitudeSquared * this.zdfLocalBus[channel]
         : commonBusActive && resonanceMagnitudeSquared > 0
           ? this.maxFeedbackGain * resonanceMagnitudeSquared * commonTapSum : 0;
@@ -1322,14 +1485,26 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       for (let band = 0; band < this.bandCount; band += 1) {
         diagnostics.localFeedbackReturnPeak[band] = Math.max(
           diagnostics.localFeedbackReturnPeak[band],
-          zdfActive ? 0 : Math.abs(this.localFeedbackReturns[channel][band])
+          perBandZdfActive ? Math.abs(this.zdfPerBandLocalReturns[channel][band])
+            : unifiedZdfActive ? 0 : Math.abs(this.localFeedbackReturns[channel][band])
         );
+        if (perBandZdfActive) {
+          diagnostics.zdfPerBandLocalReturn[band] = this.zdfPerBandLocalReturns[channel][band];
+          diagnostics.zdfPerBandLocalReturnPeak[band] = Math.max(
+            diagnostics.zdfPerBandLocalReturnPeak[band],
+            Math.abs(this.zdfPerBandLocalReturns[channel][band])
+          );
+          diagnostics.zdfPerBandLocalBus[band] = this.zdfPerBandLocalBuses[channel][band];
+          diagnostics.zdfPerBandSolverIterations[band] = this.zdfPerBandSolverIterations[channel][band];
+          diagnostics.zdfPerBandSolverResidual[band] = this.zdfPerBandSolverResiduals[channel][band];
+          diagnostics.zdfPerBandSolverFallbackCount[band] = this.zdfPerBandSolverFallbackCounts[channel][band];
+        }
       }
       diagnostics.mainCommonFeedbackReturn = mainCommonFeedbackReturn;
       diagnostics.mainTapSum = mainTapSum;
       diagnostics.mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
       diagnostics.mainPostGainFeedbackWeightMode = this.postGainFeedbackWeight;
-      diagnostics.mainSaturationInput = zdfActive
+      diagnostics.mainSaturationInput = unifiedZdfActive
         ? Math.sign(this.resonance) * this.maxFeedbackGain
           * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
             ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
@@ -1351,7 +1526,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
       diagnostics.mainTapSumScaledPeak = Math.max(diagnostics.mainTapSumScaledPeak, Math.abs(mainTapSumScaled));
       diagnostics.mainFeedbackLevelScale = this.feedbackAllLevelScale();
-      diagnostics.mainFeedbackGain = zdfActive
+      diagnostics.mainFeedbackGain = unifiedZdfActive
         ? Math.sign(this.resonance) * this.maxFeedbackGain
           * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
             ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
@@ -1365,17 +1540,17 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       diagnostics.resonanceTarget = this.resonanceTarget;
       diagnostics.smoothedResonance = this.resonance;
       diagnostics.feedbackCore = this.feedbackCore;
-      diagnostics.feedbackCoreEffective = zdfActive ? 'zdf' : 'current';
-      diagnostics.zdfLocalBus = this.zdfLocalBus[channel];
-      diagnostics.zdfMainBus = this.zdfMainBus[channel];
-      diagnostics.zdfLocalBusPeak = Math.max(diagnostics.zdfLocalBusPeak, Math.abs(this.zdfLocalBus[channel]));
-      diagnostics.zdfMainBusPeak = Math.max(diagnostics.zdfMainBusPeak, Math.abs(this.zdfMainBus[channel]));
-      diagnostics.zdfTotalReturn = this.zdfReturn[channel];
-      diagnostics.zdfSolverIterations += zdfActive ? this.zdfSolverIterations[channel] : 0;
-      diagnostics.zdfSolverMaxIterations = Math.max(diagnostics.zdfSolverMaxIterations, zdfActive ? this.zdfSolverIterations[channel] : 0);
-      diagnostics.zdfSolverResidual = Math.max(diagnostics.zdfSolverResidual, zdfActive ? this.zdfSolverResidual[channel] : 0);
-      diagnostics.zdfSolverLastResidual = zdfActive ? this.zdfSolverResidual[channel] : 0;
-      diagnostics.zdfSolverFallbackCount = this.zdfSolverFallbackCount[channel];
+      diagnostics.feedbackCoreEffective = perBandZdfActive ? 'zdf-per-band' : unifiedZdfActive ? 'zdf' : 'current';
+      diagnostics.zdfLocalBus = unifiedZdfActive ? this.zdfLocalBus[channel] : 0;
+      diagnostics.zdfMainBus = unifiedZdfActive ? this.zdfMainBus[channel] : 0;
+      diagnostics.zdfLocalBusPeak = Math.max(diagnostics.zdfLocalBusPeak, Math.abs(diagnostics.zdfLocalBus));
+      diagnostics.zdfMainBusPeak = Math.max(diagnostics.zdfMainBusPeak, Math.abs(diagnostics.zdfMainBus));
+      diagnostics.zdfTotalReturn = unifiedZdfActive ? this.zdfReturn[channel] : 0;
+      diagnostics.zdfSolverIterations += unifiedZdfActive ? this.zdfSolverIterations[channel] : 0;
+      diagnostics.zdfSolverMaxIterations = Math.max(diagnostics.zdfSolverMaxIterations, unifiedZdfActive ? this.zdfSolverIterations[channel] : 0);
+      diagnostics.zdfSolverResidual = Math.max(diagnostics.zdfSolverResidual, unifiedZdfActive ? this.zdfSolverResidual[channel] : 0);
+      diagnostics.zdfSolverLastResidual = unifiedZdfActive ? this.zdfSolverResidual[channel] : 0;
+      diagnostics.zdfSolverFallbackCount = unifiedZdfActive ? this.zdfSolverFallbackCount[channel] : 0;
       diagnostics.zdfNonFiniteResetCount = this.zdfNonFiniteResetCount[channel];
       let dominantEnergy = 0;
       for (let band = 0; band < this.bandCount; band += 1) {

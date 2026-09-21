@@ -206,3 +206,66 @@ test('effective L/R control bars are immediate while peak and preview animation 
   await expect(page.locator('.analyzer-band-detail')).toBeHidden();
   expect(pageErrors).toEqual([]);
 });
+
+test('analyzer zero bars have no enhanced decoration while small signed values remain visible', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const fader = page.locator('.band-fader').first();
+  const bars = page.locator('[data-analyzer-band="0"] i[data-channel]');
+
+  const snapshot = async () => bars.evaluateAll(elements => elements.map(element => {
+    const style = getComputedStyle(element);
+    return {
+      className: element.className,
+      height: element.getBoundingClientRect().height,
+      borderTopWidth: style.borderTopWidth,
+      boxShadow: style.boxShadow,
+      opacity: Number(style.opacity),
+      backgroundColor: style.backgroundColor
+    };
+  }));
+
+  for (const theme of ['current', 'dark-studio', 'forest']) {
+    await page.locator('[data-theme-select]').selectOption(theme);
+    await expect(bars.nth(0)).toHaveClass(/is-zero/);
+    await expect(bars.nth(1)).toHaveClass(/is-zero/);
+    for (const bar of await snapshot()) {
+      expect(bar.className).toContain('is-zero');
+      expect(bar.height).toBe(0);
+      expect(bar.borderTopWidth).toBe('0px');
+      expect(bar.boxShadow).toBe('none');
+      expect(bar.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    }
+
+    await fader.fill('1');
+    for (const bar of await snapshot()) {
+      expect(bar.className).not.toContain('is-zero');
+      expect(bar.height).toBeGreaterThan(0);
+      expect(bar.opacity).toBeGreaterThan(0);
+    }
+
+    await fader.fill('-1');
+    for (const bar of await snapshot()) {
+      expect(bar.className).not.toContain('is-zero');
+      expect(bar.height).toBeGreaterThan(0);
+      expect(bar.opacity).toBeGreaterThan(0);
+    }
+
+    await fader.fill('0');
+  }
+
+  await page.evaluate(() => window.FilterbankAnalyzer.setDisplayOption('enhancedBars', false));
+  await expect(bars.nth(0)).toHaveClass(/is-zero/);
+  await expect.poll(async () => (await snapshot()).map(bar => bar.boxShadow)).toEqual(['none', 'none']);
+  for (const bar of await snapshot()) {
+    expect(bar.height).toBe(0);
+    expect(bar.borderTopWidth).toBe('0px');
+    expect(bar.boxShadow).toBe('none');
+    expect(bar.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  }
+
+  const zeroLine = await page.locator('.chart-grid').evaluate(element => {
+    const style = getComputedStyle(element, '::after');
+    return { display: style.display, height: style.height };
+  });
+  expect(zeroLine).toEqual({ display: 'block', height: '1px' });
+});
