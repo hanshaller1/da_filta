@@ -35,7 +35,7 @@ test('CURRENT remains sample-identical with an explicit CURRENT core option', as
   expect(difference).toBe(0);
 });
 
-test('FEEDBACK CORE switches live through AudioEngine and Sweetspot state', async ({ page }) => {
+test('FEEDBACK CORE switches CURRENT to ZDF to CURRENT live without rebuilding the Worklet', async ({ page }) => {
   await page.addInitScript(() => {
     window.__coreNodes = [];
     const mediaDevices = navigator.mediaDevices || {};
@@ -84,6 +84,12 @@ test('FEEDBACK CORE switches live through AudioEngine and Sweetspot state', asyn
   expect(live.value).toEqual({ type: 'set-feedback-core', value: 'zdf' });
   await page.locator('[data-sweetspot-save="A"]').click();
   await page.locator('[data-feedback-core]').selectOption('current');
+  const returned = await page.evaluate(() => {
+    const node = window.__coreNodes.find(candidate => candidate.name === window.Filterbank.PROCESSOR_NAME);
+    return { value: node.messages.at(-1), count: window.__coreNodes.length };
+  });
+  expect(returned.value).toEqual({ type: 'set-feedback-core', value: 'current' });
+  expect(returned.count).toBe(live.count);
   await page.locator('[data-sweetspot-load="A"]').click();
   await expect(page.locator('[data-feedback-core]')).toHaveValue('zdf');
   const loaded = await page.evaluate(() => {
