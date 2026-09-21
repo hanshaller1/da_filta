@@ -35,7 +35,12 @@ const ANALYZER_DISPLAY_DEFAULTS = Object.freeze({
   peakGlow: true,
   smoothDecay: true,
   liveStatusStrip: true,
-  collapsedPreview: true
+  collapsedPreview: true,
+  spectrumFill: true,
+  spectrumTrail: false,
+  energyBloom: false,
+  peakMarkers: false,
+  enhancedBars: true
 });
 const analyzerDisplay = { ...ANALYZER_DISPLAY_DEFAULTS };
 const POSITIVE_RESONANCE_AUDITION_VALUES = [0.10, 0.20, 0.30, 0.40, 0.60, 0.80, 1.00, 1.50, 2.00, 4.00];
@@ -102,19 +107,22 @@ inlineDevLabControls?.remove();
 const analyzerHeader = document.querySelector('.analyzer-header');
 const analyzerStatus = document.querySelector('.analyzer-status');
 const analyzerTitle = analyzerHeader?.querySelector('strong');
-if (analyzerHeader && analyzerStatus && analyzerTitle) {
+if (analyzerHeader && analyzerTitle) {
   const titleStatus = document.createElement('div');
   titleStatus.className = 'analyzer-title-status';
-  titleStatus.append(analyzerTitle, analyzerStatus);
+  titleStatus.append(analyzerTitle);
   analyzerHeader.prepend(titleStatus);
 }
+// Header metadata belongs to the app controls, not the compact analyzer view.
+analyzerStatus?.remove();
 const analyzerHeaderControls = analyzerHeader?.querySelector('.analyzer-header-controls');
 const analyzerLegend = document.querySelector('.analyzer > .legend');
-if (analyzerHeaderControls && analyzerLegend) analyzerHeaderControls.prepend(analyzerLegend);
+analyzerLegend?.remove();
 const analyzer = document.querySelector('.analyzer');
 let analyzerFooter = null;
 let collapsedPreview = null;
 let clearAnalyzerHover = () => {};
+let hideAnalyzerDetails = () => {};
 const analyzerAxisX = document.querySelector('.chart-grid .axis-x');
 if (analyzer && analyzerAxisX) {
   analyzerAxisX.replaceChildren(...BAND_DEFINITIONS.map(band => {
@@ -137,7 +145,7 @@ const setFilterbankResponseCollapsed = collapsed => {
   responseCollapseButton.setAttribute('aria-label', collapsed ? 'Filterbank response ausklappen' : 'Filterbank response einklappen');
   if (collapsedPreview) {
     collapsedPreview.hidden = !collapsed || !analyzerDisplay.collapsedPreview;
-    clearAnalyzerHover();
+    hideAnalyzerDetails();
     if (collapsed) scheduleAnalyzerRender();
   }
   responseCollapseButton.textContent = collapsed ? '▾' : '▴';
@@ -169,6 +177,7 @@ const ANALYZER_OPTION_GROUPS = [
   ['SPECTRUM', [['inputSpectrum', 'Input Spectrum', 'Zeigt das Spektrum vor der Filterbank.'], ['outputSpectrum', 'Output Spectrum', 'Zeigt das Spektrum des verarbeiteten Filterbank-Signals.'], ['filterResponse', 'Filter Response', 'Zeigt die eingestellte lineare Filterbank-Kurve; Feedback und nichtlineare Effekte sind nicht enthalten.']]],
   ['FEEDBACK', [['feedbackActivity', 'Feedback Activity'], ['selfOscillation', 'Self Oscillation', 'Markiert Bänder mit über Zeit stabiler, hoher Feedback-Energie.'], ['dominantBand', 'Dominant Band', 'Hebt den aktuellen Telemetrie-Kandidaten mit der höchsten Bandenergie hervor.'], ['feedbackEnergy', 'Feedback Energy']]],
   ['LEVELS', [['saturationIndicators', 'Saturation / Clip Indicators']]],
+  ['STYLE', [['spectrumFill', 'Spectrum Fill', 'Füllt das Output-Spektrum dezent bis zur unteren Kante.'], ['spectrumTrail', 'Spectrum Trail', 'Zeigt einen kurzen, rein visuellen Nachlauf des Output-Spektrums.'], ['energyBloom', 'Energy Bloom', 'Hebt besonders energiereiche Frequenzbereiche dezent hervor.'], ['peakMarkers', 'Peak Markers', 'Zeigt kurzlebige Marker an ausgeprägten lokalen Spectrum-Peaks.'], ['enhancedBars', 'Enhanced Bars', 'Verfeinert die L/R-Control-Balken mit Verlauf und Top-Kante.']]],
   ['VISUAL', [['peakGlow', 'Peak Glow'], ['smoothDecay', 'Smooth Decay'], ['liveStatusStrip', 'Live Status Strip'], ['collapsedPreview', 'Collapsed Preview']]]
 ];
 const analyzerOptions = document.createElement('div');
@@ -194,8 +203,8 @@ const setAnalyzerOptionsOpen = open => {
   analyzerOptionsPopover.hidden = !open;
   analyzerOptionsToggle.setAttribute('aria-expanded', String(open));
 };
-analyzerOptionsToggle.addEventListener('click', () => { clearAnalyzerHover(); setAnalyzerOptionsOpen(analyzerOptionsPopover.hidden); });
-document.addEventListener('pointerdown', event => { if (!analyzerOptions.contains(event.target)) { clearAnalyzerHover(); setAnalyzerOptionsOpen(false); } });
+analyzerOptionsToggle.addEventListener('click', () => { hideAnalyzerDetails(); setAnalyzerOptionsOpen(analyzerOptionsPopover.hidden); });
+document.addEventListener('pointerdown', event => { if (!analyzerOptions.contains(event.target)) { hideAnalyzerDetails(); setAnalyzerOptionsOpen(false); } });
 document.addEventListener('keydown', event => { if (event.key === 'Escape') setAnalyzerOptionsOpen(false); });
 analyzerHeaderControls?.prepend(analyzerOptions);
 
@@ -248,6 +257,8 @@ const spectrumRenderer = (() => {
   let cssWidth = 0;
   let cssHeight = 0;
   let palette = null;
+  let outputTrail = [];
+  let lastTrailCaptureAt = 0;
   const frequencyToX = (frequency, width) => Math.log(Math.max(minFrequency, Math.min(maxFrequency, frequency)) / minFrequency) / logFrequencyRange * width;
   const decibelsToY = (decibels, height) => (maxDecibels - Math.max(minDecibels, Math.min(maxDecibels, decibels))) / (maxDecibels - minDecibels) * height;
   const shouldRender = () => visible && !filterbankWorkspace?.classList.contains('is-collapsed');
@@ -300,21 +311,79 @@ const spectrumRenderer = (() => {
     }
     return leftAnalyser && rightAnalyser && leftBins && rightBins;
   };
-  const drawCurve = (data, analyser, color, alpha, lineWidth) => {
+  const curvePath = (data, analyser) => {
     const sampleRate = analyser.context.sampleRate;
     const binWidth = sampleRate / analyser.fftSize;
     const start = Math.max(1, Math.ceil(minFrequency / binWidth));
     const end = Math.min(data.length - 1, Math.floor(maxFrequency / binWidth));
-    context.globalAlpha = alpha;
-    context.strokeStyle = color;
-    context.lineWidth = lineWidth;
     context.beginPath();
     for (let bin = start; bin <= end; bin += 1) {
       const x = frequencyToX(bin * binWidth, cssWidth);
       const y = decibelsToY(Number.isFinite(data[bin]) ? data[bin] : minDecibels, cssHeight);
       if (bin === start) context.moveTo(x, y); else context.lineTo(x, y);
     }
+    return { start, end, binWidth };
+  };
+  const drawCurve = (data, analyser, color, alpha, lineWidth) => {
+    curvePath(data, analyser);
+    context.globalAlpha = alpha;
+    context.strokeStyle = color;
+    context.lineWidth = lineWidth;
     context.stroke();
+  };
+  const drawOutputFill = (data, analyser, color, alpha) => {
+    const { start, end, binWidth } = curvePath(data, analyser);
+    const gradient = context.createLinearGradient(0, 0, 0, cssHeight);
+    gradient.addColorStop(0, color);
+    gradient.addColorStop(.78, color);
+    gradient.addColorStop(1, 'transparent');
+    context.lineTo(frequencyToX(end * binWidth, cssWidth), cssHeight);
+    context.lineTo(frequencyToX(start * binWidth, cssWidth), cssHeight);
+    context.closePath();
+    context.globalAlpha = alpha;
+    context.fillStyle = gradient;
+    context.fill();
+  };
+  const drawEnergyBloom = (data, analyser, color) => {
+    const binWidth = analyser.context.sampleRate / analyser.fftSize;
+    BAND_DEFINITIONS.forEach(band => {
+      const center = Math.round(band.frequency / binWidth);
+      const radius = Math.max(1, Math.round(center * .13));
+      let peak = minDecibels;
+      for (let bin = Math.max(1, center - radius); bin <= Math.min(data.length - 1, center + radius); bin += 1) peak = Math.max(peak, Number.isFinite(data[bin]) ? data[bin] : minDecibels);
+      if (peak < -42) return;
+      const x = frequencyToX(band.frequency, cssWidth);
+      const alpha = Math.min(.12, Math.max(.018, (peak + 42) / 42 * .12));
+      const glow = context.createRadialGradient(x, cssHeight * .58, 0, x, cssHeight * .58, Math.max(15, cssWidth * .065));
+      glow.addColorStop(0, color);
+      glow.addColorStop(1, 'transparent');
+      context.globalAlpha = alpha;
+      context.fillStyle = glow;
+      context.fillRect(Math.max(0, x - cssWidth * .08), 0, Math.min(cssWidth * .16, cssWidth), cssHeight);
+    });
+  };
+  const drawPeakMarkers = (data, analyser, color) => {
+    const binWidth = analyser.context.sampleRate / analyser.fftSize;
+    const start = Math.max(3, Math.ceil(minFrequency / binWidth));
+    const end = Math.min(data.length - 4, Math.floor(maxFrequency / binWidth));
+    const peaks = [];
+    for (let bin = start; bin <= end; bin += 3) {
+      const value = Number.isFinite(data[bin]) ? data[bin] : minDecibels;
+      if (value > -30 && value >= data[bin - 2] && value >= data[bin + 2]) peaks.push({ bin, value });
+    }
+    peaks.sort((a, b) => b.value - a.value).slice(0, 5).forEach(({ bin, value }) => {
+      context.globalAlpha = Math.min(.72, .22 + (value + 30) / 30 * .5);
+      context.fillStyle = color;
+      context.beginPath();
+      context.arc(frequencyToX(bin * binWidth, cssWidth), decibelsToY(value, cssHeight), 1.45, 0, Math.PI * 2);
+      context.fill();
+    });
+  };
+  const captureTrail = now => {
+    if (!analyzerDisplay.spectrumTrail || now - lastTrailCaptureAt < 105) return;
+    outputTrail.unshift({ left: new Float32Array(leftBins), right: new Float32Array(rightBins), at: now });
+    outputTrail = outputTrail.slice(0, 3);
+    lastTrailCaptureAt = now;
   };
   const effectiveGain = index => audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, { maxBandBoostDb: getBandBoostDb(), maxBandCutDb: getBandCutDb() });
   const drawFilterResponse = (channel, color) => {
@@ -361,10 +430,37 @@ const spectrumRenderer = (() => {
     }
     if (analyzerDisplay.outputSpectrum && leftAnalyser && rightAnalyser && leftBins && rightBins) {
       leftAnalyser.getFloatFrequencyData(leftBins); rightAnalyser.getFloatFrequencyData(rightBins);
+      const now = performance.now();
+      captureTrail(now);
+      if (analyzerDisplay.energyBloom) {
+        drawEnergyBloom(leftBins, leftAnalyser, color.left);
+        drawEnergyBloom(rightBins, rightAnalyser, color.right);
+        lastLayers.push('energyBloom');
+      }
+      if (analyzerDisplay.spectrumTrail && outputTrail.length > 1) {
+        outputTrail.slice(1).forEach((trail, index) => {
+          const age = Math.max(0, now - trail.at);
+          const trailAlpha = Math.max(0, .15 - age / 2200) * (1 - index * .25);
+          if (!trailAlpha) return;
+          drawCurve(trail.left, leftAnalyser, color.left, trailAlpha, .9);
+          drawCurve(trail.right, rightAnalyser, color.right, trailAlpha * .7, .9);
+        });
+        lastLayers.push('spectrumTrail');
+      }
+      if (analyzerDisplay.spectrumFill) {
+        drawOutputFill(leftBins, leftAnalyser, color.left, foreground === 'bars' ? .075 : .12);
+        drawOutputFill(rightBins, rightAnalyser, color.right, foreground === 'bars' ? .045 : .075);
+        lastLayers.push('spectrumFill');
+      }
       const alpha = foreground === 'bars' ? .38 : .96;
       const width = foreground === 'bars' ? 1 : 1.65;
       drawCurve(leftBins, leftAnalyser, color.left, alpha, width);
       drawCurve(rightBins, rightAnalyser, color.right, alpha, width);
+      if (analyzerDisplay.peakMarkers) {
+        drawPeakMarkers(leftBins, leftAnalyser, color.left);
+        drawPeakMarkers(rightBins, rightAnalyser, color.right);
+        lastLayers.push('peakMarkers');
+      }
       lastLayers.push('outputSpectrum');
     }
     context.globalAlpha = 1;
@@ -580,7 +676,7 @@ const devLabTelemetry = (() => {
     push(histories.main, { left: packet.left.mainCommonFeedbackReturn, right: packet.right.mainCommonFeedbackReturn });
     push(histories.resonance, { target: packet.left.resonanceTarget, smoothed: packet.left.smoothedResonance }); render();
   };
-  const setMode = mode => { responseMode = mode; const dev = mode === 'dev-lab'; filterbankWorkspace?.classList.toggle('is-dev-lab', dev); responseLab.hidden = !dev; responseChart.hidden = dev; if (responseLegend) responseLegend.hidden = dev; spectrumForegroundControl.hidden = dev; spectrumRenderer.setVisible(!dev); normalResponseButton.classList.toggle('active', !dev); devResponseButton.classList.toggle('active', dev); normalResponseButton.setAttribute('aria-pressed', String(!dev)); devResponseButton.setAttribute('aria-pressed', String(dev)); render(); };
+  const setMode = mode => { hideAnalyzerDetails(); responseMode = mode; const dev = mode === 'dev-lab'; filterbankWorkspace?.classList.toggle('is-dev-lab', dev); responseLab.hidden = !dev; responseChart.hidden = dev; if (responseLegend) responseLegend.hidden = dev; spectrumForegroundControl.hidden = dev; normalResponseButton.classList.toggle('active', !dev); devResponseButton.classList.toggle('active', dev); normalResponseButton.setAttribute('aria-pressed', String(!dev)); devResponseButton.setAttribute('aria-pressed', String(dev)); render(); };
   normalResponseButton.addEventListener('click', () => setMode('normal')); devResponseButton.addEventListener('click', () => setMode('dev-lab'));
   freezeButton.addEventListener('click', () => { frozen = !frozen; freezeButton.textContent = frozen ? 'LIVE' : 'FREEZE'; freezeButton.setAttribute('aria-pressed', String(frozen)); });
   resetButton.addEventListener('click', () => { reset(); resetSessionMax(); log('RESET METRICS'); });
@@ -1037,6 +1133,7 @@ const collapsedPreviewLevels = Array(BAND_COUNT).fill(0);
 let analyzerAnimationFrame = 0;
 let analyzerLastFrame = performance.now();
 let liveDetailTimeout = 0;
+let analyzerDetailMode = 'hidden';
 let hoveredAnalyzerBand = null;
 const toDb = value => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)} dB`;
 const getAnalyzerEffective = index => audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, { maxBandBoostDb: getBandBoostDb(), maxBandCutDb: getBandCutDb() });
@@ -1057,30 +1154,57 @@ const detailText = index => {
   const info = analyzerBandInfo(index);
   return [`BAND ${index + 1} · ${BAND_DEFINITIONS[index].label}`, `L ${toDb(info.effective.leftDb)}`, `R ${toDb(info.effective.rightDb)}`, ...(analyzerDisplay.spreadDelta || Math.abs(info.delta) > .005 ? [`Δ ${toDb(info.delta)}`] : []), info.feedback ? 'FB ON' : 'FB OFF', ...(state.feedbackAllLeft || state.feedbackAllRight ? ['MAIN'] : []), ...(info.dominant ? ['DOM'] : []), ...(info.oscillating ? ['OSC'] : [])];
 };
-clearAnalyzerHover = () => {
+const hideDetailElement = detail => { detail.hidden = true; };
+hideAnalyzerDetails = () => {
   hoveredAnalyzerBand = null;
   clearTimeout(liveDetailTimeout);
-  analyzerDetail.hidden = true;
-  collapsedAnalyzerDetail.hidden = true;
+  analyzerDetailMode = 'hidden';
+  hideDetailElement(analyzerDetail);
+  hideDetailElement(collapsedAnalyzerDetail);
   bars.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
   collapsedPreview?.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
 };
-const showAnalyzerDetail = (index, anchor, persistent = false, collapsed = false) => {
-  if ((!persistent && !analyzerDisplay.hoverValues) || (persistent && !analyzerDisplay.liveEditValues)) return;
+clearAnalyzerHover = () => {
+  hoveredAnalyzerBand = null;
+  bars.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
+  collapsedPreview?.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
+  hideDetailElement(collapsedAnalyzerDetail);
+  if (analyzerDetailMode === 'hover') {
+    analyzerDetailMode = 'hidden';
+    hideDetailElement(analyzerDetail);
+  }
+};
+const renderAnalyzerDetail = (index, anchor, collapsed = false) => {
   const detail = collapsed ? collapsedAnalyzerDetail : analyzerDetail;
   const container = collapsed ? analyzerFooter : responseChart;
-  if (!persistent) {
-    clearAnalyzerHover();
-    hoveredAnalyzerBand = index;
-    anchor?.classList.add('is-hovered');
-  }
   detail.replaceChildren(...detailText(index).map((line, lineIndex) => { const row = document.createElement(lineIndex === 0 ? 'strong' : 'span'); row.textContent = line; return row; }));
   detail.hidden = false;
   const containerRect = container.getBoundingClientRect();
   const rect = anchor?.getBoundingClientRect?.() || containerRect;
   detail.style.left = `${Math.max(4, Math.min(containerRect.width - 116, rect.left - containerRect.left + rect.width / 2 - 58))}px`;
   detail.style.top = collapsed ? '2px' : `${Math.max(4, Math.min(containerRect.height - 82, rect.top - containerRect.top + 8))}px`;
-  if (persistent) { clearTimeout(liveDetailTimeout); liveDetailTimeout = window.setTimeout(() => { analyzerDetail.hidden = true; }, 1250); }
+};
+const showAnalyzerHover = (index, anchor, collapsed = false) => {
+  if (!analyzerDisplay.hoverValues) return;
+  hideAnalyzerDetails();
+  hoveredAnalyzerBand = index;
+  analyzerDetailMode = 'hover';
+  anchor?.classList.add('is-hovered');
+  renderAnalyzerDetail(index, anchor, collapsed);
+};
+const scheduleLiveEditHide = (delay = 450) => {
+  if (analyzerDetailMode !== 'live-edit') return;
+  clearTimeout(liveDetailTimeout);
+  liveDetailTimeout = window.setTimeout(() => {
+    if (analyzerDetailMode === 'live-edit') hideAnalyzerDetails();
+  }, delay);
+};
+const showAnalyzerLiveEdit = (index, anchor) => {
+  if (!analyzerDisplay.liveEditValues) return;
+  hideAnalyzerDetails();
+  analyzerDetailMode = 'live-edit';
+  renderAnalyzerDetail(index, anchor);
+  scheduleLiveEditHide(600);
 };
 const refreshStatusStrip = () => {
   if (!liveStatusStrip) return;
@@ -1137,7 +1261,7 @@ const renderCollapsedPreview = index => {
   const packet = getAnalyzerTelemetry();
   const peakEnergy = packet ? Math.max(1e-9, ...Array.from({ length: BAND_COUNT }, (_, band) => getEnergyPair(packet, band))) : 1;
   const audioLevel = packet ? Math.min(1, Math.sqrt(getEnergyPair(packet, index) / peakEnergy)) : 0;
-  const targetLevel = Math.min(1, Math.max(Math.abs(motion.left), Math.abs(motion.right)) / 260 + audioLevel * .82);
+  const targetLevel = packet ? Math.min(1, Math.max(Math.abs(motion.left), Math.abs(motion.right)) / 260 + audioLevel * .82) : 0;
   const previousLevel = collapsedPreviewLevels[index];
   const level = targetLevel >= previousLevel ? targetLevel : previousLevel + (targetLevel - previousLevel) * .13;
   collapsedPreviewLevels[index] = level;
@@ -1179,11 +1303,15 @@ const animateAnalyzer = now => {
       pair.classList.toggle('has-glow', analyzerDisplay.peakGlow && Math.max(Math.abs(motion.left), Math.abs(motion.right)) > 4);
       pair.classList.toggle('hide-lr-bars', !analyzerDisplay.lrBars);
       const [leftBar, rightBar] = pair.querySelectorAll('i[data-channel]');
-      renderAnalyzerBar(leftBar, motion.left); renderAnalyzerBar(rightBar, motion.right);
+      // These bars are the current effective control values, not an audio
+      // meter. They intentionally bypass visual decay and change on this frame.
+      renderAnalyzerBar(leftBar, info.effective.leftControl);
+      renderAnalyzerBar(rightBar, info.effective.rightControl);
       pair.querySelector('.analyzer-band-delta').textContent = `Δ ${toDb(info.delta)}`;
       pair.querySelector('.analyzer-peak-left').style.setProperty('--peak-level', (Math.sign(motion.left || 1) * motion.peakLeft / 2).toFixed(2));
       pair.querySelector('.analyzer-peak-right').style.setProperty('--peak-level', (Math.sign(motion.right || 1) * motion.peakRight / 2).toFixed(2));
     }
+    analyzerAxisX?.children[index]?.classList.toggle('is-dominant', analyzerDisplay.dominantBand && info.dominant);
     if (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview) renderCollapsedPreview(index);
   }
   if (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview) renderCollapsedPreviewLine();
@@ -1198,14 +1326,14 @@ const setAnalyzerDisplayOption = (key, enabled) => {
   analyzerOptionsPopover.querySelector(`[data-analyzer-option="${key}"]`).checked = analyzerDisplay[key];
   responseChart?.classList.toggle(`hide-${key.replace(/[A-Z]/g, match => `-${match.toLowerCase()}`)}`, !analyzerDisplay[key]);
   if (key === 'liveStatusStrip') refreshStatusStrip();
-  if (key === 'hoverValues' && !analyzerDisplay[key]) clearAnalyzerHover();
+  if ((key === 'hoverValues' || key === 'liveEditValues') && !analyzerDisplay[key]) hideAnalyzerDetails();
   if (key === 'frequencyLabels') analyzerFooter?.classList.toggle('hide-frequency-labels', !analyzerDisplay[key]);
   if (key === 'bandRegions') responseChart?.classList.toggle('hide-band-regions', !analyzerDisplay[key]);
   if (key === 'grid') responseChart?.classList.toggle('hide-grid', !analyzerDisplay[key]);
   if (key === 'collapsedPreview') collapsedPreview.hidden = !analyzerDisplay[key] || !filterbankWorkspace?.classList.contains('is-collapsed');
   spectrumRenderer.refresh(); scheduleAnalyzerRender();
 };
-window.FilterbankAnalyzer = { getDisplayState: () => ({ ...analyzerDisplay }), setDisplayOption: setAnalyzerDisplayOption, getBandInfo: index => analyzerBandInfo(index), refresh: scheduleAnalyzerRender, getSpectrumLayers: () => spectrumRenderer.getLayers() };
+window.FilterbankAnalyzer = { getDisplayState: () => ({ ...analyzerDisplay }), getDetailState: () => ({ mode: analyzerDetailMode, hoveredBand: hoveredAnalyzerBand }), setDisplayOption: setAnalyzerDisplayOption, getBandInfo: index => analyzerBandInfo(index), refresh: scheduleAnalyzerRender, getSpectrumLayers: () => spectrumRenderer.getLayers() };
 const renderAnalyzerBar = (bar, value) => {
   const numericValue = Number(value);
   const height = numericValue > BAND_GAIN_NEUTRAL
@@ -1245,7 +1373,7 @@ const setBandBaseGain = (channel, index, value) => {
     audioEngine?.setBandBaseGain(targetChannel, index, nextValue);
   });
   renderBand(index);
-  showAnalyzerDetail(index, faders[index], true);
+  showAnalyzerLiveEdit(index, faders[index]);
   refreshStatusStrip();
   const gainDb = formatBandSliderValue(state.bandGainLeft[index]);
   devLabTelemetry.logStateChange(`BAND ${index + 1} GAIN`, setBandBaseGain.last?.[index] ?? '+0.0 dB', gainDb);
@@ -1277,26 +1405,28 @@ const setFeedbackAll = (channel, enabled) => {
 faders.forEach((slider,index) => {
   slider.addEventListener('input', () => setBandBaseGain('left', index, slider.value));
   slider.addEventListener('dblclick', () => setBandBaseGain('left', index, BAND_GAIN_NEUTRAL));
+  ['pointerup', 'pointercancel', 'change', 'blur'].forEach(type => slider.addEventListener(type, () => scheduleLiveEditHide()));
   renderBand(index);
 });
 bars.querySelectorAll('[data-analyzer-band]').forEach(pair => {
-  pair.addEventListener('pointerenter', () => showAnalyzerDetail(Number(pair.dataset.analyzerBand), pair));
+  pair.addEventListener('pointerenter', () => showAnalyzerHover(Number(pair.dataset.analyzerBand), pair));
   pair.addEventListener('pointerleave', clearAnalyzerHover);
 });
 bars.addEventListener('focusin', event => {
   const pair = event.target.closest('[data-analyzer-band]');
-  if (pair) showAnalyzerDetail(Number(pair.dataset.analyzerBand), pair);
+  if (pair) showAnalyzerHover(Number(pair.dataset.analyzerBand), pair);
 });
 bars.addEventListener('focusout', clearAnalyzerHover);
 collapsedPreview.querySelectorAll('[data-collapsed-band]').forEach(button => {
   button.addEventListener('pointerenter', () => {
-    if (analyzerDisplay.collapsedPreview && filterbankWorkspace?.classList.contains('is-collapsed')) showAnalyzerDetail(Number(button.dataset.collapsedBand), button, false, true);
+    if (analyzerDisplay.collapsedPreview && filterbankWorkspace?.classList.contains('is-collapsed')) showAnalyzerHover(Number(button.dataset.collapsedBand), button, true);
   });
   button.addEventListener('pointerleave', clearAnalyzerHover);
 });
-window.addEventListener('blur', clearAnalyzerHover);
-normalResponseButton.addEventListener('click', clearAnalyzerHover);
-devResponseButton.addEventListener('click', clearAnalyzerHover);
+analyzer?.addEventListener('pointerleave', hideAnalyzerDetails);
+window.addEventListener('blur', hideAnalyzerDetails);
+normalResponseButton.addEventListener('click', hideAnalyzerDetails);
+devResponseButton.addEventListener('click', hideAnalyzerDetails);
 document.addEventListener('input', () => { refreshStatusStrip(); scheduleAnalyzerRender(); });
 document.addEventListener('change', () => { refreshStatusStrip(); scheduleAnalyzerRender(); });
 
