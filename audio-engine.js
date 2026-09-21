@@ -1,5 +1,14 @@
 (function () {
-  const { BAND_COUNT, BAND_GAIN_MIN, BAND_GAIN_MAX, clampBandGain } = window.ResonantState;
+  const {
+    BAND_COUNT,
+    BAND_GAIN_MIN,
+    BAND_GAIN_MAX,
+    clampBandGain,
+    getEffectiveBandGains,
+    normalizeSpreadCurve,
+    normalizeSpreadMaxOffsetDb,
+    clampSpread
+  } = window.ResonantState;
   const dbToGain = db => 10 ** (Number(db) / 20);
   const dryWetGains = value => {
     const wet = Math.min(100, Math.max(0, Number(value))) / 100;
@@ -41,6 +50,10 @@
       this.referenceLevel = 1;
       this.maxBandBoostDb = 12;
       this.maxBandCutDb = 12;
+      this.spread = 0;
+      this.spreadMode = 'CLASSIC';
+      this.spreadCurve = 'linear';
+      this.spreadMaxOffsetDb = 6;
       this.positiveResonanceEngine = 'tpt';
       this.feedbackTopology = 'isolated-tpt'; this.feedbackCore = 'current'; this.localLoopTuning = 'current'; this.feedbackTap = 'pre-gain'; this.wetModel = 'reference-delta';
       this.commonBusSaturationMode = 'current'; this.commonBusDrive = 1; this.commonBusCeiling = 1;
@@ -191,8 +204,12 @@
     }
 
     setReferenceLevel(value) { this.referenceLevel = [1, 0.75, 0.5, 0.25, 0].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setReferenceLevel(this.referenceLevel); return this.referenceLevel; }
-    setBandBoostDb(value) { this.maxBandBoostDb = [12, 18, 24].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandBoostDb(this.maxBandBoostDb); return this.maxBandBoostDb; }
-    setBandCutDb(value) { this.maxBandCutDb = [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandCutDb(this.maxBandCutDb); return this.maxBandCutDb; }
+    setBandBoostDb(value) { this.maxBandBoostDb = [12, 18, 24].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandBoostDb(this.maxBandBoostDb); this.applyEffectiveBandGains(); return this.maxBandBoostDb; }
+    setBandCutDb(value) { this.maxBandCutDb = [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandCutDb(this.maxBandCutDb); this.applyEffectiveBandGains(); return this.maxBandCutDb; }
+    setSpread(value) { this.spread = clampSpread(value); this.applyEffectiveBandGains(); return this.spread; }
+    setSpreadMode(value) { this.spreadMode = value === 'FB_CH_SELECT' ? 'FB_CH_SELECT' : 'CLASSIC'; this.applyEffectiveBandGains(); return this.spreadMode; }
+    setSpreadCurve(value) { this.spreadCurve = normalizeSpreadCurve(value); this.applyEffectiveBandGains(); return this.spreadCurve; }
+    setSpreadMaxOffsetDb(value) { this.spreadMaxOffsetDb = normalizeSpreadMaxOffsetDb(value); this.applyEffectiveBandGains(); return this.spreadMaxOffsetDb; }
     setPositiveResonanceEngine(value) { this.positiveResonanceEngine = value === 'phase2' ? value : 'tpt'; this.filterbank?.setPositiveResonanceEngine(this.positiveResonanceEngine); return this.positiveResonanceEngine; }
     setFeedbackTopology(value) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt'; this.filterbank?.setFeedbackTopology(this.feedbackTopology); return this.feedbackTopology; }
     setFeedbackCore(value) { this.feedbackCore = value === 'zdf' ? 'zdf' : 'current'; this.filterbank?.setFeedbackCore(this.feedbackCore); return this.feedbackCore; }
@@ -214,8 +231,43 @@
       const nextValue = clampBandGain(value);
       const target = channel === 'left' ? this.bandGainLeft : this.bandGainRight;
       target[index] = nextValue;
-      this.filterbank?.setBandBaseGain(channel, index, nextValue);
+      this.applyEffectiveBandGain(index);
       return nextValue;
+    }
+
+    getEffectiveBandGains(index) {
+      return getEffectiveBandGains(this, index, {
+        maxBandBoostDb: this.maxBandBoostDb,
+        maxBandCutDb: this.maxBandCutDb
+      });
+    }
+
+    get effectiveBandGainLeft() {
+      return Array.from({ length: BAND_COUNT }, (_, index) => this.getEffectiveBandGains(index).leftControl);
+    }
+
+    get effectiveBandGainRight() {
+      return Array.from({ length: BAND_COUNT }, (_, index) => this.getEffectiveBandGains(index).rightControl);
+    }
+
+    get effectiveBandGainDbLeft() {
+      return Array.from({ length: BAND_COUNT }, (_, index) => this.getEffectiveBandGains(index).leftDb);
+    }
+
+    get effectiveBandGainDbRight() {
+      return Array.from({ length: BAND_COUNT }, (_, index) => this.getEffectiveBandGains(index).rightDb);
+    }
+
+    applyEffectiveBandGain(index) {
+      if (!this.filterbank) return;
+      const effective = this.getEffectiveBandGains(index);
+      this.filterbank.setBandBaseGain('left', index, effective.leftControl);
+      this.filterbank.setBandBaseGain('right', index, effective.rightControl);
+    }
+
+    applyEffectiveBandGains() {
+      if (!this.filterbank) return;
+      for (let index = 0; index < BAND_COUNT; index += 1) this.applyEffectiveBandGain(index);
     }
 
     setBandFeedback(channel, index, enabled) {
@@ -239,8 +291,8 @@
 
     getFilterbankState() {
       return {
-        bandGainLeft: this.bandGainLeft,
-        bandGainRight: this.bandGainRight,
+        bandGainLeft: this.effectiveBandGainLeft,
+        bandGainRight: this.effectiveBandGainRight,
         feedbackBandLeft: this.feedbackBandLeft,
         feedbackBandRight: this.feedbackBandRight,
         feedbackAllLeft: this.feedbackAllLeft,
@@ -266,6 +318,10 @@
         ...filterbankState,
         bandGainLeft: [...this.bandGainLeft],
         bandGainRight: [...this.bandGainRight],
+        spread: this.spread,
+        spreadMode: this.spreadMode,
+        spreadCurve: this.spreadCurve,
+        spreadMaxOffsetDb: this.spreadMaxOffsetDb,
         feedbackBandLeft: [...this.feedbackBandLeft],
         feedbackBandRight: [...this.feedbackBandRight],
         inputGainDb: this.inputGainDb,
@@ -286,6 +342,10 @@
       this.feedbackBandRight = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandRight?.[index]));
       this.feedbackAllLeft = Boolean(snapshot?.feedbackAllLeft);
       this.feedbackAllRight = Boolean(snapshot?.feedbackAllRight);
+      this.setSpreadMode(snapshot?.spreadMode ?? this.spreadMode);
+      this.setSpreadCurve(snapshot?.spreadCurve ?? this.spreadCurve);
+      this.setSpreadMaxOffsetDb(snapshot?.spreadMaxOffsetDb ?? this.spreadMaxOffsetDb);
+      this.setSpread(snapshot?.spread ?? this.spread);
       if (snapshot?.inputGainDb !== undefined) this.setInputGainDb(finiteOr(snapshot.inputGainDb, this.inputGainDb));
       if (snapshot?.inputPreampStage !== undefined) this.setInputPreampStage(snapshot.inputPreampStage);
       if (snapshot?.inputCharacterAmount !== undefined) this.setInputCharacterAmount(finiteOr(snapshot.inputCharacterAmount, this.inputCharacterAmount));

@@ -7,6 +7,7 @@ const {
   GLOBAL_CONTROL_DEFINITIONS,
   controlToBandGainDb,
   createInitialState,
+  getEffectiveBandGains,
   setBandBaseGain: setStateBandBaseGain
 } = window.ResonantState;
 const state = createInitialState();
@@ -63,7 +64,7 @@ devLabControls?.append(sweetspotGroup);
 const groupForDevControl = control => {
   const attribute = control.querySelector('select')?.getAttributeNames().find(name => name.startsWith('data-')) ?? '';
   if (attribute === 'data-input-preamp-stage') return 'input';
-  if (attribute === 'data-reference-level' || attribute === 'data-band-boost-db' || attribute === 'data-band-cut-db' || attribute === 'data-wet-model') return 'filterbank';
+  if (attribute === 'data-reference-level' || attribute === 'data-band-boost-db' || attribute === 'data-band-cut-db' || attribute === 'data-spread-curve' || attribute === 'data-spread-max-offset-db' || attribute === 'data-wet-model') return 'filterbank';
   if (attribute === 'data-feedback-topology' || attribute === 'data-feedback-tap' || attribute === 'data-local-loop-tuning' || attribute === 'data-feedback-core') return 'local-feedback';
   if (attribute === 'data-feedback-all-engine' || attribute === 'data-feedback-all-source' || attribute === 'data-post-gain-feedback-weight' || attribute === 'data-feedback-all-level') return 'main';
   return 'resonator';
@@ -414,7 +415,7 @@ const devLabTelemetry = (() => {
     const wetCrestL = metrics.wetRmsLeft > 1e-9 ? left.wetPeak / metrics.wetRmsLeft : 0;
     const wetCrestR = metrics.wetRmsRight > 1e-9 ? right.wetPeak / metrics.wetRmsRight : 0;
     detail.innerHTML = `<strong>${left.feedbackCoreEffective === 'zdf' ? 'DOMINANT BASE BAND' : 'DOMINANT BAND'}</strong><b>${frequencies[dominant.index]} Hz</b><span>DOMINANCE ${(dominant.dominance * 100).toFixed(0)} %</span><span>DOM STABLE ${((performance.now() - dominant.startedAt) / 1000).toFixed(1)} s</span><span>SAT ACT ${(metrics.sat * 100).toFixed(0)} % · RETURN/TAP ${metrics.feedbackRatio === null ? 'N/A' : metrics.feedbackRatio.toFixed(2)}</span><span>DC L/R ${number(metrics.dcLeft)} / ${number(metrics.dcRight)}</span><span>SRC CREST ${sourceCrestL.toFixed(2)} / ${sourceCrestR.toFixed(2)}</span><span>WET CREST ${wetCrestL.toFixed(2)} / ${wetCrestR.toFixed(2)}</span>`;
-    bands.replaceChildren(...frequencies.map((frequency, index) => { const zdf = left.feedbackCoreEffective === 'zdf'; const energy = finite((zdf ? left.baseBandEnergy : left.bandEnergy)?.[index]) + finite((zdf ? right.baseBandEnergy : right.bandEnergy)?.[index]); const maxEnergy = Math.max(1e-12, dominant.energy); const row = document.createElement('div'); const gain = Math.max(controlToBandGainDb(audioEngine?.bandGainLeft?.[index] ?? 0, audioEngine?.maxBandBoostDb, audioEngine?.maxBandCutDb), controlToBandGainDb(audioEngine?.bandGainRight?.[index] ?? 0, audioEngine?.maxBandBoostDb, audioEngine?.maxBandCutDb)); row.className = index === dominant.index ? 'is-dominant' : ''; row.innerHTML = `<span>${frequency >= 1000 ? `${(frequency / 1000).toFixed(1)} kHz` : `${frequency} Hz`}</span><i><b style="width:${Math.min(100, energy / maxEnergy * 100)}%"></b></i><em>${number(Math.max(finite((zdf ? left.baseBandPeak : left.bandPeak)?.[index]), finite((zdf ? right.baseBandPeak : right.bandPeak)?.[index])))}</em><small>${left.localGates?.[index] > .5 || right.localGates?.[index] > .5 ? 'FB ON' : 'FB OFF'} · ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} dB</small>`; return row; }));
+    bands.replaceChildren(...frequencies.map((frequency, index) => { const zdf = left.feedbackCoreEffective === 'zdf'; const energy = finite((zdf ? left.baseBandEnergy : left.bandEnergy)?.[index]) + finite((zdf ? right.baseBandEnergy : right.bandEnergy)?.[index]); const maxEnergy = Math.max(1e-12, dominant.energy); const row = document.createElement('div'); const gain = Math.max(audioEngine?.effectiveBandGainDbLeft?.[index] ?? 0, audioEngine?.effectiveBandGainDbRight?.[index] ?? 0); row.className = index === dominant.index ? 'is-dominant' : ''; row.innerHTML = `<span>${frequency >= 1000 ? `${(frequency / 1000).toFixed(1)} kHz` : `${frequency} Hz`}</span><i><b style="width:${Math.min(100, energy / maxEnergy * 100)}%"></b></i><em>${number(Math.max(finite((zdf ? left.baseBandPeak : left.bandPeak)?.[index]), finite((zdf ? right.baseBandPeak : right.bandPeak)?.[index])))}</em><small>${left.localGates?.[index] > .5 || right.localGates?.[index] > .5 ? 'FB ON' : 'FB OFF'} · ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} dB</small>`; return row; }));
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="common"]'), histories.common, ['left', 'right']);
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="main"]'), histories.main, ['left', 'right']);
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="resonance"]'), histories.resonance, ['target', 'smoothed'], 1);
@@ -456,7 +457,7 @@ const devLabTelemetry = (() => {
   responseLab.querySelector('[data-debug-mark]').addEventListener('click', () => { markerNumber += 1; log(`USER MARK #${markerNumber}`); });
   responseLab.querySelector('[data-debug-snapshot]').addEventListener('click', () => {
     if (!latest) { log('SNAPSHOT unavailable — NO AUDIO'); return; }
-    snapshotNumber += 1; const d = dominantBand(latest); const m = telemetryMetrics(latest); const state = audioEngine || {}; const gains = state.bandGainLeft?.map(value => `${controlToBandGainDb(value, state.maxBandBoostDb, state.maxBandCutDb) >= 0 ? '+' : ''}${controlToBandGainDb(value, state.maxBandBoostDb, state.maxBandCutDb).toFixed(1)}`).join(',') || '—'; const fb = (state.feedbackBandLeft || []).map((on, index) => on ? index + 1 : null).filter(Boolean).join(',') || 'none';
+    snapshotNumber += 1; const d = dominantBand(latest); const m = telemetryMetrics(latest); const state = audioEngine || {}; const gains = state.effectiveBandGainDbLeft?.map(value => `${value >= 0 ? '+' : ''}${value.toFixed(1)}`).join(',') || '—'; const fb = (state.feedbackBandLeft || []).map((on, index) => on ? index + 1 : null).filter(Boolean).join(',') || 'none';
     const text = `SNAPSHOT #${snapshotNumber} · RES ${number(latest.left.resonanceTarget)}/${number(latest.left.smoothedResonance)} · DOM ${BAND_DEFINITIONS[d.index].frequency} Hz/${((performance.now() - dominant.startedAt) / 1000).toFixed(1)} s · LOCAL ${number(latest.left.commonFeedbackReturn)}/${number(latest.right.commonFeedbackReturn)} · MAIN ${number(latest.left.mainCommonFeedbackReturn)}/${number(latest.right.mainCommonFeedbackReturn)} · SAT ${(m.sat * 100).toFixed(0)} % · FB ${fb} · GAIN [${gains}] · TOPOLOGY ${state.feedbackTopology} · TAP ${state.feedbackTap}`;
     snapshots.push(text); log(text);
   });
@@ -482,6 +483,8 @@ const addDevLabSelector = (label, attribute, options) => {
     'data-reference-level': 'filterbank',
     'data-band-boost-db': 'filterbank',
     'data-band-cut-db': 'filterbank',
+    'data-spread-curve': 'filterbank',
+    'data-spread-max-offset-db': 'filterbank',
     'data-wet-model': 'filterbank',
     'data-feedback-topology': 'local-feedback',
     'data-feedback-core': 'local-feedback',
@@ -513,6 +516,10 @@ const referenceLevelSelect = addDevLabSelector('DEV REFERENCE', 'data-reference-
 const resonanceEngineSelect = addDevLabSelector('DEV RES ENGINE', 'data-positive-resonance-engine', [['tpt', 'TPT'], ['phase2', 'PHASE 2']]);
 const bandBoostSelect = addDevLabSelector('DEV BAND BOOST', 'data-band-boost-db', [['12', '+12 dB'], ['18', '+18 dB'], ['24', '+24 dB']]);
 const bandCutSelect = addDevLabSelector('DEV BAND CUT', 'data-band-cut-db', [['12', '-12 dB'], ['24', '-24 dB'], ['36', '-36 dB'], ['48', '-48 dB'], ['60', '-60 dB']]);
+const spreadCurveSelect = addDevLabSelector('SPREAD CURVE', 'data-spread-curve', [['linear', 'LINEAR'], ['quadratic', 'QUADRATIC'], ['smoothstep', 'SMOOTHSTEP']]);
+const spreadMaxOffsetSelect = addDevLabSelector('DEV SPREAD MAX OFFSET', 'data-spread-max-offset-db', [['3', '3 dB'], ['6', '6 dB'], ['9', '9 dB'], ['12', '12 dB']]);
+if (spreadCurveSelect) spreadCurveSelect.value = 'linear';
+if (spreadMaxOffsetSelect) spreadMaxOffsetSelect.value = '6';
 const feedbackTopologySelect = addDevLabSelector('DEV FB TOPOLOGY', 'data-feedback-topology', [['isolated-tpt', 'ISOLATED TPT'], ['common-bus', 'COMMON BUS'], ['local-loop-exp', 'LOCAL LOOP EXP']]);
 const feedbackCoreSelect = addDevLabSelector('FEEDBACK CORE', 'data-feedback-core', [['current', 'CURRENT'], ['zdf', 'ZDF']]);
 const localLoopTuningSelect = addDevLabSelector('DEV LOCAL LOOP TUNING', 'data-local-loop-tuning', [['current', 'CURRENT'], ['compensated', 'COMPENSATED']]);
@@ -603,6 +610,18 @@ const DEV_LAB_HELP = {
     scope: 'Wirkt unabhängig vom Boost auf die negative Hälfte der Band-Fader; bei -60 dB sind -100 = -60 dB, -50 = -30 dB und 0 = 0 dB.',
     values: [['-12 dB', 'Fader -100 = -12 dB.'], ['-24 dB', 'Fader -100 = -24 dB.'], ['-36 dB', 'Fader -100 = -36 dB.'], ['-48 dB', 'Fader -100 = -48 dB.'], ['-60 dB', 'Fader -100 = -60 dB.']],
     default: '-12 dB', note: 'Experimenteller Kalibrierwert; kein bestätigter Erica-Hardwarewert.'
+  },
+  'data-spread-curve': {
+    title: 'SPREAD CURVE', what: 'Wählt die Kennlinie des CLASSIC-SPREAD-Offsets.',
+    scope: 'Nur FB MODE + CLASSIC: Ein gemeinsamer dB-Offset wird symmetrisch auf alle linken und rechten Band-Gains aufgeteilt. FB_CH_SELECT bleibt unverändert.',
+    values: [['LINEAR', 'Offset folgt direkt dem SPREAD-Wert.'], ['QUADRATIC', 'Geringe Wirkung um die Mitte, stärkerer Anstieg zum Maximum.'], ['SMOOTHSTEP', 'Weicher Verlauf an Mitte und Maximum.']],
+    default: 'LINEAR', note: 'DEV/LAB-Vergleich, keine finale Erica-Kennlinie.'
+  },
+  'data-spread-max-offset-db': {
+    title: 'DEV SPREAD MAX OFFSET', what: 'Legt den maximalen CLASSIC-SPREAD-Offset pro Kanal fest.',
+    scope: 'Nur FB MODE + CLASSIC. Der Offset wird für jeden Kanal separat am aktuellen Band-Gain-Limit geclampet; Basisfaderwerte bleiben unverändert.',
+    values: [['3 dB', 'Maximal ±3 dB pro Kanal.'], ['6 dB', 'Maximal ±6 dB pro Kanal.'], ['9 dB', 'Maximal ±9 dB pro Kanal.'], ['12 dB', 'Maximal ±12 dB pro Kanal.']],
+    default: '6 dB', note: 'Neutraler Test-Startwert, keine Produktionsentscheidung.'
   },
   'data-wet-model': {
     title: 'DEV WET MODEL', what: 'Wählt die experimentelle Bildung des Wet-Ausgangs.',
@@ -728,7 +747,7 @@ const DEV_LAB_HELP = {
 
 const DEV_LAB_GROUP_HELP = {
   input: ['data-input-preamp-stage', 'data-input-character-amount'],
-  filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-wet-model'],
+  filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-spread-curve', 'data-spread-max-offset-db', 'data-wet-model'],
   'local-feedback': ['data-feedback-topology', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
   main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-post-gain-feedback-weight', 'data-feedback-all-level', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
   resonator: ['data-positive-resonance-audition', 'data-positive-resonance-drive', 'data-positive-resonance-damping-floor', 'data-positive-resonance-output', 'data-positive-resonance-latency', 'data-positive-resonance-curve', 'data-positive-resonance-engine']
@@ -821,7 +840,11 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape' && !d
 window.addEventListener('resize', positionDevLabTooltip);
 const THEME_STORAGE_KEY = 'da_filta-theme';
 const LEGACY_THEME_STORAGE_KEY = 'resonant-filterbank-theme';
-const THEME_VALUES = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'pro-console'];
+const THEME_VALUES = [
+  'current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'pro-console',
+  'graphite', 'midnight', 'slate', 'forest', 'warm-studio',
+  'copper-circuit', 'ultraviolet', 'deep-ocean', 'amber-crt', 'ice-lab'
+];
 const themeSelect = document.querySelector('[data-theme-select]');
 const readStoredTheme = () => {
   try {
@@ -859,8 +882,12 @@ const renderAnalyzerBar = (bar, value) => {
 };
 const updateAnalyzerBand = index => {
   const [leftBar, rightBar] = document.querySelectorAll(`[data-analyzer-band="${index}"] i`);
-  renderAnalyzerBar(leftBar, state.bandGainLeft[index]);
-  renderAnalyzerBar(rightBar, state.bandGainRight[index]);
+  const effective = audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, {
+    maxBandBoostDb: getBandBoostDb(),
+    maxBandCutDb: getBandCutDb()
+  });
+  renderAnalyzerBar(leftBar, effective.leftControl);
+  renderAnalyzerBar(rightBar, effective.rightControl);
 };
 const getBandBoostDb = () => Number(bandBoostSelect?.value ?? 12);
 const getBandCutDb = () => Number(bandCutSelect?.value ?? 12);
@@ -1157,6 +1184,14 @@ bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(va
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
 bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); renderBandSliderValues(); }, '12');
 bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); renderBandSliderValues(); }, '12');
+bindDevLabSelect(spreadCurveSelect, value => {
+  state.spreadCurve = audioEngine.setSpreadCurve(value);
+  renderBandSliderValues();
+}, 'linear');
+bindDevLabSelect(spreadMaxOffsetSelect, value => {
+  state.spreadMaxOffsetDb = audioEngine.setSpreadMaxOffsetDb(value);
+  renderBandSliderValues();
+}, '6');
 const updateLocalLoopTuningRelevance = () => {
   const zdf = feedbackCoreSelect?.value === 'zdf';
   if (localLoopTuningSelect) {
@@ -1212,7 +1247,11 @@ document.querySelector('[data-control="inputGain"]').addEventListener('input', s
 document.querySelector('[data-control="dryWet"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="volume"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="resonance"]').addEventListener('input', () => audioEngine.setResonance(state.resonance));
-['resonance', 'dryWet', 'inputGain', 'volume'].forEach(name => {
+document.querySelector('[data-control="spread"]').addEventListener('input', () => {
+  audioEngine.setSpread(state.spread);
+  renderBandSliderValues();
+});
+['resonance', 'dryWet', 'inputGain', 'volume', 'spread'].forEach(name => {
   const slider = document.querySelector(`[data-control="${name}"]`); let previous = state[name];
   slider?.addEventListener('input', () => { const next = state[name]; devLabTelemetry.logStateChange(name.toUpperCase(), Number(previous).toFixed(name === 'resonance' ? 2 : 1), Number(next).toFixed(name === 'resonance' ? 2 : 1)); previous = next; });
 });
@@ -1251,7 +1290,11 @@ const syncUiFromAudioState = snapshot => {
   if (snapshot.resonance !== undefined) renderGlobalControlValue('resonance', snapshot.resonance);
   if (snapshot.inputGainDb !== undefined) renderGlobalControlValue('inputGain', snapshot.inputGainDb);
   if (snapshot.dryWet !== undefined) renderGlobalControlValue('dryWet', snapshot.dryWet);
+  if (snapshot.spread !== undefined) renderGlobalControlValue('spread', snapshot.spread);
   if (snapshot.volumeDb !== undefined) renderGlobalControlValue('volume', snapshot.volumeDb);
+  if (snapshot.spreadMode !== undefined) state.spreadMode = snapshot.spreadMode;
+  if (snapshot.spreadCurve !== undefined) state.spreadCurve = snapshot.spreadCurve;
+  if (snapshot.spreadMaxOffsetDb !== undefined) state.spreadMaxOffsetDb = Number(snapshot.spreadMaxOffsetDb);
   faders.forEach((_, index) => renderBand(index));
   document.querySelectorAll('[data-feedback-band]').forEach(button => {
     const active = state.feedbackBandLeft[Number(button.dataset.feedbackBand)];
@@ -1264,6 +1307,7 @@ const syncUiFromAudioState = snapshot => {
   }
   const selectValues = [
     [bandBoostSelect, snapshot.maxBandBoostDb], [bandCutSelect, snapshot.maxBandCutDb],
+    [spreadCurveSelect, snapshot.spreadCurve], [spreadMaxOffsetSelect, snapshot.spreadMaxOffsetDb],
     [referenceLevelSelect, snapshot.referenceLevel], [resonanceEngineSelect, snapshot.positiveResonanceEngine],
     [feedbackTopologySelect, snapshot.feedbackTopology], [feedbackCoreSelect, snapshot.feedbackCore], [localLoopTuningSelect, snapshot.localLoopTuning],
     [feedbackTapSelect, snapshot.feedbackTap], [wetModelSelect, snapshot.wetModel],

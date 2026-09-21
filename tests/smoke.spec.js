@@ -36,9 +36,13 @@ test('theme selector switches all themes and persists without resetting UI state
   const fader = page.locator('.band-fader').nth(0);
   const fb = page.locator('[data-feedback-band]').nth(0);
   const mod = page.locator('[data-mod-band]').nth(0);
-  const themes = ['current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'pro-console'];
+  const themes = [
+    'current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'pro-console',
+    'graphite', 'midnight', 'slate', 'forest', 'warm-studio',
+    'copper-circuit', 'ultraviolet', 'deep-ocean', 'amber-crt', 'ice-lab'
+  ];
 
-  await expect(themeSelect.locator('option')).toHaveCount(6);
+  await expect(themeSelect.locator('option')).toHaveCount(16);
   await expect(themeSelect.locator('option[value="soft-neutral"]')).toHaveCount(0);
   await expect(themeSelect).toHaveValue('current');
   await expect(page.locator('body')).toHaveAttribute('data-theme', 'current');
@@ -56,8 +60,8 @@ test('theme selector switches all themes and persists without resetting UI state
   }
 
   await page.reload({ waitUntil: 'networkidle' });
-  await expect(page.locator('body')).toHaveAttribute('data-theme', 'pro-console');
-  await expect(page.locator('[data-theme-select]')).toHaveValue('pro-console');
+  await expect(page.locator('body')).toHaveAttribute('data-theme', 'ice-lab');
+  await expect(page.locator('[data-theme-select]')).toHaveValue('ice-lab');
 
   await page.evaluate(() => window.localStorage.setItem('da_filta-theme', 'invalid-theme'));
   await page.reload({ waitUntil: 'networkidle' });
@@ -95,6 +99,31 @@ test('theme storage migrates the legacy project key without deleting it', async 
     legacy: window.localStorage.getItem('resonant-filterbank-theme')
   }));
   expect(storage).toEqual({ current: 'dark-studio', legacy: 'dark-studio' });
+});
+
+test('every theme provides a complete, distinct console palette', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const themes = [
+    'graphite', 'midnight', 'slate', 'forest', 'warm-studio',
+    'copper-circuit', 'ultraviolet', 'deep-ocean', 'amber-crt', 'ice-lab'
+  ];
+  const variables = [
+    '--page-background', '--panel-background', '--panel-border', '--text', '--secondary-text', '--strong-text',
+    '--output-background', '--output-border', '--range-track', '--range-thumb-border', '--button-background',
+    '--button-border', '--button-text', '--active-background', '--band-button-background', '--graph-background',
+    '--graph-grid', '--graph-zero', '--graph-left', '--graph-right', '--fader-track', '--fader-thumb', '--error',
+    '--color-scheme'
+  ];
+  const palettes = [];
+  for (const theme of themes) {
+    await page.locator('[data-theme-select]').selectOption(theme);
+    palettes.push(await page.evaluate(keys => {
+      const style = getComputedStyle(document.body);
+      return keys.map(key => style.getPropertyValue(key).trim());
+    }, variables));
+  }
+  expect(palettes.every(palette => palette.every(Boolean))).toBe(true);
+  expect(new Set(palettes.map(palette => palette.join('|'))).size).toBe(themes.length);
 });
 
 test('central state and the filterbank wrapper keep L/R base values separate', async ({ page }) => {
