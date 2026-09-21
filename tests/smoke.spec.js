@@ -661,8 +661,9 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
 
   await expect(page.locator('[data-audio-input]')).toHaveCount(1);
   await expect(page.locator('[data-audio-output]')).toHaveCount(1);
-  await expect(page.locator('[data-audio-start]')).toBeVisible();
-  await expect(page.locator('[data-audio-stop]')).toBeVisible();
+  await expect(page.locator('[data-audio-toggle]')).toBeVisible();
+  await expect(page.locator('[data-audio-toggle]')).toHaveText('START AUDIO');
+  await expect(page.locator('[data-audio-bypass]')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('[data-audio-status]')).toHaveText('OFF');
   await page.locator('[data-audio-input]').selectOption('input-1');
   await page.locator('[data-audio-output]').selectOption('output-1');
@@ -673,8 +674,9 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   await page.locator('.band-fader').nth(0).fill('40');
   await page.locator('[data-feedback-band]').nth(2).click();
   await page.locator('.fb-all-toggle').click();
-  await page.locator('[data-audio-start]').click();
+  await page.locator('[data-audio-toggle]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('ON');
+  await expect(page.locator('[data-audio-toggle]')).toHaveText('STOP AUDIO');
   await expect(page.locator('audio')).toHaveCount(1);
   for (const theme of ['clean-modern', 'analog-inspired', 'pro-console', 'current']) {
     await page.locator('[data-theme-select]').selectOption(theme);
@@ -686,28 +688,36 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   expect(await page.evaluate(() => window.__audioTestState.constraints.audio.noiseSuppression)).toBe(false);
   expect(await page.evaluate(() => window.__audioTestState.constraints.audio.autoGainControl)).toBe(false);
   expect(await page.evaluate(() => window.__audioTestState.sinkId)).toBe('output-1');
-  expect(await page.evaluate(() => window.__audioTestState.gains[0].value)).toBeCloseTo(10 ** (6 / 20), 5);
-  expect(await page.evaluate(() => window.__audioTestState.gains[1].value)).toBe(1);
-  expect(await page.evaluate(() => window.__audioTestState.gains[2].value)).toBe(0);
-  expect(await page.evaluate(() => window.__audioTestState.gains[4].value)).toBeCloseTo(10 ** (-12 / 20), 5);
-  expect(await page.evaluate(() => window.__audioTestState.workletModules.length)).toBe(1);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes.length)).toBe(1);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].name)).toBe('da-filta-processor');
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.outputChannelCount)).toEqual([2]);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.bandGainLeft[0])).toBe(40);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.bandGainRight[0])).toBe(40);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.smoothingTime)).toBe(0.015);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.resonance)).toBe(0.5);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.feedbackBandLeft[2])).toBe(true);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.feedbackBandRight[2])).toBe(true);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.feedbackAllLeft)).toBe(true);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.feedbackAllRight)).toBe(true);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.feedbackGateSmoothingTime)).toBe(0.008);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.resonanceSmoothingTime)).toBe(0.015);
-  await expect(page.locator('[data-positive-resonance-audition] option')).toHaveCount(4);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.positiveResonanceAuditionGain)).toBe(0.1);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.positiveResonanceAuditionGainSmoothingTime)).toBe(0.015);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[0].options.processorOptions.feedbackAllNormalization)).toBeCloseTo(1 / Math.sqrt(10), 12);
+  expect(await page.evaluate(() => window.__audioTestState.gains[1].value)).toBeCloseTo(10 ** (6 / 20), 5);
+  expect(await page.evaluate(() => window.__audioTestState.gains[2].value)).toBe(1);
+  expect(await page.evaluate(() => window.__audioTestState.gains[3].value)).toBe(0);
+  expect(await page.evaluate(() => window.__audioTestState.gains[4].value)).toBe(0);
+  expect(await page.evaluate(() => window.__audioTestState.gains[6].value)).toBeCloseTo(10 ** (-12 / 20), 5);
+  await page.locator('[data-audio-bypass]').click();
+  await expect(page.locator('[data-audio-bypass]')).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.evaluate(() => window.__audioTestState.gains[4].value)).toBe(1);
+  expect(await page.evaluate(() => window.__audioTestState.gains[6].value)).toBe(0);
+  await page.locator('[data-audio-bypass]').click();
+  expect(await page.evaluate(() => window.__audioTestState.gains[4].value)).toBe(0);
+  expect(await page.evaluate(() => window.__audioTestState.gains[6].value)).toBeCloseTo(10 ** (-12 / 20), 5);
+  expect(await page.evaluate(() => window.__audioTestState.workletModules.length)).toBe(2);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes.length)).toBe(2);
+  const filterbankOptions = () => page.evaluate(() => window.__audioTestState.workletNodes.find(node => node.name === 'da-filta-processor').options);
+  expect((await filterbankOptions()).outputChannelCount).toEqual([2]);
+  expect((await filterbankOptions()).processorOptions.bandGainLeft[0]).toBe(40);
+  expect((await filterbankOptions()).processorOptions.bandGainRight[0]).toBe(40);
+  expect((await filterbankOptions()).processorOptions.smoothingTime).toBe(0.015);
+  expect((await filterbankOptions()).processorOptions.resonance).toBe(0.5);
+  expect((await filterbankOptions()).processorOptions.feedbackBandLeft[2]).toBe(true);
+  expect((await filterbankOptions()).processorOptions.feedbackBandRight[2]).toBe(true);
+  expect((await filterbankOptions()).processorOptions.feedbackAllLeft).toBe(true);
+  expect((await filterbankOptions()).processorOptions.feedbackAllRight).toBe(true);
+  expect((await filterbankOptions()).processorOptions.feedbackGateSmoothingTime).toBe(0.008);
+  expect((await filterbankOptions()).processorOptions.resonanceSmoothingTime).toBe(0.015);
+  await expect(page.locator('[data-positive-resonance-audition] option')).toHaveCount(10);
+  expect((await filterbankOptions()).processorOptions.positiveResonanceAuditionGain).toBe(0.1);
+  expect((await filterbankOptions()).processorOptions.positiveResonanceAuditionGainSmoothingTime).toBe(0.015);
+  expect((await filterbankOptions()).processorOptions.feedbackAllNormalization).toBeCloseTo(1 / Math.sqrt(10), 12);
   expect(await page.evaluate(() => window.__audioTestState.nativeFilters)).toBe(0);
   await page.locator('[data-positive-resonance-audition]').selectOption('0.40');
   expect(await page.evaluate(() => window.__audioTestState.workletMessages.filter(message => message.type === 'set-positive-resonance-audition-gain'))).toEqual([
@@ -728,21 +738,21 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
     { type: 'set-resonance', value: -0.5 }
   ]);
   await page.locator('.band-fader').nth(4).fill('-25');
-  expect(await page.evaluate(() => window.__audioTestState.workletMessages.filter(message => message.type === 'set-band-base-gain'))).toEqual([
+  expect(await page.evaluate(() => window.__audioTestState.workletMessages.filter(message => message.type === 'set-band-base-gain').slice(-2))).toEqual([
     { type: 'set-band-base-gain', channel: 'left', index: 4, value: -25 },
     { type: 'set-band-base-gain', channel: 'right', index: 4, value: -25 }
   ]);
   await page.locator('[data-control="dryWet"]').fill('100');
-  expect(await page.evaluate(() => window.__audioTestState.gains[1].value)).toBe(0);
-  expect(await page.evaluate(() => window.__audioTestState.gains[2].value)).toBe(1);
+  expect(await page.evaluate(() => window.__audioTestState.gains[2].value)).toBe(0);
+  expect(await page.evaluate(() => window.__audioTestState.gains[3].value)).toBe(1);
   await page.locator('[data-control="dryWet"]').fill('50');
-  expect(await page.evaluate(() => window.__audioTestState.gains[1].value)).toBe(0.5);
   expect(await page.evaluate(() => window.__audioTestState.gains[2].value)).toBe(0.5);
+  expect(await page.evaluate(() => window.__audioTestState.gains[3].value)).toBe(0.5);
   await page.locator('[data-control="inputGain"]').dblclick();
   await expect(page.locator('[data-control="inputGain"]')).toHaveValue('0');
-  expect(await page.evaluate(() => window.__audioTestState.gains[0].value)).toBe(1);
+  expect(await page.evaluate(() => window.__audioTestState.gains[1].value)).toBe(1);
   await page.locator('[data-control="inputGain"]').fill('6');
-  await page.locator('[data-audio-stop]').click();
+  await page.locator('[data-audio-toggle]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('OFF');
   await expect(page.locator('audio')).toHaveCount(0);
   expect(await page.evaluate(() => window.__audioTestState.stopped)).toBe(true);
@@ -752,16 +762,17 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   await expect(page.locator('[data-control="dryWet"]')).toHaveValue('50');
   await expect(page.locator('[data-control="volume"]')).toHaveValue('-12');
   const restartGainOffset = await page.evaluate(() => window.__audioTestState.gains.length);
-  await page.locator('[data-audio-start]').click();
+  await page.locator('[data-audio-toggle]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('ON');
-  expect(await page.evaluate(offset => window.__audioTestState.gains[offset].value, restartGainOffset)).toBeCloseTo(10 ** (6 / 20), 5);
-  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 1].value, restartGainOffset)).toBe(0.5);
+  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 1].value, restartGainOffset)).toBeCloseTo(10 ** (6 / 20), 5);
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 2].value, restartGainOffset)).toBe(0.5);
-  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 4].value, restartGainOffset)).toBeCloseTo(10 ** (-12 / 20), 5);
-  expect(await page.evaluate(() => window.__audioTestState.workletModules.length)).toBe(2);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes.length)).toBe(2);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes[1].options.processorOptions.positiveResonanceAuditionGain)).toBe(0.4);
-  await page.locator('[data-audio-stop]').click();
+  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 3].value, restartGainOffset)).toBe(0.5);
+  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 4].value, restartGainOffset)).toBe(0);
+  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 6].value, restartGainOffset)).toBeCloseTo(10 ** (-12 / 20), 5);
+  expect(await page.evaluate(() => window.__audioTestState.workletModules.length)).toBe(4);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes.length)).toBe(4);
+  expect(await page.evaluate(() => window.__audioTestState.workletNodes.filter(node => node.name === 'da-filta-processor').at(-1).options.processorOptions.positiveResonanceAuditionGain)).toBe(0.4);
+  await page.locator('[data-audio-toggle]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('OFF');
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);

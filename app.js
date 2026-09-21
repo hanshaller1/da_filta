@@ -42,6 +42,19 @@ const ANALYZER_DISPLAY_DEFAULTS = Object.freeze({
   enhancedBars: true
 });
 const analyzerDisplay = { ...ANALYZER_DISPLAY_DEFAULTS };
+const ANALYZER_SILENCE_DBFS = -90;
+const ANALYZER_SILENCE_RMS = 10 ** (ANALYZER_SILENCE_DBFS / 20);
+const finiteAnalyzerEnergy = value => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+const getAnalyzerBandEnergyMetrics = packet => {
+  const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band';
+  const left = (zdf ? packet?.left?.baseBandEnergy : packet?.left?.bandEnergy) || [];
+  const right = (zdf ? packet?.right?.baseBandEnergy : packet?.right?.bandEnergy) || [];
+  const frameCount = Math.max(1, finiteAnalyzerEnergy(packet?.left?.frameCount)) + Math.max(1, finiteAnalyzerEnergy(packet?.right?.frameCount));
+  const energies = Array.from({ length: BAND_COUNT }, (_, index) => finiteAnalyzerEnergy(left[index]) + finiteAnalyzerEnergy(right[index]));
+  const rms = energies.map(energy => Math.sqrt(energy / frameCount));
+  const peakRms = Math.max(0, ...rms);
+  return { energies, rms, peakRms, isSilent: peakRms < ANALYZER_SILENCE_RMS };
+};
 const POSITIVE_RESONANCE_AUDITION_VALUES = [0.10, 0.20, 0.30, 0.40, 0.60, 0.80, 1.00, 1.50, 2.00, 4.00];
 const positiveResonanceAuditionSelect = document.querySelector('[data-positive-resonance-audition]');
 const positiveResonanceDriveSelect = document.querySelector('[data-positive-resonance-drive]');
@@ -67,7 +80,7 @@ const devLabPanel = document.querySelector('[data-dev-lab-panel]');
 const devLabToggle = document.querySelector('[data-dev-lab-toggle]');
 const devLabControls = document.querySelector('.dev-lab-panel .dev-lab-controls');
 const devLabGroups = new Map();
-[['input', 'INPUT'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
+[['input', 'INPUT'], ['keyboard', 'KEYBOARD'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
   const group = document.createElement('section');
   group.className = 'dev-lab-group';
   group.dataset.devLabGroup = value;
@@ -615,12 +628,11 @@ const devLabTelemetry = (() => {
   };
   const push = (history, value) => { history.push(value); if (history.length > maxHistory) history.shift(); };
   const dominantBand = packet => {
-    const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band';
-    const left = (zdf ? packet?.left?.baseBandEnergy : packet?.left?.bandEnergy) || [];
-    const right = (zdf ? packet?.right?.baseBandEnergy : packet?.right?.bandEnergy) || [];
+    const metrics = getAnalyzerBandEnergyMetrics(packet);
+    if (metrics.isSilent) return { index: null, energy: 0, dominance: 0, isSilent: true, startedAt: 0 };
     let index = 0; let energy = -1; let total = 0;
-    for (let band = 0; band < BAND_COUNT; band += 1) { const value = finite(left[band]) + finite(right[band]); total += value; if (value > energy) { energy = value; index = band; } }
-    return { index, energy: Math.max(0, energy), dominance: total > 0 ? Math.max(0, energy) / total : 0 };
+    metrics.energies.forEach((value, band) => { total += value; if (value > energy) { energy = value; index = band; } });
+    return { index, energy: Math.max(0, energy), dominance: total > 0 ? Math.max(0, energy) / total : 0, isSilent: false, startedAt: dominant.startedAt };
   };
   const reset = () => {
     histories.common.length = histories.main.length = histories.resonance.length = 0;
@@ -638,7 +650,7 @@ const devLabTelemetry = (() => {
   const render = () => {
     if (responseMode !== 'dev-lab' || filterbankWorkspace?.classList.contains('is-collapsed')) return;
     if (!latest) { summary.textContent = 'NO AUDIO — keine Telemetrie verfügbar'; bands.replaceChildren(); detail.textContent = ''; return; }
-    const { left, right } = latest; const dominant = dominantBand(latest); const frequencies = BAND_DEFINITIONS.map(band => band.frequency);
+    const { left, right } = latest; const dominant = dominantBand(latest); const energyMetrics = getAnalyzerBandEnergyMetrics(latest); const frequencies = BAND_DEFINITIONS.map(band => band.frequency);
     const items = [
       ['RES TARGET', number(left.resonanceTarget)], ['RES SMOOTHED', number(left.smoothedResonance)], ['TOPOLOGY', left.feedbackTopology], ['TAP', left.feedbackTap], ['WET', left.wetModel], ['SAT', left.commonBusSaturationMode], ['DRIVE', number(left.commonBusDrive)], ['CEILING', number(left.commonBusCeiling)],
       ['POST GAIN FB WEIGHT', left.mainPostGainFeedbackWeightMode],
@@ -664,17 +676,23 @@ const devLabTelemetry = (() => {
     const wetCrestL = metrics.wetRmsLeft > 1e-9 ? left.wetPeak / metrics.wetRmsLeft : 0;
     const wetCrestR = metrics.wetRmsRight > 1e-9 ? right.wetPeak / metrics.wetRmsRight : 0;
     detail.innerHTML = `<strong>${left.feedbackCoreEffective === 'zdf' || left.feedbackCoreEffective === 'zdf-per-band' ? 'DOMINANT BASE BAND' : 'DOMINANT BAND'}</strong><b>${frequencies[dominant.index]} Hz</b><span>DOMINANCE ${(dominant.dominance * 100).toFixed(0)} %</span><span>DOM STABLE ${((performance.now() - dominant.startedAt) / 1000).toFixed(1)} s</span><span>SAT ACT ${(metrics.sat * 100).toFixed(0)} % · RETURN/TAP ${metrics.feedbackRatio === null ? 'N/A' : metrics.feedbackRatio.toFixed(2)}</span><span>DC L/R ${number(metrics.dcLeft)} / ${number(metrics.dcRight)}</span><span>SRC CREST ${sourceCrestL.toFixed(2)} / ${sourceCrestR.toFixed(2)}</span><span>WET CREST ${wetCrestL.toFixed(2)} / ${wetCrestR.toFixed(2)}</span>`;
+    if (dominant.isSilent || !Number.isFinite(dominant.startedAt) || dominant.startedAt <= 0 || performance.now() < dominant.startedAt) {
+      detail.querySelector('b').textContent = 'N/A';
+      detail.querySelectorAll('span')[1].textContent = 'DOM STABLE N/A';
+    }
     bands.replaceChildren(...frequencies.map((frequency, index) => { const zdf = left.feedbackCoreEffective === 'zdf' || left.feedbackCoreEffective === 'zdf-per-band'; const energy = finite((zdf ? left.baseBandEnergy : left.bandEnergy)?.[index]) + finite((zdf ? right.baseBandEnergy : right.bandEnergy)?.[index]); const maxEnergy = Math.max(1e-12, dominant.energy); const row = document.createElement('div'); const gain = Math.max(audioEngine?.effectiveBandGainDbLeft?.[index] ?? 0, audioEngine?.effectiveBandGainDbRight?.[index] ?? 0); row.className = index === dominant.index ? 'is-dominant' : ''; row.innerHTML = `<span>${frequency >= 1000 ? `${(frequency / 1000).toFixed(1)} kHz` : `${frequency} Hz`}</span><i><b style="width:${Math.min(100, energy / maxEnergy * 100)}%"></b></i><em>${number(Math.max(finite((zdf ? left.baseBandPeak : left.bandPeak)?.[index]), finite((zdf ? right.baseBandPeak : right.bandPeak)?.[index])))}</em><small>${left.localGates?.[index] > .5 || right.localGates?.[index] > .5 ? 'FB ON' : 'FB OFF'} · ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} dB</small>`; return row; }));
+    if (energyMetrics.isSilent) bands.querySelectorAll('i b').forEach(bar => { bar.style.width = '0%'; });
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="common"]'), histories.common, ['left', 'right']);
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="main"]'), histories.main, ['left', 'right']);
     renderTrace(responseLab.querySelector('[data-dev-lab-trace="resonance"]'), histories.resonance, ['target', 'smoothed'], 1);
   };
   const observe = packet => {
     const nextDominant = dominantBand(packet); const now = performance.now(); const metrics = telemetryMetrics(packet);
-    if (dominant.index === null) { dominant.index = nextDominant.index; dominant.startedAt = now; dominant.logged.clear(); }
+    if (nextDominant.isSilent) { dominant = { index: null, startedAt: 0, logged: new Set() }; }
+    else if (dominant.index === null) { dominant.index = nextDominant.index; dominant.startedAt = now; dominant.logged.clear(); }
     else if (dominant.index !== nextDominant.index) { log(`DOMINANT BAND ${BAND_DEFINITIONS[dominant.index].frequency} Hz → ${BAND_DEFINITIONS[nextDominant.index].frequency} Hz`); dominant.index = nextDominant.index; dominant.startedAt = now; dominant.logged.clear(); }
-    const stableMs = now - dominant.startedAt; sessionMax.dominantMs = Math.max(sessionMax.dominantMs, stableMs);
-    [3000, 5000, 10000].forEach(threshold => { if (stableMs >= threshold && !dominant.logged.has(threshold)) { dominant.logged.add(threshold); log(`DOMINANT STABLE ${BAND_DEFINITIONS[dominant.index].frequency} Hz / ${(threshold / 1000).toFixed(1)} s`); } });
+    const stableMs = nextDominant.isSilent ? 0 : now - dominant.startedAt; sessionMax.dominantMs = Math.max(sessionMax.dominantMs, stableMs);
+    [3000, 5000, 10000].forEach(threshold => { if (!nextDominant.isSilent && stableMs >= threshold && !dominant.logged.has(threshold)) { dominant.logged.add(threshold); log(`DOMINANT STABLE ${BAND_DEFINITIONS[dominant.index].frequency} Hz / ${(threshold / 1000).toFixed(1)} s`); } });
     const satPercent = metrics.sat * 100; const threshold = [90, 75, 50, 25].find(value => satPercent >= value) || 0;
     if (threshold > satThreshold) log(`SAT ACTIVITY ${threshold} % threshold crossed`);
     satThreshold = threshold || (satPercent < Math.max(0, satThreshold - 8) ? 0 : satThreshold);
@@ -761,6 +779,55 @@ const addDevLabSelector = (label, attribute, options) => {
   container.append(control);
   return select;
 };
+const KEYBOARD_PREFERENCES_STORAGE_KEY = 'da-filta-keyboard-preferences-v1';
+const KEY_STEP_DEFAULT_PERCENT = 5;
+const KEY_SPEED_DEFAULT_HZ = 30;
+const clampKeyboardPreference = (value, min, max, fallback) => Number.isFinite(Number(value)) ? Math.min(max, Math.max(min, Number(value))) : fallback;
+const readKeyboardPreferences = () => {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(KEYBOARD_PREFERENCES_STORAGE_KEY) || 'null');
+    return {
+      keyStepPercent: clampKeyboardPreference(stored?.keyStepPercent, .1, 100, KEY_STEP_DEFAULT_PERCENT),
+      keySpeedHz: clampKeyboardPreference(stored?.keySpeedHz, 1, 60, KEY_SPEED_DEFAULT_HZ)
+    };
+  } catch { return { keyStepPercent: KEY_STEP_DEFAULT_PERCENT, keySpeedHz: KEY_SPEED_DEFAULT_HZ }; }
+};
+const keyboardPreferences = readKeyboardPreferences();
+const formatKeyboardPreference = (value, decimals) => String(Number(value.toFixed(decimals)));
+const persistKeyboardPreferences = () => {
+  try { window.localStorage.setItem(KEYBOARD_PREFERENCES_STORAGE_KEY, JSON.stringify(keyboardPreferences)); } catch { /* Storage may be unavailable. */ }
+};
+const addKeyboardPreferenceControl = ({ label, attribute, min, max, step, suffix, tooltip, value, onChange }) => {
+  const container = devLabGroups.get('keyboard');
+  if (!container) return null;
+  const control = document.createElement('label'); control.className = 'dev-lab-control';
+  const title = document.createElement('span'); title.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'number'; input.min = String(min); input.max = String(max); input.step = String(step); input.value = formatKeyboardPreference(value(), step < 1 ? 1 : 0);
+  input.setAttribute(attribute, ''); input.setAttribute('aria-label', `${label} ${suffix}`); input.title = tooltip;
+  const unit = document.createElement('em'); unit.textContent = suffix;
+  const apply = restoreInvalid => {
+    const numeric = Number(input.value);
+    if (input.value.trim() === '' || !Number.isFinite(numeric)) { if (restoreInvalid) input.value = formatKeyboardPreference(value(), step < 1 ? 1 : 0); return; }
+    onChange(Math.min(max, Math.max(min, numeric)));
+    input.value = formatKeyboardPreference(value(), step < 1 ? 1 : 0);
+  };
+  input.addEventListener('input', () => { if (input.value !== '') apply(false); });
+  input.addEventListener('change', () => apply(true)); input.addEventListener('blur', () => apply(true));
+  control.append(title, input, unit); container.append(control); return input;
+};
+const keyStepInput = addKeyboardPreferenceControl({
+  label: 'KEY STEP', attribute: 'data-key-step-percent', min: .1, max: 100, step: .1, suffix: '%',
+  tooltip: 'Bestimmt, wie weit sich ein Band-Fader pro Tastaturschritt bewegt. Der Wert entspricht einem Prozentanteil des vollständigen Fader-Regelwegs. 5 % entspricht dem bisherigen Verhalten; 100 % bewegt den Fader mit einem Schritt bis zum jeweiligen Grenzwert.',
+  value: () => keyboardPreferences.keyStepPercent,
+  onChange: value => { keyboardPreferences.keyStepPercent = value; persistKeyboardPreferences(); }
+});
+const keySpeedInput = addKeyboardPreferenceControl({
+  label: 'KEY SPEED', attribute: 'data-key-speed-hz', min: 1, max: 60, step: 1, suffix: 'Hz',
+  tooltip: 'Bestimmt, wie viele Fader-Schritte pro Sekunde beim Gedrückthalten einer Tastaturtaste ausgeführt werden. Der erste Schritt erfolgt sofort. 30 Hz entspricht dem bisherigen Verhalten.',
+  value: () => keyboardPreferences.keySpeedHz,
+  onChange: value => { keyboardPreferences.keySpeedHz = value; persistKeyboardPreferences(); }
+});
 const referenceLevelSelect = addDevLabSelector('DEV REFERENCE', 'data-reference-level', [['1', '100 %'], ['0.75', '75 %'], ['0.5', '50 %'], ['0.25', '25 %'], ['0', '0 % / BANDS ONLY']]);
 const resonanceEngineSelect = addDevLabSelector('DEV RES ENGINE', 'data-positive-resonance-engine', [['tpt', 'TPT'], ['phase2', 'PHASE 2']]);
 const bandBoostSelect = addDevLabSelector('DEV BAND BOOST', 'data-band-boost-db', [['12', '+12 dB'], ['18', '+18 dB'], ['24', '+24 dB']]);
@@ -830,6 +897,18 @@ const addDevLabCharacterSlider = () => {
 const inputCharacterAmountSlider = addDevLabCharacterSlider();
 
 const DEV_LAB_HELP = {
+  'data-key-step-percent': {
+    title: 'KEY STEP', what: 'Bestimmt, wie weit sich ein Band-Fader pro Tastaturschritt bewegt.',
+    scope: 'Reine Keyboard-Bedienpräferenz. Der Wert ist ein Prozentanteil des vollständigen Fader-Regelwegs und verändert weder DSP noch Audio.',
+    values: [['0.1 %', 'Kleinster Schritt.'], ['5 %', 'Bisheriges Verhalten.'], ['100 %', 'Ein Schritt bis zum Grenzwert.']],
+    default: '5 %', note: 'Gültig von 0.1 % bis 100.0 %; die Präferenz wird separat gespeichert und nicht in Sweetspots übernommen.'
+  },
+  'data-key-speed-hz': {
+    title: 'KEY SPEED', what: 'Bestimmt, wie viele Fader-Schritte pro Sekunde beim Gedrückthalten einer Tastaturtaste ausgeführt werden.',
+    scope: 'Reine Keyboard-Bedienpräferenz. Der erste Schritt erfolgt sofort; nur weitere Schritte nutzen diese Rate.',
+    values: [['1 Hz', 'Ein Wiederholungsschritt pro Sekunde.'], ['30 Hz', 'Bisherige Wiederholrate.'], ['60 Hz', 'Höchste Wiederholrate.']],
+    default: '30 Hz', note: 'Gültig von 1 Hz bis 60 Hz; die Präferenz wird separat gespeichert und nicht in Sweetspots übernommen.'
+  },
   'data-input-preamp-stage': {
     title: 'DEV INPUT STAGE', what: 'Wählt die feste nichtlineare Kennlinie beziehungsweise Klangcharakteristik.',
     scope: 'Wirkt nach dem Input Gain und vor der Dry/Wet-Verzweigung.',
@@ -1002,6 +1081,7 @@ const DEV_LAB_HELP = {
 
 const DEV_LAB_GROUP_HELP = {
   input: ['data-input-preamp-stage', 'data-input-character-amount'],
+  keyboard: ['data-key-step-percent', 'data-key-speed-hz'],
   filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-spread-curve', 'data-spread-max-offset-db', 'data-wet-model'],
   'local-feedback': ['data-feedback-topology', 'data-feedback-core', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
   main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-post-gain-feedback-weight', 'data-feedback-all-level', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
@@ -1317,7 +1397,7 @@ document.addEventListener('pointerdown', event => { if (themeEditor && !themeEdi
 document.addEventListener('keydown', event => { if (event.key === 'Escape') setThemeEditorOpen(false); });
 window.DaFiltaThemeEditor = { applyCustomTheme, clearCustomTheme, getState: () => editorTheme && ({ ...editorTheme }) };
 const bands = document.querySelector('.bands');
-bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><div class="band-actions"><button class="band-action" type="button" data-feedback-band="${index}">FB</button><button class="band-action" type="button" data-mod-band="${index}">MOD</button></div><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
+bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><div class="band-actions"><button class="band-action" type="button" data-feedback-band="${index}">FB</button><button class="band-action" type="button" data-mod-band="${index}">MOD</button></div><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
 const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume') return `${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
 
 const bars = document.querySelector('.bars');
@@ -1457,18 +1537,15 @@ const renderTelemetryIndicators = () => {
   const saturated = Math.max(Number(left?.saturationActiveFrames) || 0, Number(right?.saturationActiveFrames) || 0) / frames > .01 || Math.max(Math.abs(Number(left?.wetPeak) || 0), Math.abs(Number(right?.wetPeak) || 0)) >= .995;
   analyzerSaturationBadge.hidden = !analyzerDisplay.saturationIndicators || !saturated;
 };
-const COLLAPSED_PREVIEW_SILENCE_ENERGY = 1e-8;
 const renderCollapsedPreview = index => {
   const button = collapsedPreview.querySelector(`[data-collapsed-band="${index}"]`);
   if (!button) return;
   const motion = analyzerMotion[index];
   const packet = getAnalyzerTelemetry();
-  const energies = packet ? Array.from({ length: BAND_COUNT }, (_, band) => getEnergyPair(packet, band)) : [];
-  const peakEnergy = packet ? Math.max(...energies) : 0;
-  const audioLevel = peakEnergy >= COLLAPSED_PREVIEW_SILENCE_ENERGY
-    ? Math.min(1, Math.sqrt(energies[index] / peakEnergy))
-    : 0;
-  const targetLevel = packet ? Math.min(1, Math.max(Math.abs(motion.left), Math.abs(motion.right)) / 260 + audioLevel * .82) : 0;
+  const energyMetrics = getAnalyzerBandEnergyMetrics(packet);
+  const peakEnergy = Math.max(...energyMetrics.energies);
+  const audioLevel = !energyMetrics.isSilent && peakEnergy > 0 ? Math.min(1, Math.sqrt(energyMetrics.energies[index] / peakEnergy)) : 0;
+  const targetLevel = packet && !energyMetrics.isSilent ? Math.min(1, Math.max(Math.abs(motion.left), Math.abs(motion.right)) / 260 + audioLevel * .82) : 0;
   const previousLevel = collapsedPreviewLevels[index];
   const level = targetLevel >= previousLevel ? targetLevel : previousLevel + (targetLevel - previousLevel) * .13;
   collapsedPreviewLevels[index] = level;
@@ -1664,8 +1741,8 @@ const FB_CODES = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7'
 const FADER_UP_CODES = ['KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI','KeyO','KeyP'];
 const FADER_DOWN_CODES = ['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK','KeyL','Semicolon'];
 const FADER_NEUTRAL_CODES = ['KeyZ','KeyX','KeyC','KeyV','KeyB','KeyN','KeyM','Comma','Period','Slash'];
-const BAND_GAIN_STEP = (BAND_GAIN_MAX - BAND_GAIN_MIN) * 0.05;
-const FADER_KEY_REPEAT_INTERVAL_MS = 1000 / 30;
+const getBandGainKeyStep = () => (BAND_GAIN_MAX - BAND_GAIN_MIN) * (keyboardPreferences.keyStepPercent / 100);
+const getFaderKeyRepeatIntervalMs = () => 1000 / keyboardPreferences.keySpeedHz;
 const DRIVE_UP_CODE = 'Equal';
 const DRIVE_DOWN_CODE = 'Minus';
 const RESONANCE_UP_CODE = 'BracketRight';
@@ -1695,9 +1772,9 @@ let faderKeyboardAnimationFrame = 0;
 let faderKeyboardLastStepAt = 0;
 const getFaderKeyDelta = code => {
   const upIndex = FADER_UP_CODES.indexOf(code);
-  if (upIndex !== -1) return { index: upIndex, delta: BAND_GAIN_STEP };
+  if (upIndex !== -1) return { index: upIndex, delta: getBandGainKeyStep() };
   const downIndex = FADER_DOWN_CODES.indexOf(code);
-  return downIndex !== -1 ? { index: downIndex, delta: -BAND_GAIN_STEP } : null;
+  return downIndex !== -1 ? { index: downIndex, delta: -getBandGainKeyStep() } : null;
 };
 const applyPressedFaderKeys = () => {
   const deltas = Array.from({ length: BAND_COUNT }, () => 0);
@@ -1709,10 +1786,14 @@ const applyPressedFaderKeys = () => {
     if (delta) setBandBaseGain('left', index, state.bandGainLeft[index] + delta);
   });
 };
+const applyFaderKey = code => {
+  const movement = getFaderKeyDelta(code);
+  if (movement) setBandBaseGain('left', movement.index, state.bandGainLeft[movement.index] + movement.delta);
+};
 const animatePressedFaderKeys = now => {
   faderKeyboardAnimationFrame = 0;
   if (!pressedFaderKeys.size) return;
-  if (now - faderKeyboardLastStepAt >= FADER_KEY_REPEAT_INTERVAL_MS) {
+  if (now - faderKeyboardLastStepAt >= getFaderKeyRepeatIntervalMs()) {
     applyPressedFaderKeys();
     faderKeyboardLastStepAt = now;
   }
@@ -1745,7 +1826,7 @@ document.addEventListener('keydown', event => {
   if (getFaderKeyDelta(event.code)) {
     if (!pressedFaderKeys.has(event.code)) {
       pressedFaderKeys.add(event.code);
-      applyPressedFaderKeys();
+      applyFaderKey(event.code);
       faderKeyboardLastStepAt = performance.now();
       startPressedFaderKeyAnimation();
     }
@@ -1763,15 +1844,16 @@ window.addEventListener('blur', clearPressedFaderKeys);
 const inputDeviceSelect = document.querySelector('[data-audio-input]');
 const outputDeviceSelect = document.querySelector('[data-audio-output]');
 const inputSourceButtons = [...document.querySelectorAll('[data-audio-source]')];
-const startAudioButton = document.querySelector('[data-audio-start]');
-const stopAudioButton = document.querySelector('[data-audio-stop]');
+const audioToggleButton = document.querySelector('[data-audio-toggle]');
 const panicAudioButton = document.querySelector('[data-audio-panic]');
+const bypassAudioButton = document.querySelector('[data-audio-bypass]');
 const audioStatus = document.querySelector('[data-audio-status]');
 const audioMessage = document.querySelector('[data-audio-message]');
 let hasManualInputSelection = false;
 const SAMPLE_LIBRARY = Array.isArray(window.ResonantSamples) ? window.ResonantSamples : [];
 const sampleById = new Map(SAMPLE_LIBRARY.map(sample => [sample.id, sample]));
 let audioSourceMode = 'device';
+let audioBypassEnabled = false;
 let selectedSampleId = SAMPLE_LIBRARY[0]?.id || '';
 let rememberedInputDeviceId = '';
 let knownInputDevices = [];
@@ -1860,8 +1942,11 @@ const updateAudioStatus = (status, message = '') => {
   audioStatus.textContent = status;
   audioMessage.textContent = message;
   audioStatus.dataset.status = status;
-  startAudioButton.disabled = status === 'STARTING' || status === 'ON';
-  stopAudioButton.disabled = status !== 'ON';
+  if (audioToggleButton) {
+    audioToggleButton.disabled = status === 'STARTING';
+    audioToggleButton.textContent = status === 'ON' ? 'STOP AUDIO' : 'START AUDIO';
+    audioToggleButton.classList.toggle('stop', status === 'ON');
+  }
   if (status === 'ON') devLabTelemetry.startSession(audioEngine?.context);
   else if (status !== 'STARTING') devLabTelemetry.setAudioOff();
 };
@@ -1871,6 +1956,11 @@ audioEngine = new AudioEngine({
   onDiagnostics: packet => { devLabTelemetry.receive(packet); scheduleAnalyzerRender(); }
 });
 audioEngine.applyState(state);
+const setAudioBypass = enabled => {
+  audioBypassEnabled = Boolean(enabled);
+  audioEngine?.setBypass(audioBypassEnabled);
+  bypassAudioButton?.setAttribute('aria-pressed', String(audioBypassEnabled));
+};
 const setPositiveResonanceAuditionGain = value => {
   const numericValue = Number(value);
   const nextValue = POSITIVE_RESONANCE_AUDITION_VALUES.includes(numericValue) ? numericValue : 0.10;
@@ -2193,15 +2283,17 @@ const refreshAudioDevices = async () => {
     audioMessage.textContent = error.message;
   }
 };
-startAudioButton.addEventListener('click', async () => {
+audioToggleButton?.addEventListener('click', async () => {
+  if (audioEngine.status === 'ON') { await audioEngine.stop(); return; }
   try {
     await audioEngine.start({ inputDeviceId: rememberedInputDeviceId || inputDeviceSelect.value, outputDeviceId: outputDeviceSelect.value, sourceMode: audioSourceMode, sample: selectedSample() });
+    setAudioBypass(audioBypassEnabled);
     if (audioSourceMode === 'sample' && selectedSample()) logSourceEvent(`SAMPLE START ${selectedSample().name}`);
   } catch (error) {
     audioMessage.textContent = audioEngine.getErrorMessage(error);
   }
 });
-stopAudioButton.addEventListener('click', () => audioEngine.stop());
+bypassAudioButton?.addEventListener('click', () => setAudioBypass(!audioBypassEnabled));
 panicAudioButton?.addEventListener('click', panic);
 updateAudioStatus('OFF');
 refreshAudioDevices();

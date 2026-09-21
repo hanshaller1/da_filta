@@ -77,6 +77,8 @@
       this.inputPreampNode = null;
       this.dryGainNode = null;
       this.wetGainNode = null;
+      this.bypassGainNode = null;
+      this.bypass = false;
       // Passive visual-analysis sidechain. It is deliberately not routed back
       // into the audible graph.
       this.spectrumSplitterNode = null;
@@ -147,7 +149,14 @@
 
     setVolumeDb(value) {
       this.volumeDb = Math.max(-60, Math.min(0, Number(value)));
-      this.setSmoothedParam(this.volumeGainNode?.gain, dbToGain(this.volumeDb));
+      this.setSmoothedParam(this.volumeGainNode?.gain, this.bypass ? 0 : dbToGain(this.volumeDb));
+    }
+
+    setBypass(enabled, smoothingTime = 0.015) {
+      this.bypass = Boolean(enabled);
+      this.setSmoothedParam(this.bypassGainNode?.gain, this.bypass ? 1 : 0, smoothingTime);
+      this.setSmoothedParam(this.volumeGainNode?.gain, this.bypass ? 0 : dbToGain(this.volumeDb), smoothingTime);
+      return this.bypass;
     }
 
     setResonance(value) {
@@ -396,7 +405,8 @@
       const gains = dryWetGains(this.dryWet);
       this.setAudioParam(this.dryGainNode?.gain, gains.dry, immediate);
       this.setAudioParam(this.wetGainNode?.gain, gains.wet, immediate);
-      this.setAudioParam(this.volumeGainNode?.gain, dbToGain(this.volumeDb), immediate);
+      this.setAudioParam(this.volumeGainNode?.gain, this.bypass ? 0 : dbToGain(this.volumeDb), immediate);
+      this.setAudioParam(this.bypassGainNode?.gain, this.bypass ? 1 : 0, immediate);
     }
 
     setGateGain(gate, value, time = this.context?.currentTime || 0, rampSeconds = 0) {
@@ -547,6 +557,7 @@
         });
         this.dryGainNode = this.context.createGain();
         this.wetGainNode = this.context.createGain();
+        this.bypassGainNode = this.context.createGain();
         if (typeof this.context.createChannelSplitter === 'function' && typeof this.context.createAnalyser === 'function') {
           this.spectrumSplitterNode = this.context.createChannelSplitter(2);
           this.spectrumAnalyserLeft = this.context.createAnalyser();
@@ -580,6 +591,10 @@
         this.wetGainNode.connect(this.mixBus);
         this.mixBus.connect(this.volumeGainNode);
         this.volumeGainNode.connect(this.destination);
+        // Bypass deliberately starts at sourceBus, before input gain, preamp,
+        // filterbank, dry/wet and master volume, and feeds the output directly.
+        this.sourceBus.connect(this.bypassGainNode);
+        this.bypassGainNode.connect(this.destination);
         this.applyAudioParameters(true);
         await this.setSource({ sourceMode, inputDeviceId, sample });
 
@@ -606,7 +621,7 @@
     async cleanup() {
       this.stopInputNodes({ immediate: true });
       if (this.filterbank) { this.filterbank.dispose(); this.filterbank = null; }
-      [this.sourceBus, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.inputSpectrumSplitterNode, this.inputSpectrumAnalyserLeft, this.inputSpectrumAnalyserRight, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
+      [this.sourceBus, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.bypassGainNode, this.inputSpectrumSplitterNode, this.inputSpectrumAnalyserLeft, this.inputSpectrumAnalyserRight, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
       this.source = null;
       this.sourceBus = null;
       this.activeInputGate = null;
@@ -615,6 +630,7 @@
       this.inputPreampNode = null;
       this.dryGainNode = null;
       this.wetGainNode = null;
+      this.bypassGainNode = null;
       this.inputSpectrumSplitterNode = null;
       this.inputSpectrumAnalyserLeft = null;
       this.inputSpectrumAnalyserRight = null;
