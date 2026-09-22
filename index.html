@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="assets/icons/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/da-filta-icon-32.png" />
     <title>da_filta · Prototype 0.1</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -11,29 +13,7 @@
       <main class="console">
         <header class="masthead">
           <div class="masthead-primary">
-          <div class="brand">DA <span>FILTA</span></div>
-          <label class="theme-picker"
-            ><span class="sr-only">UI Theme</span
-            ><select data-theme-select aria-label="UI Theme">
-              <option value="current">Current / Cyan Studio</option>
-              <option value="clean-modern">Clean Modern</option>
-              <option value="dark-studio">Dark Studio</option>
-              <option value="analog-inspired">Analog Inspired</option>
-              <option value="minimal-dark">Minimal Dark</option>
-              <option value="pro-console">Pro Console</option>
-              <option value="graphite">Graphite</option>
-              <option value="midnight">Midnight</option>
-              <option value="slate">Slate</option>
-              <option value="forest">Forest</option>
-              <option value="warm-studio">Warm Studio</option>
-              <option value="copper-circuit">Copper Circuit</option>
-              <option value="ultraviolet">Ultraviolet</option>
-              <option value="deep-ocean">Deep Ocean</option>
-              <option value="amber-crt">Amber CRT</option>
-              <option value="ice-lab">Ice Lab</option>
-              <option value="custom" disabled>Custom</option>
-            </select></label
-          >
+          <div class="brand"><img src="assets/icons/da-filta-icon-64.png" alt="" />DA <span>FILTA</span></div>
           <div class="theme-editor">
             <button
               class="theme-editor-toggle"
@@ -182,8 +162,6 @@
               </footer>
             </section>
           </div>
-          </div>
-          <div class="masthead-routing" aria-label="Audio Routing">
           <div class="audio-input-source">
             <div class="source-toggle" role="group" aria-label="Audioquelle">
               <button
@@ -219,7 +197,9 @@
               </select></label
             >
           </div>
+          <span class="audio-device-label">INPUT</span>
           <span class="audio-routing-arrow" aria-hidden="true">→</span>
+          <span class="audio-device-label">OUTPUT</span>
           <label class="audio-device"
             ><select data-audio-output aria-label="Audio-Ausgabegerät">
               <option value="">Geräte werden geladen …</option>
@@ -242,6 +222,28 @@
           </div>
           </div>
           <div class="masthead-dev-lab" aria-label="DEV / LAB">
+            <label class="theme-picker"
+              ><span class="sr-only">UI Theme</span
+              ><select data-theme-select aria-label="UI Theme">
+                <option value="current">Current / Cyan Studio</option>
+                <option value="clean-modern">Clean Modern</option>
+                <option value="dark-studio">Dark Studio</option>
+                <option value="analog-inspired">Analog Inspired</option>
+                <option value="minimal-dark">Minimal Dark</option>
+                <option value="pro-console">Pro Console</option>
+                <option value="graphite">Graphite</option>
+                <option value="midnight">Midnight</option>
+                <option value="slate">Slate</option>
+                <option value="forest">Forest</option>
+                <option value="warm-studio">Warm Studio</option>
+                <option value="copper-circuit">Copper Circuit</option>
+                <option value="ultraviolet">Ultraviolet</option>
+                <option value="deep-ocean">Deep Ocean</option>
+                <option value="amber-crt">Amber CRT</option>
+                <option value="ice-lab">Ice Lab</option>
+                <option value="custom" disabled>Custom</option>
+              </select></label
+            >
             <button class="dev-lab-toggle active" type="button" data-dev-lab-toggle aria-expanded="true" aria-controls="dev-lab-panel" aria-label="DEV / LAB" title="DEV / LAB">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v5l-5.5 9.2A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-3.8L14 8V3M8 14h8M7 17h10"/></svg><span class="sr-only">DEV / LAB</span>
             </button>

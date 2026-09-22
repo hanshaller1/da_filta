@@ -144,6 +144,8 @@ body::before { content: ''; position: fixed; inset: 0; pointer-events: none; opa
 .global-controls { display: grid; grid-template-columns: 1.1fr 1.05fr 1.05fr 1.05fr 1fr; gap: 2px; }.control-card, .status-panel, .analyzer, .info-panel, .band-card { border: 1px solid var(--panel-border); background: var(--panel-background); box-shadow: var(--panel-shadow); }.control-card { padding: 10px 15px 8px; min-height: 82px; border-radius: 5px; }.control-label { display: block; font-size: 14px; letter-spacing: 1px; }.control-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; }.control-row input { flex: 1; }.control-row output { min-width: 60px; padding: 5px 8px; border: 1px solid var(--output-border); border-radius: 4px; text-align: center; color: var(--strong-text); font-size: 16px; background: var(--output-background); }.control-scale { display: flex; justify-content: space-between; color: var(--muted-text); font-size: 14px; margin-top: 2px; }
 .control-row output[data-output="volume"] { width: 92px; min-width: 92px; white-space: nowrap; }
 input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; border-radius: 4px; background: transparent; outline: none; }
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand img { width: 30px; height: 30px; flex: 0 0 30px; object-fit: contain; }
 .range-hit-area > input[type=range]::-webkit-slider-runnable-track { -webkit-appearance: none; appearance: none; width: 100%; height: var(--global-range-track-height); margin: 0; padding: 0; border: 0; border-radius: 4px; background: var(--range-track); }
 .range-hit-area > input[type=range]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 10px; height: 20px; margin-top: calc((var(--global-range-track-height) - 20px) / 2); border: 2px solid var(--range-thumb-border); border-radius: 3px; background: var(--cyan); box-shadow: var(--range-thumb-shadow); }
 .range-hit-area > input[type=range]::-moz-range-track { width: 100%; height: var(--global-range-track-height); margin: 0; padding: 0; border: 0; border-radius: 4px; background: var(--range-track); }
@@ -601,8 +603,8 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .masthead {
   min-height: 48px;
   height: auto;
-  justify-content: space-between;
-  gap: 14px;
+  justify-content: flex-start;
+  gap: 12px;
 }
 .masthead-primary,
 .masthead-routing,
@@ -611,18 +613,28 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   display: flex;
   align-items: center;
   min-width: 0;
+  height: 42px;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 4px 9px;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  background: var(--panel-background);
 }
+.masthead-primary { flex: 1 1 auto; }
 .masthead-primary { gap: 8px; }
-.masthead-routing, .masthead-controls, .masthead-dev-lab { display: flex; align-items: center; }
-.masthead-routing { flex: 1 1 auto; min-width: 0; gap: 9px; }
-.masthead-routing .audio-input-source { flex: 1 1 250px; max-width: 360px; }
-.masthead-routing > .audio-device { flex: 1 1 190px; max-width: 285px; }
+.masthead-primary > .audio-input-source { margin-left: auto; }
+.audio-device-label { flex: 0 0 auto; color: var(--muted-text); font-size: 11px; letter-spacing: 1px; white-space: nowrap; }
+.masthead-routing { flex: 0 1 auto; min-width: 0; gap: 9px; }
+.masthead-primary .audio-input-source { flex: 1 1 250px; max-width: 360px; }
+.masthead-primary > .audio-device { flex: 1 1 190px; max-width: 285px; }
 .audio-routing-arrow { flex: 0 0 auto; color: var(--cyan); font-size: 18px; line-height: 1; }
-.masthead-controls { flex: 0 0 auto; gap: 7px; }
-.masthead-dev-lab { flex: 0 0 auto; justify-content: center; min-width: 42px; height: 34px; border: 1px solid var(--panel-border); border-radius: 4px; background: var(--panel-background); }
+.masthead-controls { flex: 0 0 auto; justify-content: flex-start; gap: 10px; }
+.masthead-dev-lab { flex: 0 0 auto; justify-content: center; width: auto; height: 42px; margin-left: auto; gap: 8px; }
 .masthead-dev-lab .dev-lab-toggle { width: 32px; height: 30px; padding: 5px; border: 0; background: transparent; }
 .masthead-dev-lab .dev-lab-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
-.masthead-primary .theme-picker { flex-basis: 190px; }
+.masthead-dev-lab .theme-picker { flex: 0 0 190px; }
+.theme-editor-panel { left: auto; right: 0; }
 .theme-editor-toggle {
   display: grid;
   width: 30px;
@@ -631,10 +643,9 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   place-items: center;
 }
 .theme-editor-toggle svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.8; }
-.masthead-routing .audio-device { gap: 6px; font-size: 11px; }
-.masthead-routing .audio-device select { height: 30px; font-size: 12px; }
-.masthead-controls .audio-button { flex: 0 0 auto; height: 30px; min-height: 30px; padding-inline: 9px; font-size: 10px; white-space: nowrap; }
-.masthead-controls .audio-button.start { width: 110px; min-width: 110px; }
+.masthead-primary .audio-device { gap: 6px; font-size: 11px; }
+.masthead-primary .audio-device select { height: 30px; font-size: 12px; }
+.masthead-controls .audio-button { flex: 0 0 110px; width: 110px; min-width: 110px; height: 30px; min-height: 30px; padding-inline: 9px; font-size: 10px; white-space: nowrap; }
 .masthead-controls .audio-button.bypass[aria-pressed=true] { color: var(--cyan); border-color: var(--cyan); background: var(--active-background); box-shadow: var(--active-shadow); }
 .masthead-controls .audio-state { flex: 0 0 165px; width: 165px; min-width: 165px; padding: 2px 0; white-space: nowrap; }
 .masthead-controls .audio-state small { max-width: 130px; }
@@ -648,7 +659,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .masthead { align-items: flex-start; }
   .masthead-primary, .masthead-routing, .masthead-controls { flex-wrap: nowrap; }
   .masthead-routing { gap: 6px; }
-  .masthead-routing .audio-input-source, .masthead-routing > .audio-device { max-width: none; min-width: 0; }
+  .masthead-primary .audio-input-source, .masthead-primary > .audio-device { max-width: none; min-width: 0; }
   .masthead-controls { gap: 5px; }
 }
 .range-hit-area {

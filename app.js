@@ -78,6 +78,9 @@ addDevSelectOptions(positiveResonanceDriveSelect, [24, 32]);
 addDevSelectOptions(positiveResonanceDampingFloorSelect, [-0.05, -0.10], value => value.toFixed(2));
 const devLabPanel = document.querySelector('[data-dev-lab-panel]');
 const devLabToggle = document.querySelector('[data-dev-lab-toggle]');
+const mastheadDevLab = document.querySelector('.masthead-dev-lab');
+const mastheadThemeEditor = document.querySelector('.theme-editor');
+if (mastheadDevLab && mastheadThemeEditor && devLabToggle) mastheadDevLab.insertBefore(mastheadThemeEditor, devLabToggle);
 const devLabControls = document.querySelector('.dev-lab-panel .dev-lab-controls');
 const devLabGroups = new Map();
 [['input', 'INPUT'], ['keyboard', 'KEYBOARD'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
