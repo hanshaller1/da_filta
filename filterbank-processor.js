@@ -682,7 +682,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const localConstantCeiling = this.feedbackTopology === 'common-bus'
       && this.commonBusSaturationMode === 'constant-ceiling';
     const localCeiling = localConstantCeiling ? this.commonBusCeiling : 1;
-    const specialMain = this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
+    const specialMain = this.resonance >= 0
+      && this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
       && this.feedbackTopology === 'common-bus' && this.commonBusSaturationMode === 'current';
     const mainCeiling = specialMain ? 0.2
       : this.commonBusSaturationMode === 'constant-ceiling' ? this.commonBusCeiling : 1;
@@ -1021,7 +1022,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       && this.commonBusSaturationMode === 'constant-ceiling';
     const localCeiling = localConstantCeiling ? this.commonBusCeiling : 1;
     const localScale = localConstantCeiling ? this.commonBusDrive / localCeiling : 1;
-    const specialMain = this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
+    const specialMain = this.resonance >= 0
+      && this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
       && this.feedbackTopology === 'common-bus' && this.commonBusSaturationMode === 'current';
     const mainCeiling = specialMain ? 0.2
       : this.commonBusSaturationMode === 'constant-ceiling' ? this.commonBusCeiling : 1;
@@ -1385,7 +1387,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   applyMainCommonBusSaturation(drive) {
     if (!Number.isFinite(drive)) return null;
-    const experimentActive = this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
+    const experimentActive = this.resonance >= 0
+      && this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
       && this.feedbackTopology === 'common-bus'
       && this.feedbackAllEngine === 'common-bus'
       && this.commonBusSaturationMode === 'current';
@@ -1948,7 +1951,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         : perBandZdfSelected ? 0 : this.commonFeedbackReturns[channel];
       const mainCommonFeedbackReturn = unifiedZdfActive ? this.zdfMainReturn[channel]
         : perBandZdfSelected ? this.zdfPerBandMainReturns[channel] : this.mainCommonFeedbackReturns[channel];
-      const specialZdfMainReturn = this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
+      const specialZdfMainReturn = this.resonance >= 0
+        && this.feedbackAllSaturationReturn === 'drive-4-return-0.2'
         && this.feedbackTopology === 'common-bus' && this.commonBusSaturationMode === 'current';
       const mainSaturationOutput = unifiedZdfActive
         ? (specialZdfMainReturn ? this.zdfMainReturn[channel] / 0.2 : this.zdfMainReturn[channel])
