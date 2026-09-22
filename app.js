@@ -1468,13 +1468,15 @@ const bands = document.querySelector('.bands');
 bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><div class="band-actions"><button class="band-action" type="button" data-feedback-band="${index}">FB</button><button class="band-action" type="button" data-mod-band="${index}">MOD</button></div><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
 bands.insertAdjacentHTML('afterbegin', '<div class="filterbank-panel-header"><strong>FILTERBANK</strong><span class="filterbank-panel-actions"><button class="per-channel-toggle" type="button" aria-pressed="false">P/CH</button></span></div>');
 document.querySelectorAll('.band-card').forEach((card, index) => {
-  card.insertAdjacentHTML('beforeend', `<div class="channel-faders"><label>L<input class="band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="left" aria-label="${BAND_DEFINITIONS[index].label} Left"></label><button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false">LINK</button><label>R<input class="band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="right" aria-label="${BAND_DEFINITIONS[index].label} Right"></label></div>`);
+  card.querySelector('.fader-wrap')?.classList.add('center-fader');
+  const channelFader = (channel, label) => `<div class="channel-fader"><span>${label}</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;
+  card.insertAdjacentHTML('beforeend', `<div class="channel-faders">${channelFader('left', 'L')}<button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false">⛓</button>${channelFader('right', 'R')}</div>`);
 });
 const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume') return `${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
 
 const bars = document.querySelector('.bars');
 bars.innerHTML = Array.from({ length: BAND_COUNT }, (_, i) => `<div class="bar-pair" data-analyzer-band="${i}" tabindex="0" aria-label="Band ${i + 1}, ${BAND_DEFINITIONS[i].label}"><i data-channel="left"></i><i data-channel="right"></i><b class="analyzer-peak analyzer-peak-left"></b><b class="analyzer-peak analyzer-peak-right"></b><small class="analyzer-band-delta"></small><em class="analyzer-feedback-marker" aria-hidden="true">FB</em><em class="analyzer-osc-marker" aria-hidden="true">OSC</em></div>`).join('');
-const faders = [...document.querySelectorAll('.band-fader')];
+const faders = [...document.querySelectorAll('.center-fader .band-fader')];
 const analyzerDetail = document.createElement('div');
 analyzerDetail.className = 'analyzer-band-detail';
 analyzerDetail.hidden = true;
@@ -1729,6 +1731,9 @@ const renderBand = index => {
   document.querySelectorAll(`.band-fader-channel[data-band="${index}"]`).forEach(input => {
     input.value = String(input.dataset.channel === 'left' ? state.bandGainLeft[index] : state.bandGainRight[index]);
   });
+  const channelValue = channel => document.querySelector(`[data-band-channel-value="${index}-${channel}"]`);
+  if (channelValue('left')) channelValue('left').textContent = formatBandSliderValue(state.bandGainLeft[index]);
+  if (channelValue('right')) channelValue('right').textContent = formatBandSliderValue(state.bandGainRight[index]);
   const link = document.querySelector(`[data-band-link="${index}"]`);
   if (link) { link.classList.toggle('active', Boolean(state.bandChannelLinked[index])); link.setAttribute('aria-pressed', String(Boolean(state.bandChannelLinked[index]))); }
   updateAnalyzerBand(index);
