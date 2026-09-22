@@ -265,6 +265,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 }
 .console:has(.dev-lab-panel[hidden]) { grid-template-columns: minmax(0, 1fr); }
 .console > :not(.dev-lab-panel) { grid-column: 1; }
+.console > .masthead { grid-column: 1 / -1; }
 .dev-lab-panel {
   grid-column: 2;
   grid-row: 2 / 6;
@@ -604,13 +605,23 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   gap: 14px;
 }
 .masthead-primary,
-.masthead-audio {
+.masthead-routing,
+.masthead-controls,
+.masthead-dev-lab {
   display: flex;
   align-items: center;
   min-width: 0;
 }
 .masthead-primary { gap: 8px; }
-.masthead-audio { justify-content: flex-end; flex: 1 1 auto; gap: 7px; }
+.masthead-routing, .masthead-controls, .masthead-dev-lab { display: flex; align-items: center; }
+.masthead-routing { flex: 1 1 auto; min-width: 0; gap: 9px; }
+.masthead-routing .audio-input-source { flex: 1 1 250px; max-width: 360px; }
+.masthead-routing > .audio-device { flex: 1 1 190px; max-width: 285px; }
+.audio-routing-arrow { flex: 0 0 auto; color: var(--cyan); font-size: 18px; line-height: 1; }
+.masthead-controls { flex: 0 0 auto; gap: 7px; }
+.masthead-dev-lab { flex: 0 0 auto; justify-content: center; min-width: 42px; height: 34px; border: 1px solid var(--panel-border); border-radius: 4px; background: var(--panel-background); }
+.masthead-dev-lab .dev-lab-toggle { width: 32px; height: 30px; padding: 5px; border: 0; background: transparent; }
+.masthead-dev-lab .dev-lab-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .masthead-primary .theme-picker { flex-basis: 190px; }
 .theme-editor-toggle {
   display: grid;
@@ -620,15 +631,13 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   place-items: center;
 }
 .theme-editor-toggle svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.8; }
-.masthead-audio .audio-input-source { flex: 1 1 250px; max-width: 360px; }
-.masthead-audio > .audio-device { flex: 1 1 190px; max-width: 285px; }
-.masthead-audio .audio-device { gap: 6px; font-size: 11px; }
-.masthead-audio .audio-device select { height: 30px; font-size: 12px; }
-.masthead-audio .audio-button { flex: 0 0 auto; height: 30px; min-height: 30px; padding-inline: 9px; font-size: 10px; white-space: nowrap; }
-.masthead-audio .audio-button.start { width: 110px; min-width: 110px; white-space: nowrap; }
-.masthead-audio .audio-button.bypass[aria-pressed=true] { color: var(--cyan); border-color: var(--cyan); background: var(--active-background); box-shadow: var(--active-shadow); }
-.masthead-audio .audio-state { flex: 0 0 165px; width: 165px; min-width: 165px; padding: 2px 0; white-space: nowrap; }
-.masthead-audio .audio-state small { max-width: 130px; }
+.masthead-routing .audio-device { gap: 6px; font-size: 11px; }
+.masthead-routing .audio-device select { height: 30px; font-size: 12px; }
+.masthead-controls .audio-button { flex: 0 0 auto; height: 30px; min-height: 30px; padding-inline: 9px; font-size: 10px; white-space: nowrap; }
+.masthead-controls .audio-button.start { width: 110px; min-width: 110px; }
+.masthead-controls .audio-button.bypass[aria-pressed=true] { color: var(--cyan); border-color: var(--cyan); background: var(--active-background); box-shadow: var(--active-shadow); }
+.masthead-controls .audio-state { flex: 0 0 165px; width: 165px; min-width: 165px; padding: 2px 0; white-space: nowrap; }
+.masthead-controls .audio-state small { max-width: 130px; }
 .console {
   grid-template-rows: auto auto minmax(0, 1fr) clamp(247px, calc(38vh + 7px), 352px);
 }
@@ -637,9 +646,10 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 
 @media (min-width: 768px) and (max-width: 1199px) {
   .masthead { align-items: flex-start; }
-  .masthead-primary, .masthead-audio { flex-wrap: wrap; }
-  .masthead-audio { justify-content: flex-start; }
-  .masthead-audio .audio-input-source, .masthead-audio > .audio-device { max-width: none; }
+  .masthead-primary, .masthead-routing, .masthead-controls { flex-wrap: nowrap; }
+  .masthead-routing { gap: 6px; }
+  .masthead-routing .audio-input-source, .masthead-routing > .audio-device { max-width: none; min-width: 0; }
+  .masthead-controls { gap: 5px; }
 }
 .range-hit-area {
   --global-range-track-height: 5px;
