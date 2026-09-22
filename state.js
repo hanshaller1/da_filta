@@ -116,6 +116,8 @@
     spread: GLOBAL_CONTROL_DEFINITIONS.spread.defaultValue,
     spreadCurve: 'linear',
     spreadMaxOffsetDb: 6,
+    perChannelBands: false,
+    bandChannelLinked: createArray(false),
     volume: GLOBAL_CONTROL_DEFINITIONS.volume.defaultValue,
     audioStatus: 'OFF',
     audioError: '',

@@ -6,6 +6,7 @@ const {
   BAND_GAIN_NEUTRAL,
   GLOBAL_CONTROL_DEFINITIONS,
   controlToBandGainDb,
+  bandGainDbToControl,
   createInitialState,
   getEffectiveBandGains,
   setBandBaseGain: setStateBandBaseGain
@@ -1465,6 +1466,10 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape') setT
 window.DaFiltaThemeEditor = { applyCustomTheme, clearCustomTheme, getState: () => editorTheme && ({ ...editorTheme }) };
 const bands = document.querySelector('.bands');
 bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><div class="band-actions"><button class="band-action" type="button" data-feedback-band="${index}">FB</button><button class="band-action" type="button" data-mod-band="${index}">MOD</button></div><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
+bands.insertAdjacentHTML('afterbegin', '<div class="filterbank-panel-header"><strong>FILTERBANK</strong><span class="filterbank-panel-actions"><button class="per-channel-toggle" type="button" aria-pressed="false">P/CH</button></span></div>');
+document.querySelectorAll('.band-card').forEach((card, index) => {
+  card.insertAdjacentHTML('beforeend', `<div class="channel-faders"><label>L<input class="band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="left" aria-label="${BAND_DEFINITIONS[index].label} Left"></label><button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false">LINK</button><label>R<input class="band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="right" aria-label="${BAND_DEFINITIONS[index].label} Right"></label></div>`);
+});
 const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume') return `${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
 
 const bars = document.querySelector('.bars');
@@ -1500,7 +1505,7 @@ let analyzerLastFrame = performance.now();
 let analyzerDetailMode = 'hidden';
 let hoveredAnalyzerBand = null;
 const toDb = value => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)} dB`;
-const getAnalyzerEffective = index => audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, { maxBandBoostDb: getBandBoostDb(), maxBandCutDb: getBandCutDb() });
+const getAnalyzerEffective = index => audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, { maxBandBoostDb: getBandBoostDb(), maxBandCutDb: getBandCutDb(), spread: state.perChannelBands ? 0 : state.spread });
 const getAnalyzerTelemetry = () => devLabTelemetry.getLatest?.() || null;
 const getEnergyPair = (packet, index) => {
   const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band';
@@ -1716,13 +1721,38 @@ const formatBandSliderValue = value => {
 const renderBandSliderValues = () => faders.forEach((_, index) => renderBand(index));
 const renderBand = index => {
   const slider = faders[index];
-  slider.value = String(state.bandGainLeft[index]);
+  const leftDb = controlToBandGainDb(state.bandGainLeft[index], getBandBoostDb(), getBandCutDb());
+  const rightDb = controlToBandGainDb(state.bandGainRight[index], getBandBoostDb(), getBandCutDb());
+  slider.value = String(bandGainDbToControl((leftDb + rightDb) / 2, getBandBoostDb(), getBandCutDb()));
   const valueDisplay = document.querySelector(`[data-band-value="${index}"]`);
-  if (valueDisplay) valueDisplay.textContent = formatBandSliderValue(state.bandGainLeft[index]);
+  if (valueDisplay) valueDisplay.textContent = `${((leftDb + rightDb) / 2 >= 0 ? '+' : '')}${((leftDb + rightDb) / 2).toFixed(1)} dB`;
+  document.querySelectorAll(`.band-fader-channel[data-band="${index}"]`).forEach(input => {
+    input.value = String(input.dataset.channel === 'left' ? state.bandGainLeft[index] : state.bandGainRight[index]);
+  });
+  const link = document.querySelector(`[data-band-link="${index}"]`);
+  if (link) { link.classList.toggle('active', Boolean(state.bandChannelLinked[index])); link.setAttribute('aria-pressed', String(Boolean(state.bandChannelLinked[index]))); }
   updateAnalyzerBand(index);
 };
-const setBandBaseGain = (channel, index, value) => {
-  const channels = state.channelSelection === 'LR' ? ['left', 'right'] : [channel];
+const setBandPairByDb = (index, sourceChannel, targetControl) => {
+  const boost = getBandBoostDb(); const cut = getBandCutDb();
+  const currentLeft = controlToBandGainDb(state.bandGainLeft[index], boost, cut);
+  const currentRight = controlToBandGainDb(state.bandGainRight[index], boost, cut);
+  const current = sourceChannel === 'right' ? currentRight : sourceChannel === 'center' ? (currentLeft + currentRight) / 2 : currentLeft;
+  const desired = controlToBandGainDb(targetControl, boost, cut);
+  let delta = desired - current;
+  const minimum = Math.max(-cut - currentLeft, -cut - currentRight);
+  const maximum = Math.min(boost - currentLeft, boost - currentRight);
+  delta = Math.max(minimum, Math.min(maximum, delta));
+  ['left', 'right'].forEach(channel => {
+    const db = (channel === 'left' ? currentLeft : currentRight) + delta;
+    const control = bandGainDbToControl(db, boost, cut);
+    const next = setStateBandBaseGain(state, channel, index, control);
+    audioEngine?.setBandBaseGain(channel, index, next);
+  });
+  renderBand(index); refreshStatusStrip();
+};
+const setBandBaseGain = (channel, index, value, singleChannel = false) => {
+  const channels = !singleChannel && state.channelSelection === 'LR' ? ['left', 'right'] : [channel];
   channels.forEach(targetChannel => {
     const nextValue = setStateBandBaseGain(state, targetChannel, index, value);
     audioEngine?.setBandBaseGain(targetChannel, index, nextValue);
@@ -1757,10 +1787,16 @@ const setFeedbackAll = (channel, enabled) => {
   refreshStatusStrip();
 };
 faders.forEach((slider,index) => {
-  slider.addEventListener('input', () => setBandBaseGain('left', index, slider.value));
-  slider.addEventListener('dblclick', () => setBandBaseGain('left', index, BAND_GAIN_NEUTRAL));
+  slider.addEventListener('input', () => setBandPairByDb(index, 'center', slider.value));
+  slider.addEventListener('dblclick', () => setBandPairByDb(index, 'center', BAND_GAIN_NEUTRAL));
   renderBand(index);
 });
+document.querySelectorAll('.band-fader-channel').forEach(input => {
+  const index = Number(input.dataset.band); const channel = input.dataset.channel;
+  const change = () => state.bandChannelLinked[index] ? setBandPairByDb(index, channel, input.value) : setBandBaseGain(channel, index, input.value, true);
+  input.addEventListener('input', change); input.addEventListener('dblclick', () => state.bandChannelLinked[index] ? setBandPairByDb(index, channel, BAND_GAIN_NEUTRAL) : setBandBaseGain(channel, index, BAND_GAIN_NEUTRAL, true));
+});
+document.querySelectorAll('[data-band-link]').forEach(button => button.addEventListener('click', () => { const index = Number(button.dataset.bandLink); state.bandChannelLinked[index] = !state.bandChannelLinked[index]; renderBand(index); }));
 bars.querySelectorAll('[data-analyzer-band]').forEach(pair => {
   pair.addEventListener('pointerenter', () => showAnalyzerHover(Number(pair.dataset.analyzerBand), pair));
   pair.addEventListener('pointerleave', clearAnalyzerHover);
@@ -1802,6 +1838,19 @@ document.querySelectorAll('[data-control]').forEach(slider => {
 document.querySelectorAll('[data-feedback-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.feedbackBand); const nextValue=!state.feedbackBandLeft[index]; setBandFeedback('left', index, nextValue); button.classList.toggle('active',nextValue); button.setAttribute('aria-pressed',String(nextValue)); }));
 document.querySelectorAll('[data-mod-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.modBand); state.modulated[index]=!state.modulated[index]; button.classList.toggle('active',state.modulated[index]); button.setAttribute('aria-pressed',String(state.modulated[index])); }));
 const fbAllButton = document.querySelector('.fb-all-toggle');
+const perChannelButton = document.querySelector('.per-channel-toggle');
+const spreadControl = document.querySelector('[data-control="spread"]');
+const updatePerChannelBands = () => {
+  bands.classList.toggle('is-per-channel', state.perChannelBands);
+  perChannelButton?.classList.toggle('active', state.perChannelBands);
+  perChannelButton?.setAttribute('aria-pressed', String(state.perChannelBands));
+  if (spreadControl) spreadControl.disabled = state.perChannelBands;
+  audioEngine?.setPerChannelBands(state.perChannelBands);
+  renderBandSliderValues();
+};
+perChannelButton?.addEventListener('click', () => { state.perChannelBands = !state.perChannelBands; updatePerChannelBands(); });
+const fbAllControl = fbAllButton?.closest('.fb-all-control');
+if (fbAllControl) document.querySelector('.filterbank-panel-actions')?.prepend(fbAllControl);
 fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent=nextValue?'ON':'OFF'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
 
 const FB_CODES = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0'];
@@ -2194,6 +2243,8 @@ const syncUiFromAudioState = snapshot => {
   if (!snapshot) return;
   state.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => Number(snapshot.bandGainLeft?.[index] ?? 0));
   state.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => Number(snapshot.bandGainRight?.[index] ?? 0));
+  state.perChannelBands = Boolean(snapshot.perChannelBands);
+  state.bandChannelLinked = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.bandChannelLinked?.[index]));
   state.feedbackBandLeft = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.feedbackBandLeft?.[index]));
   state.feedbackBandRight = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.feedbackBandRight?.[index]));
   state.feedbackAllLeft = Boolean(snapshot.feedbackAllLeft);
@@ -2216,6 +2267,7 @@ const syncUiFromAudioState = snapshot => {
     fbAllButton.textContent = state.feedbackAllLeft ? 'ON' : 'OFF';
     fbAllButton.setAttribute('aria-pressed', String(state.feedbackAllLeft));
   }
+  updatePerChannelBands();
   const selectValues = [
     [bandBoostSelect, snapshot.maxBandBoostDb], [bandCutSelect, snapshot.maxBandCutDb],
     [spreadCurveSelect, snapshot.spreadCurve], [spreadMaxOffsetSelect, snapshot.spreadMaxOffsetDb],

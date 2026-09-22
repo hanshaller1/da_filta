@@ -98,6 +98,7 @@
       this.feedbackBandRight = Array(BAND_COUNT).fill(false);
       this.feedbackAllLeft = false;
       this.feedbackAllRight = false;
+      this.perChannelBands = false;
       this.handleDeviceChange = () => this.refreshDevices().then(devices => this.onDevicesChanged?.(devices)).catch(() => {});
       if (navigator.mediaDevices?.addEventListener) navigator.mediaDevices.addEventListener('devicechange', this.handleDeviceChange);
     }
@@ -219,6 +220,7 @@
     setBandBoostDb(value) { this.maxBandBoostDb = [12, 18, 24].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandBoostDb(this.maxBandBoostDb); this.applyEffectiveBandGains(); return this.maxBandBoostDb; }
     setBandCutDb(value) { this.maxBandCutDb = [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandCutDb(this.maxBandCutDb); this.applyEffectiveBandGains(); return this.maxBandCutDb; }
     setSpread(value) { this.spread = clampSpread(value); this.applyEffectiveBandGains(); return this.spread; }
+    setPerChannelBands(value) { this.perChannelBands = Boolean(value); this.applyEffectiveBandGains(); return this.perChannelBands; }
     setSpreadMode(value) { this.spreadMode = value === 'FB_CH_SELECT' ? 'FB_CH_SELECT' : 'CLASSIC'; this.applyEffectiveBandGains(); return this.spreadMode; }
     setSpreadCurve(value) { this.spreadCurve = normalizeSpreadCurve(value); this.applyEffectiveBandGains(); return this.spreadCurve; }
     setSpreadMaxOffsetDb(value) { this.spreadMaxOffsetDb = normalizeSpreadMaxOffsetDb(value); this.applyEffectiveBandGains(); return this.spreadMaxOffsetDb; }
@@ -256,7 +258,7 @@
 
     getEffectiveBandGains(index) {
       return getEffectiveBandGains(this, index, {
-        maxBandBoostDb: this.maxBandBoostDb,
+        maxBandBoostDb: this.maxBandBoostDb, spread: this.perChannelBands ? 0 : this.spread,
         maxBandCutDb: this.maxBandCutDb
       });
     }
@@ -327,6 +329,7 @@
         , feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
         , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
+        , perChannelBands: this.perChannelBands
         , negativeResonanceMode: this.negativeResonanceMode, negativeResonanceCurve: this.negativeResonanceCurve, negativeResonanceAmount: this.negativeResonanceAmount, negativeResonanceLocal: this.negativeResonanceLocal, negativeResonanceMain: this.negativeResonanceMain, negativeResonancePhase: this.negativeResonancePhase
         , onDiagnostics: this.onDiagnostics
       };
@@ -393,6 +396,7 @@
       this.setFeedbackAllAmount(snapshot?.feedbackAllAmount ?? this.feedbackAllAmount);
       this.setFeedbackAllResonanceCurve(snapshot?.feedbackAllResonanceCurve ?? this.feedbackAllResonanceCurve);
       this.setFeedbackAllSaturationReturn(snapshot?.feedbackAllSaturationReturn ?? this.feedbackAllSaturationReturn);
+      this.setPerChannelBands(snapshot?.perChannelBands ?? this.perChannelBands);
       this.setNegativeResonanceMode(snapshot?.negativeResonanceMode ?? this.negativeResonanceMode);
       this.setNegativeResonanceCurve(snapshot?.negativeResonanceCurve ?? this.negativeResonanceCurve);
       this.setNegativeResonanceAmount(snapshot?.negativeResonanceAmount ?? this.negativeResonanceAmount);

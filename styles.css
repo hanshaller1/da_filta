@@ -715,6 +715,25 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   background: transparent;
   touch-action: none;
 }
+
+/* One shared filterbank surface; band separators deliberately stay subtle. */
+.bands { display: grid; grid-template-columns: repeat(10, minmax(68px, 1fr)); height: auto; margin-top: var(--panel-gap); border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); overflow-x: auto; }
+.filterbank-panel-header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; min-height: 42px; padding: 0 12px; border-bottom: 1px solid var(--panel-border); letter-spacing: 1px; }
+.filterbank-panel-actions, .filterbank-panel-actions .fb-all-control { display: flex; align-items: center; gap: 8px; }
+.per-channel-toggle, .band-link-toggle { border: 1px solid var(--button-border); border-radius: 3px; background: var(--output-background); color: var(--button-text); cursor: pointer; font: 600 12px 'Trebuchet MS', Arial, sans-serif; }
+.per-channel-toggle { min-width: 43px; height: 24px; }
+.per-channel-toggle.active, .band-link-toggle.active { color: var(--cyan); border-color: var(--cyan); box-shadow: var(--active-shadow); }
+.filterbank-band-grid { display: contents; }
+.band-card { border: 0; border-right: 1px solid color-mix(in srgb, var(--panel-border) 45%, transparent); border-radius: 0; background: transparent; box-shadow: none; }
+.band-card:last-child { border-right: 0; }
+.channel-faders { display: none; align-items: end; justify-content: center; gap: 3px; flex: 1; min-height: 0; }
+.channel-faders label { display: grid; gap: 3px; justify-items: center; font-size: 11px; color: var(--secondary-text); }
+.band-fader-channel { writing-mode: vertical-lr; direction: rtl; width: 24px; height: 190px; accent-color: var(--cyan); }
+.band-link-toggle { width: 27px; height: 25px; margin-bottom: 80px; font-size: 9px; }
+.bands.is-per-channel .center-fader { display: none; }
+.bands.is-per-channel .channel-faders { display: flex; }
+.bands.is-per-channel .band-slider-value { display: none; }
+@media (max-width: 900px) { .filterbank-band-grid { min-width: 680px; } .band-fader-channel { height: 150px; } .band-link-toggle { margin-bottom: 62px; } }
 .fader-hit-area > .band-fader::-webkit-slider-runnable-track {
   -webkit-appearance: none;
   appearance: none;
