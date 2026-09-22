@@ -627,7 +627,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .masthead-audio .audio-button { flex: 0 0 auto; height: 30px; min-height: 30px; padding-inline: 9px; font-size: 10px; white-space: nowrap; }
 .masthead-audio .audio-button.start { width: 110px; min-width: 110px; white-space: nowrap; }
 .masthead-audio .audio-button.bypass[aria-pressed=true] { color: var(--cyan); border-color: var(--cyan); background: var(--active-background); box-shadow: var(--active-shadow); }
-.masthead-audio .audio-state { flex: 0 0 135px; width: 135px; min-width: 135px; padding: 2px 0; white-space: nowrap; }
+.masthead-audio .audio-state { flex: 0 0 165px; width: 165px; min-width: 165px; padding: 2px 0; white-space: nowrap; }
 .masthead-audio .audio-state small { max-width: 130px; }
 .console {
   grid-template-rows: auto auto minmax(0, 1fr) clamp(247px, calc(38vh + 7px), 352px);
