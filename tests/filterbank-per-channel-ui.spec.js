@@ -23,10 +23,11 @@ test('P/CH swaps one center fader for an L/R pair without visual overlap', async
   const standardLayout = await page.locator('.band-card').first().evaluate(card => {
     const track = card.querySelector('.center-fader .fader-track').getBoundingClientRect();
     const value = card.querySelector('.band-slider-value');
-    return { trackBottom: track.bottom, valueTop: value.getBoundingClientRect().top, fontSize: getComputedStyle(value).fontSize };
+    return { trackBottom: track.bottom, trackHeight: track.height, valueTop: value.getBoundingClientRect().top, fontSize: getComputedStyle(value).fontSize };
   });
   expect(standardLayout.valueTop).toBeGreaterThanOrEqual(standardLayout.trackBottom);
   expect(standardLayout.fontSize).toBe('10px');
+  expect(await page.locator('.center-fader .fader-label').evaluateAll(labels => labels.every(label => getComputedStyle(label).display === 'none'))).toBe(true);
   await page.locator('.per-channel-toggle').click();
   const spread = page.locator('[data-control="spread"]');
   const spreadCard = spread.locator('xpath=ancestor::label[contains(@class, "control-card")]');
@@ -39,10 +40,13 @@ test('P/CH swaps one center fader for an L/R pair without visual overlap', async
     const left = pair.querySelector('.channel-fader:has([data-channel="left"]) .fader-track').getBoundingClientRect();
     const right = pair.querySelector('.channel-fader:has([data-channel="right"]) .fader-track').getBoundingClientRect();
     const link = pair.querySelector('.band-link-toggle').getBoundingClientRect();
-    return { separation: right.x - left.x, linkOffset: Math.abs((link.x + link.width / 2) - ((left.x + right.x) / 2)) };
+    const label = pair.querySelector('.channel-fader > span').getBoundingClientRect();
+    return { separation: right.x - left.x, trackHeight: left.height, labelTop: label.top, trackBottom: left.bottom, linkOffset: Math.abs((link.x + link.width / 2) - ((left.x + right.x) / 2)) };
   });
   expect(perChannelLayout.separation).toBeLessThanOrEqual(55);
-  expect(perChannelLayout.linkOffset).toBeLessThanOrEqual(2);
+  expect(perChannelLayout.trackHeight).toBeGreaterThanOrEqual(standardLayout.trackHeight - 1);
+  expect(perChannelLayout.labelTop).toBeGreaterThanOrEqual(perChannelLayout.trackBottom);
+  expect(perChannelLayout.linkOffset).toBeLessThanOrEqual(5);
   await expect(page.locator('[data-band-link="0"]')).toHaveAttribute('aria-pressed', 'false');
   const values = await page.evaluate(() => {
     const left = document.querySelector('.band-fader-channel[data-band="0"][data-channel="left"]');

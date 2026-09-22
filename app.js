@@ -829,20 +829,21 @@ const formatKeyboardPreference = (value, decimals) => String(Number(value.toFixe
 const persistKeyboardPreferences = () => {
   try { window.localStorage.setItem(KEYBOARD_PREFERENCES_STORAGE_KEY, JSON.stringify(keyboardPreferences)); } catch { /* Storage may be unavailable. */ }
 };
-const addKeyboardPreferenceControl = ({ label, attribute, min, max, step, suffix, tooltip, value, onChange }) => {
+const addKeyboardPreferenceControl = ({ label, attribute, min, max, step, suffix, tooltip, value, onChange, integer = false }) => {
   const container = devLabGroups.get('keyboard');
   if (!container) return null;
   const control = document.createElement('label'); control.className = 'dev-lab-control';
   const title = document.createElement('span'); title.textContent = label;
   const input = document.createElement('input');
-  input.type = 'number'; input.min = String(min); input.max = String(max); input.step = String(step); input.value = formatKeyboardPreference(value(), step < 1 ? 1 : 0);
+  input.type = 'number'; input.min = String(integer ? 1 : min); input.max = String(max); input.step = String(integer ? 1 : step); input.value = formatKeyboardPreference(value(), integer ? 0 : (step < 1 ? 1 : 0));
   input.setAttribute(attribute, ''); input.setAttribute('aria-label', `${label} ${suffix}`); input.title = tooltip;
   const unit = document.createElement('em'); unit.textContent = suffix;
   const apply = restoreInvalid => {
     const numeric = Number(input.value);
     if (input.value.trim() === '' || !Number.isFinite(numeric)) { if (restoreInvalid) input.value = formatKeyboardPreference(value(), step < 1 ? 1 : 0); return; }
-    onChange(Math.min(max, Math.max(min, numeric)));
-    input.value = formatKeyboardPreference(value(), step < 1 ? 1 : 0);
+    const normalized = integer ? Math.round(numeric) : numeric;
+    onChange(Math.min(max, Math.max(min, normalized)));
+    input.value = formatKeyboardPreference(value(), integer ? 0 : (step < 1 ? 1 : 0));
   };
   input.addEventListener('input', () => { if (input.value !== '') apply(false); });
   input.addEventListener('change', () => apply(true)); input.addEventListener('blur', () => apply(true));
@@ -852,7 +853,7 @@ const keyStepInput = addKeyboardPreferenceControl({
   label: 'KEY STEP', attribute: 'data-key-step-percent', min: .1, max: 100, step: .1, suffix: '%',
   tooltip: 'Bestimmt, wie weit sich ein Band-Fader pro Tastaturschritt bewegt. Der Wert entspricht einem Prozentanteil des vollständigen Fader-Regelwegs. 5 % entspricht dem bisherigen Verhalten; 100 % bewegt den Fader mit einem Schritt bis zum jeweiligen Grenzwert.',
   value: () => keyboardPreferences.keyStepPercent,
-  onChange: value => { keyboardPreferences.keyStepPercent = value; persistKeyboardPreferences(); }
+  onChange: value => { keyboardPreferences.keyStepPercent = value; persistKeyboardPreferences(); }, integer: true
 });
 const keySpeedInput = addKeyboardPreferenceControl({
   label: 'KEY SPEED', attribute: 'data-key-speed-hz', min: 1, max: 60, step: 1, suffix: 'Hz',
@@ -1466,10 +1467,10 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape') setT
 window.DaFiltaThemeEditor = { applyCustomTheme, clearCustomTheme, getState: () => editorTheme && ({ ...editorTheme }) };
 const bands = document.querySelector('.bands');
 bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><div class="band-actions"><button class="band-action" type="button" data-feedback-band="${index}">FB</button><button class="band-action" type="button" data-mod-band="${index}">MOD</button></div><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
-bands.insertAdjacentHTML('afterbegin', '<div class="filterbank-panel-header"><strong>FILTERBANK</strong><span class="filterbank-panel-actions"><button class="per-channel-toggle" type="button" aria-pressed="false">P/CH</button></span></div>');
+bands.insertAdjacentHTML('afterbegin', '<div class="filterbank-panel-header"><strong>FILTERBANK</strong><span class="filterbank-panel-actions"><span class="filterbank-action-group filterbank-fb-all-group"></span><span class="filterbank-action-group filterbank-per-channel-group"><span class="filterbank-spread-label">SPREAD</span><button class="per-channel-toggle" type="button" aria-pressed="false">P/CH</button></span></span></div>');
 document.querySelectorAll('.band-card').forEach((card, index) => {
   card.querySelector('.fader-wrap')?.classList.add('center-fader');
-  const channelFader = (channel, label) => `<div class="channel-fader"><span>${label}</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;
+  const channelFader = (channel, label) => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">${label} 0.0 dB</output></div>`;
   card.insertAdjacentHTML('beforeend', `<div class="channel-faders">${channelFader('left', 'L')}<button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg></button>${channelFader('right', 'R')}</div>`);
 });
 const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume') return `${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
@@ -1732,8 +1733,8 @@ const renderBand = index => {
     input.value = String(input.dataset.channel === 'left' ? state.bandGainLeft[index] : state.bandGainRight[index]);
   });
   const channelValue = channel => document.querySelector(`[data-band-channel-value="${index}-${channel}"]`);
-  if (channelValue('left')) channelValue('left').textContent = formatBandSliderValue(state.bandGainLeft[index]);
-  if (channelValue('right')) channelValue('right').textContent = formatBandSliderValue(state.bandGainRight[index]);
+  if (channelValue('left')) channelValue('left').textContent = `L ${formatBandSliderValue(state.bandGainLeft[index])}`;
+  if (channelValue('right')) channelValue('right').textContent = `R ${formatBandSliderValue(state.bandGainRight[index])}`;
   const link = document.querySelector(`[data-band-link="${index}"]`);
   if (link) { link.classList.toggle('active', Boolean(state.bandChannelLinked[index])); link.setAttribute('aria-pressed', String(Boolean(state.bandChannelLinked[index]))); }
   updateAnalyzerBand(index);
@@ -1857,7 +1858,7 @@ const updatePerChannelBands = () => {
 };
 perChannelButton?.addEventListener('click', () => { state.perChannelBands = !state.perChannelBands; updatePerChannelBands(); });
 const fbAllControl = fbAllButton?.closest('.fb-all-control');
-if (fbAllControl) document.querySelector('.filterbank-panel-actions')?.prepend(fbAllControl);
+if (fbAllControl) document.querySelector('.filterbank-fb-all-group')?.append(fbAllControl);
 fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent=nextValue?'ON':'OFF'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
 
 const FB_CODES = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0'];
