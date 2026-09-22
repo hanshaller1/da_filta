@@ -789,3 +789,205 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   border: 0;
   background: transparent;
 }
+
+/* UI refactor V2: desktop-only workspace structure. */
+@media (min-width: 1200px) {
+  .console,
+  .console:has(.fb-workspace.is-collapsed) {
+    position: relative;
+    height: auto;
+    grid-template-rows: auto auto auto;
+    align-items: start;
+  }
+
+  .global-controls {
+    height: 46px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: var(--panel-gap);
+    margin-top: var(--panel-gap);
+  }
+  .control-card {
+    display: grid;
+    grid-template-columns: max-content minmax(44px, 1fr) max-content;
+    grid-template-rows: 1fr;
+    height: 46px;
+    min-height: 46px;
+    padding: 0 9px;
+    align-items: center;
+    column-gap: 8px;
+  }
+  .control-card .control-label {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 11px;
+    letter-spacing: .7px;
+    white-space: nowrap;
+  }
+  .control-card .range-hit-area {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
+  }
+  .control-card .control-row output {
+    grid-column: 3;
+    grid-row: 1;
+    min-width: 48px;
+    margin: 0;
+    padding: 3px 5px;
+    font-size: 12px;
+  }
+  .control-card .control-row output[data-output="inputGain"],
+  .control-card .control-row output[data-output="volume"] {
+    width: 68px;
+    min-width: 68px;
+  }
+  .control-card .control-scale { display: none; }
+
+  .console > .mode-shell {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .mode-shell {
+    display: grid;
+    grid-template-columns: 138px minmax(0, 1fr);
+    align-items: start;
+    align-self: start;
+    height: auto;
+    margin-top: var(--panel-gap);
+  }
+  .mode-tabs {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    align-self: start;
+    height: max-content;
+    background: transparent;
+  }
+  .mode-tab {
+    position: relative;
+    min-height: 40px;
+    padding: 7px 10px;
+    border: 1px solid var(--panel-border);
+    border-bottom: 0;
+    border-left: 3px solid var(--panel-border);
+    color: var(--secondary-text);
+    background: var(--graph-background);
+    font: 700 10px/1.15 'Trebuchet MS', Arial, sans-serif;
+    letter-spacing: .55px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .mode-tab:last-child { border-bottom: 1px solid var(--panel-border); }
+  .mode-tab:hover,
+  .mode-tab:focus-visible {
+    color: var(--strong-text);
+    outline: none;
+  }
+  .mode-tab.active {
+    z-index: 2;
+    margin-right: -1px;
+    border-right-color: transparent;
+    border-left-color: var(--cyan);
+    color: var(--cyan);
+    background: var(--output-background);
+    box-shadow: none;
+  }
+  .mode-tab.active::after {
+    content: '';
+    position: absolute;
+    z-index: 4;
+    top: -1px;
+    right: -2px;
+    bottom: -1px;
+    width: 3px;
+    background: var(--output-background);
+    pointer-events: none;
+  }
+  .mode-tab > span {
+    display: block;
+    padding-right: 18px;
+  }
+
+  .mode-workspace {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    height: auto;
+    overflow: visible;
+    border: 1px solid var(--panel-border);
+    border-radius: 0 5px 5px 0;
+    background: var(--output-background);
+    box-shadow: none;
+  }
+  .filterbank-mode-panel {
+    display: block;
+    height: auto;
+    padding: var(--panel-gap);
+  }
+  .filterbank-mode-panel > .fb-workspace {
+    width: auto;
+    height: clamp(240px, 27vh, 280px);
+    margin: 0;
+  }
+  .filterbank-mode-panel > .bands {
+    height: 414px;
+    grid-template-rows: 42px 365px;
+    margin-top: var(--panel-gap);
+    align-items: start;
+  }
+  .filterbank-panel-header {
+    justify-content: flex-end;
+  }
+  .filterbank-panel-actions { margin-left: auto; }
+  .filterbank-mode-panel .band-card { height: 365px; }
+  .filterbank-mode-panel .fader-wrap {
+    flex: 0 0 271px;
+    height: 271px;
+    min-height: 271px;
+  }
+  .filterbank-mode-panel .fader-track,
+  .filterbank-mode-panel .fb-workspace.is-collapsed ~ .bands .fader-track {
+    height: 261px;
+  }
+  .filterbank-mode-panel .channel-faders {
+    flex: 0 0 281px;
+    height: 281px;
+  }
+  .filterbank-mode-panel .channel-fader .fader-track {
+    height: 261px;
+  }
+
+  .mode-placeholder {
+    display: grid;
+    min-height: 280px;
+    padding: 28px;
+    align-content: center;
+    justify-items: center;
+    gap: 8px;
+    color: var(--secondary-text);
+    background: var(--output-background);
+    text-align: center;
+  }
+  .mode-placeholder strong {
+    color: var(--cyan);
+    font-size: 17px;
+    letter-spacing: 1px;
+  }
+  .mode-placeholder span { font-size: 12px; }
+
+  .console > .dev-lab-panel {
+    position: absolute;
+    grid-column: auto;
+    grid-row: auto;
+    top: calc(16px + 48px + var(--panel-gap));
+    right: 0;
+    height: auto;
+    margin: 0;
+    max-height: calc(100vh - 78px);
+    overflow-y: auto;
+  }
+}
+
+[data-mode-panel][hidden] { display: none; }

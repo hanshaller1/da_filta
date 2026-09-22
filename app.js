@@ -1466,8 +1466,37 @@ document.addEventListener('pointerdown', event => { if (themeEditor && !themeEdi
 document.addEventListener('keydown', event => { if (event.key === 'Escape') setThemeEditorOpen(false); });
 window.DaFiltaThemeEditor = { applyCustomTheme, clearCustomTheme, getState: () => editorTheme && ({ ...editorTheme }) };
 const bands = document.querySelector('.bands');
+const modeTabs = [...document.querySelectorAll('[data-mode]')];
+const modePanels = [...document.querySelectorAll('[data-mode-panel]')];
+let selectedMode = 'filterbank';
+const selectMode = mode => {
+  if (!modePanels.some(panel => panel.dataset.modePanel === mode)) return;
+  selectedMode = mode;
+  modeTabs.forEach(tab => {
+    const selected = tab.dataset.mode === mode;
+    tab.classList.toggle('active', selected);
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  });
+  modePanels.forEach(panel => { panel.hidden = panel.dataset.modePanel !== mode; });
+};
+modeTabs.forEach((tab, index) => {
+  tab.tabIndex = tab.classList.contains('active') ? 0 : -1;
+  tab.addEventListener('click', () => selectMode(tab.dataset.mode));
+  tab.addEventListener('keydown', event => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? modeTabs.length - 1
+        : (index + (event.key === 'ArrowDown' ? 1 : -1) + modeTabs.length) % modeTabs.length;
+    modeTabs[nextIndex].focus();
+    selectMode(modeTabs[nextIndex].dataset.mode);
+  });
+});
 bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><div class="band-actions"><button class="band-action" type="button" data-feedback-band="${index}">FB</button><button class="band-action" type="button" data-mod-band="${index}">MOD</button></div><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
-bands.insertAdjacentHTML('afterbegin', '<div class="filterbank-panel-header"><strong>FILTERBANK</strong><span class="filterbank-panel-actions"><span class="filterbank-action-group filterbank-fb-all-group"></span><span class="filterbank-action-group filterbank-per-channel-group"><span class="filterbank-spread-label">SPREAD</span><button class="per-channel-toggle" type="button" aria-pressed="false">P/CH</button></span></span></div>');
+bands.insertAdjacentHTML('afterbegin', '<div class="filterbank-panel-header"><span class="filterbank-panel-actions"><span class="filterbank-action-group filterbank-fb-all-group"></span><span class="filterbank-action-group filterbank-per-channel-group"><span class="filterbank-spread-label">SPREAD</span><button class="per-channel-toggle" type="button" aria-pressed="false">P/CH</button></span></span></div>');
 document.querySelectorAll('.band-card').forEach((card, index) => {
   card.querySelector('.fader-wrap')?.classList.add('center-fader');
   const channelFader = (channel, label) => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">${label} 0.0 dB</output></div>`;

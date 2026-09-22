@@ -251,7 +251,7 @@
         </header>
         <section class="global-controls" aria-label="Globale Bedienelemente">
           <label class="control-card"
-            ><span class="control-label">INPUT GAIN</span
+            ><span class="control-label">INPUT</span
             ><span class="control-row"
               ><span class="range-hit-area"
                 ><input
@@ -334,6 +334,19 @@
             ></label
           >
         </section>
+        <div class="mode-shell">
+          <nav class="mode-tabs" aria-label="Arbeitsmodi" role="tablist">
+            <button class="mode-tab active" type="button" role="tab" id="mode-tab-filterbank" aria-selected="true" aria-controls="mode-filterbank" data-mode="filterbank"><span>FILTERBANK</span></button>
+            <button class="mode-tab" type="button" role="tab" id="mode-tab-filter" aria-selected="false" aria-controls="mode-filter" data-mode="filter"><span>FILTER</span></button>
+            <button class="mode-tab" type="button" role="tab" id="mode-tab-clock-mod" aria-selected="false" aria-controls="mode-clock-mod" data-mode="clock-mod"><span>CLOCK MOD</span></button>
+            <button class="mode-tab" type="button" role="tab" id="mode-tab-lfo" aria-selected="false" aria-controls="mode-lfo" data-mode="lfo"><span>LFO</span></button>
+            <button class="mode-tab" type="button" role="tab" id="mode-tab-envelope-follower" aria-selected="false" aria-controls="mode-envelope-follower" data-mode="envelope-follower"><span>ENVELOPE FOLLOWER</span></button>
+            <button class="mode-tab" type="button" role="tab" id="mode-tab-dynamic-eq" aria-selected="false" aria-controls="mode-dynamic-eq" data-mode="dynamic-eq"><span>DYNAMIC EQ</span></button>
+            <button class="mode-tab" type="button" role="tab" id="mode-tab-makros" aria-selected="false" aria-controls="mode-makros" data-mode="makros"><span>MAKROS</span></button>
+            <button class="mode-tab" type="button" role="tab" id="mode-tab-presets" aria-selected="false" aria-controls="mode-presets" data-mode="presets"><span>PRESETS / SNAPSHOTS</span></button>
+          </nav>
+          <section class="mode-workspace" aria-label="Workspace">
+            <section class="filterbank-mode-panel" id="mode-filterbank" role="tabpanel" aria-labelledby="mode-tab-filterbank" data-mode-panel="filterbank">
         <section class="fb-workspace" aria-label="FB Workspace">
           <div class="analyzer" aria-label="Statische Pegelübersicht">
             <div class="analyzer-header">
@@ -435,6 +448,16 @@
           </div>
         </section>
         <section class="bands" aria-label="Frequenzbänder"></section>
+            </section>
+            <section class="mode-placeholder" id="mode-filter" role="tabpanel" aria-labelledby="mode-tab-filter" data-mode-panel="filter" hidden><strong>FILTER</strong><span>Filter module – coming later</span></section>
+            <section class="mode-placeholder" id="mode-clock-mod" role="tabpanel" aria-labelledby="mode-tab-clock-mod" data-mode-panel="clock-mod" hidden><strong>CLOCK MOD</strong><span>Clock modulation – coming later</span></section>
+            <section class="mode-placeholder" id="mode-lfo" role="tabpanel" aria-labelledby="mode-tab-lfo" data-mode-panel="lfo" hidden><strong>LFO</strong><span>LFO module – coming later</span></section>
+            <section class="mode-placeholder" id="mode-envelope-follower" role="tabpanel" aria-labelledby="mode-tab-envelope-follower" data-mode-panel="envelope-follower" hidden><strong>ENVELOPE FOLLOWER</strong><span>Envelope follower – coming later</span></section>
+            <section class="mode-placeholder" id="mode-dynamic-eq" role="tabpanel" aria-labelledby="mode-tab-dynamic-eq" data-mode-panel="dynamic-eq" hidden><strong>DYNAMIC EQ</strong><span>Dynamic EQ – coming later</span></section>
+            <section class="mode-placeholder" id="mode-makros" role="tabpanel" aria-labelledby="mode-tab-makros" data-mode-panel="makros" hidden><strong>MAKROS</strong><span>Macro controls – coming later</span></section>
+            <section class="mode-placeholder" id="mode-presets" role="tabpanel" aria-labelledby="mode-tab-presets" data-mode-panel="presets" hidden><strong>PRESETS / SNAPSHOTS</strong><span>Preset management – coming later</span></section>
+          </section>
+        </div>
         <aside
           class="dev-lab-panel"
           id="dev-lab-panel"
