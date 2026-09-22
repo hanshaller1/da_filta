@@ -24,8 +24,11 @@ test.describe('DEV/LAB snapshots', () => {
     await page.locator('[data-feedback-band="0"]').click();
     await page.locator('.fb-all-toggle').click();
     await page.locator('[data-feedback-core]').selectOption('zdf');
-    await page.locator('[data-feedback-topology]').selectOption('common-bus');
-    await page.locator('[data-feedback-tap]').selectOption('post-gain');
+    await page.locator('[data-feedback-topology]').selectOption('isolated-tpt');
+    await page.locator('[data-feedback-tap]').selectOption('pre-gain');
+    await page.locator('[data-wet-model]').selectOption('reference-delta');
+    await page.locator('[data-feedback-all-engine]').selectOption('legacy');
+    await page.locator('[data-feedback-all-level]').selectOption('raw');
     await page.locator('[data-spread-curve]').selectOption('quadratic');
     await page.locator('[data-spread-max-offset-db]').selectOption('9');
     await page.locator('[data-feedback-all-level]').selectOption('sqrt2');
@@ -35,7 +38,7 @@ test.describe('DEV/LAB snapshots', () => {
     const snapshot = saved.slots.A.state;
     expect(saved.version).toBe(1);
     expect(saved.slots.A.name).toBe('ZDF comparison');
-    expect(snapshot).toMatchObject({ feedbackCore: 'zdf', feedbackTopology: 'common-bus', feedbackTap: 'post-gain', spreadCurve: 'quadratic', spreadMaxOffsetDb: 9, feedbackAllLevel: 'sqrt2' });
+    expect(snapshot).toMatchObject({ feedbackCore: 'zdf', feedbackTopology: 'isolated-tpt', feedbackTap: 'pre-gain', wetModel: 'reference-delta', feedbackAllEngine: 'legacy', spreadCurve: 'quadratic', spreadMaxOffsetDb: 9, feedbackAllLevel: 'sqrt2' });
     ['bandGainLeft', 'bandGainRight', 'feedbackBandLeft', 'feedbackBandRight', 'feedbackAllLeft', 'feedbackAllRight', 'resonance', 'inputGainDb', 'dryWet', 'spread', 'volumeDb', 'audioStatus', 'audioError'].forEach(key => expect(snapshot).not.toHaveProperty(key));
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
@@ -44,8 +47,11 @@ test.describe('DEV/LAB snapshots', () => {
   test('load restores DEV/LAB values while preserving normal controls and feedback state', async ({ page }) => {
     await page.goto('/', { waitUntil: 'networkidle' });
     await page.locator('[data-feedback-core]').selectOption('zdf');
-    await page.locator('[data-feedback-topology]').selectOption('common-bus');
-    await page.locator('[data-feedback-tap]').selectOption('post-gain');
+    await page.locator('[data-feedback-topology]').selectOption('isolated-tpt');
+    await page.locator('[data-feedback-tap]').selectOption('pre-gain');
+    await page.locator('[data-wet-model]').selectOption('reference-delta');
+    await page.locator('[data-feedback-all-engine]').selectOption('legacy');
+    await page.locator('[data-feedback-all-level]').selectOption('raw');
     await page.locator('[data-spread-curve]').selectOption('smoothstep');
     await page.locator('[data-spread-max-offset-db]').selectOption('12');
     await page.locator('[data-sweetspot-save="B"]').click();
@@ -59,14 +65,21 @@ test.describe('DEV/LAB snapshots', () => {
     await page.locator('[data-feedback-band="1"]').click();
     await page.locator('.fb-all-toggle').click();
     await page.locator('[data-feedback-core]').selectOption('current');
-    await page.locator('[data-feedback-topology]').selectOption('isolated-tpt');
+    await page.locator('[data-feedback-topology]').selectOption('common-bus');
+    await page.locator('[data-feedback-tap]').selectOption('post-gain');
+    await page.locator('[data-wet-model]').selectOption('filterbank-sum');
+    await page.locator('[data-feedback-all-engine]').selectOption('common-bus');
+    await page.locator('[data-feedback-all-level]').selectOption('sqrt10');
     await page.locator('[data-spread-curve]').selectOption('linear');
     await page.locator('[data-spread-max-offset-db]').selectOption('3');
 
     await page.locator('[data-sweetspot-load="B"]').click();
     await expect(page.locator('[data-feedback-core]')).toHaveValue('zdf');
-    await expect(page.locator('[data-feedback-topology]')).toHaveValue('common-bus');
-    await expect(page.locator('[data-feedback-tap]')).toHaveValue('post-gain');
+    await expect(page.locator('[data-feedback-topology]')).toHaveValue('isolated-tpt');
+    await expect(page.locator('[data-feedback-tap]')).toHaveValue('pre-gain');
+    await expect(page.locator('[data-wet-model]')).toHaveValue('reference-delta');
+    await expect(page.locator('[data-feedback-all-engine]')).toHaveValue('legacy');
+    await expect(page.locator('[data-feedback-all-level]')).toHaveValue('raw');
     await expect(page.locator('[data-spread-curve]')).toHaveValue('smoothstep');
     await expect(page.locator('[data-spread-max-offset-db]')).toHaveValue('12');
     await expect(page.locator(normalControls.resonance)).toHaveValue('0.82');

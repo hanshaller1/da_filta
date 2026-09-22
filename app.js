@@ -138,9 +138,9 @@ let clearAnalyzerHover = () => {};
 let hideAnalyzerDetails = () => {};
 const analyzerAxisX = document.querySelector('.chart-grid .axis-x');
 if (analyzer && analyzerAxisX) {
-  analyzerAxisX.replaceChildren(...BAND_DEFINITIONS.map(band => {
+  analyzerAxisX.replaceChildren(...BAND_DEFINITIONS.map((band, index) => {
     const label = document.createElement('span');
-    label.textContent = band.label;
+    label.textContent = index + 1;
     return label;
   }));
   analyzerFooter = document.createElement('div');
@@ -884,6 +884,11 @@ const feedbackAllLevelSelect = addDevLabSelector('DEV FB ALL LEVEL', 'data-feedb
   ['fortieth', '1 / 40'],
   ['eightieth', '1 / 80']
 ]);
+if (wetModelSelect) wetModelSelect.value = 'filterbank-sum';
+if (feedbackTopologySelect) feedbackTopologySelect.value = 'common-bus';
+if (feedbackTapSelect) feedbackTapSelect.value = 'post-gain';
+if (feedbackAllEngineSelect) feedbackAllEngineSelect.value = 'common-bus';
+if (feedbackAllLevelSelect) feedbackAllLevelSelect.value = 'sqrt10';
 const feedbackAllAmountInput = addDevLabNumberControl({
   label: 'FB ALL AMOUNT', attribute: 'data-feedback-all-amount', min: 0, max: 100, step: 1, suffix: '%',
   tooltip: 'Skaliert ausschließlich die Stärke des gemeinsamen FB-ALL/MAIN-Feedback-Loops. 100 % entspricht dem bisherigen Verhalten. LOCAL-Feedback bleibt unverändert.',

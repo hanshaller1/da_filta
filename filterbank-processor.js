@@ -987,7 +987,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const localGain = this.maxFeedbackGain * signedResonance;
     const mainCurveGain = this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
       ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : this.resonance * this.resonance;
-    const mainGain = Math.sign(this.resonance) * this.maxFeedbackGain * mainCurveGain;
+    // Keep FB ALL AMOUNT inside the actual coupled equation: it scales the
+    // MAIN loop gain before the shared nonlinear return, never LOCAL.
+    const mainGain = Math.sign(this.resonance) * this.maxFeedbackGain * mainCurveGain
+      * (this.feedbackAllAmount / 100);
     const localConstantCeiling = this.feedbackTopology === 'common-bus'
       && this.commonBusSaturationMode === 'constant-ceiling';
     const localCeiling = localConstantCeiling ? this.commonBusCeiling : 1;

@@ -55,11 +55,11 @@
       this.spreadCurve = 'linear';
       this.spreadMaxOffsetDb = 6;
       this.positiveResonanceEngine = 'tpt';
-      this.feedbackTopology = 'isolated-tpt'; this.feedbackCore = 'current'; this.localLoopTuning = 'current'; this.feedbackTap = 'pre-gain'; this.wetModel = 'reference-delta';
+      this.feedbackTopology = 'common-bus'; this.feedbackCore = 'current'; this.localLoopTuning = 'current'; this.feedbackTap = 'post-gain'; this.wetModel = 'filterbank-sum';
       this.commonBusSaturationMode = 'current'; this.commonBusDrive = 1; this.commonBusCeiling = 1;
-      this.feedbackAllEngine = 'legacy'; this.feedbackAllSource = 'post-gain-sum';
+      this.feedbackAllEngine = 'common-bus'; this.feedbackAllSource = 'post-gain-sum';
       this.postGainFeedbackWeight = 'current';
-      this.feedbackAllLevel = 'raw';
+      this.feedbackAllLevel = 'sqrt10';
       this.feedbackAllAmount = 100;
       this.feedbackAllResonanceCurve = 'current';
       this.feedbackAllSaturationReturn = 'current';

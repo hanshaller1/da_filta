@@ -73,7 +73,13 @@ const renderPerBandProbe = async page => page.evaluate(async () => {
   for (let i = 0; i < perBand.output.length; i += 1) mainRequestDifference = Math.max(mainRequestDifference, Math.abs(perBand.output[i] - perBandWithMainRequested.output[i]));
   const perBandWithMain100 = await render({ active: [3], tap: 'post-gain', gainLeft: [[3, 50]], feedbackAll: true, feedbackAllAmount: 100 });
   const perBandWithMain0 = await render({ active: [3], tap: 'post-gain', gainLeft: [[3, 50]], feedbackAll: true, feedbackAllAmount: 0 });
-  const mainAmounts = await Promise.all([25, 50, 75].map(feedbackAllAmount => render({ active: [], feedbackAll: true, sourceBand: 5, feedbackAllAmount })));
+  // This verifies the solved shared return and rendered audio, rather than
+  // trusting the diagnostic gain alone.
+  const mainAmounts = await Promise.all([0, 1, 10, 25, 50, 75, 100]
+    .map(feedbackAllAmount => render({ active: [], feedbackAll: true, sourceBand: 5, feedbackAllAmount })));
+  const mainAmountOutputDifferences = mainAmounts.map(item => item.output.reduce(
+    (maximum, value, index) => Math.max(maximum, Math.abs(value - mainAmounts[0].output[index])), 0
+  ));
   const liveAmount = await render({ active: [3], feedbackAll: true, event: { time: .14, message: { type: 'set-feedback-all-amount', value: 0 } } });
   let amount100Difference = 0; let amount0LocalDifference = 0;
   for (let i = 0; i < perBand.output.length; i += 1) {
@@ -107,7 +113,7 @@ const renderPerBandProbe = async page => page.evaluate(async () => {
   const ceilingMain = await render({ active: [3], feedbackAll: true, saturationMode: 'constant-ceiling', commonBusDrive: 8, commonBusCeiling: .5 });
 
   return {
-    oneBandDifference, mainRequestDifference, amount100Difference, amount0LocalDifference,
+    oneBandDifference, mainRequestDifference, amount100Difference, amount0LocalDifference, mainAmountOutputDifferences,
     unified, perBand, perBandWithMainRequested, foreignLow, foreignHigh, preLow, preHigh, postLow, postHigh, multiple, singleBand2, singleBand4, singleBand8, neutral, negative, stereo,
     mainOnly, multiWithMain, foreignWithMainLow, foreignWithMainHigh, mainPre, mainPost, negativeMain, mainLevels, specialMain, ceilingMain, perBandWithMain100, perBandWithMain0, mainAmounts, liveAmount
   };
@@ -127,8 +133,15 @@ test('ZDF PER-BAND keeps LOCAL loops private while MAIN is a shared ZDF return',
   expect(report.perBandWithMain0.diagnostics.zdfPerBandMainReturn).toBe(0);
   expect(report.perBandWithMain0.diagnostics.zdfPerBandLocalReturnPeak).toEqual(report.perBand.diagnostics.zdfPerBandLocalReturnPeak);
   expect(report.perBandWithMain100.diagnostics.feedbackAllAmount).toBe(100);
-  expect(report.mainAmounts.map(item => item.diagnostics.feedbackAllAmount)).toEqual([25, 50, 75]);
-  expect(report.mainAmounts.map(item => item.diagnostics.mainFeedbackGain)).toEqual([.3125, .625, .9375]);
+  expect(report.mainAmounts.map(item => item.diagnostics.feedbackAllAmount)).toEqual([0, 1, 10, 25, 50, 75, 100]);
+  expect(report.mainAmounts.map(item => item.diagnostics.mainFeedbackGain)).toEqual([0, .0125, .125, .3125, .625, .9375, 1.25]);
+  expect(report.mainAmounts[0].diagnostics.zdfPerBandMainReturnPeak).toBe(0);
+  for (let index = 1; index < report.mainAmounts.length; index += 1) {
+    expect(Math.abs(report.mainAmounts[index].diagnostics.zdfPerBandMainReturnPeak)).toBeGreaterThan(0);
+    expect(report.mainAmountOutputDifferences[index]).toBeGreaterThan(1e-8);
+    expect(Math.abs(report.mainAmounts[index].diagnostics.zdfPerBandMainReturnPeak
+      - report.mainAmounts[index - 1].diagnostics.zdfPerBandMainReturnPeak)).toBeGreaterThan(1e-10);
+  }
   expect(report.liveAmount.diagnosticPackets.some(packet => packet.feedbackAllAmountTarget === 0)).toBe(true);
   expect(report.liveAmount.diagnosticPackets.every(packet => Number.isFinite(packet.feedbackAllAmount))).toBe(true);
   expect(report.perBand.diagnostics.feedbackCoreEffective).toBe('zdf-per-band');

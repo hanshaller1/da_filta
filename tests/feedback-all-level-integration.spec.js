@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('DEV FB ALL LEVEL, AMOUNT and POST GAIN FB WEIGHT survive the UI, AudioEngine, Filterbank, and Worklet handoff', async ({ page }) => {
+test('DEV FB ALL startup defaults, AMOUNT and POST GAIN FB WEIGHT survive the UI, AudioEngine, Filterbank, and Worklet handoff', async ({ page }) => {
   await page.addInitScript(() => {
     window.__feedbackAllLevelTestState = { nodes: [] };
     const mediaDevices = navigator.mediaDevices || {};
@@ -61,7 +61,7 @@ test('DEV FB ALL LEVEL, AMOUNT and POST GAIN FB WEIGHT survive the UI, AudioEngi
   const initialLevel = await page.evaluate(() => window.__feedbackAllLevelTestState.nodes
     .find(node => node.name === window.Filterbank.PROCESSOR_NAME)
     .options.processorOptions.feedbackAllLevel);
-  expect(initialLevel).toBe('raw');
+  expect(initialLevel).toBe('sqrt10');
 
   const initialWeight = await page.evaluate(() => window.__feedbackAllLevelTestState.nodes
     .find(node => node.name === window.Filterbank.PROCESSOR_NAME)
@@ -71,6 +71,26 @@ test('DEV FB ALL LEVEL, AMOUNT and POST GAIN FB WEIGHT survive the UI, AudioEngi
     .find(node => node.name === window.Filterbank.PROCESSOR_NAME)
     .options.processorOptions.feedbackAllAmount);
   expect(initialAmount).toBe(100);
+  expect(await page.locator('[data-wet-model]')).toHaveValue('filterbank-sum');
+  expect(await page.locator('[data-feedback-topology]')).toHaveValue('common-bus');
+  expect(await page.locator('[data-feedback-tap]')).toHaveValue('post-gain');
+  expect(await page.locator('[data-feedback-all-engine]')).toHaveValue('common-bus');
+  expect(await page.locator('[data-feedback-all-level]')).toHaveValue('sqrt10');
+  const initialDevDefaults = await page.evaluate(() => {
+    const node = window.__feedbackAllLevelTestState.nodes.find(candidate => candidate.name === window.Filterbank.PROCESSOR_NAME);
+    const { processorOptions } = node.options;
+    return {
+      wetModel: processorOptions.wetModel,
+      feedbackTopology: processorOptions.feedbackTopology,
+      feedbackTap: processorOptions.feedbackTap,
+      feedbackAllEngine: processorOptions.feedbackAllEngine,
+      feedbackAllLevel: processorOptions.feedbackAllLevel
+    };
+  });
+  expect(initialDevDefaults).toEqual({
+    wetModel: 'filterbank-sum', feedbackTopology: 'common-bus', feedbackTap: 'post-gain',
+    feedbackAllEngine: 'common-bus', feedbackAllLevel: 'sqrt10'
+  });
   const initialWorkletNodeCount = await page.evaluate(() => window.__feedbackAllLevelTestState.nodes.length);
   for (const value of ['current', 'soft-knee']) {
     await page.locator('[data-post-gain-feedback-weight]').selectOption(value);
