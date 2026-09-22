@@ -61,6 +61,8 @@
       this.postGainFeedbackWeight = 'current';
       this.feedbackAllLevel = 'sqrt10';
       this.feedbackAllAmount = 100;
+      this.negativeResonanceMode = 'signed'; this.negativeResonanceCurve = 'same-as-positive'; this.negativeResonanceAmount = 100;
+      this.negativeResonanceLocal = true; this.negativeResonanceMain = true; this.negativeResonancePhase = 90;
       this.feedbackAllResonanceCurve = 'current';
       this.feedbackAllSaturationReturn = 'current';
       this.dryWet = 50;
@@ -236,6 +238,12 @@
     setFeedbackAllAmount(value) { this.feedbackAllAmount = Number.isFinite(Number(value)) ? Math.min(100, Math.max(0, Number(value))) : 100; this.filterbank?.setFeedbackAllAmount(this.feedbackAllAmount); return this.feedbackAllAmount; }
     setFeedbackAllResonanceCurve(value) { this.feedbackAllResonanceCurve = value === 'soft-knee' ? 'soft-knee' : 'current'; this.filterbank?.setFeedbackAllResonanceCurve(this.feedbackAllResonanceCurve); return this.feedbackAllResonanceCurve; }
     setFeedbackAllSaturationReturn(value) { this.feedbackAllSaturationReturn = value === 'drive-4-return-0.2' ? 'drive-4-return-0.2' : 'current'; this.filterbank?.setFeedbackAllSaturationReturn(this.feedbackAllSaturationReturn); return this.feedbackAllSaturationReturn; }
+    setNegativeResonanceMode(value) { this.negativeResonanceMode = ['damping', 'anti-resonance', 'phase'].includes(value) ? value : 'signed'; this.filterbank?.setNegativeResonanceMode(this.negativeResonanceMode); return this.negativeResonanceMode; }
+    setNegativeResonanceCurve(value) { this.negativeResonanceCurve = ['linear', 'squared', 'soft-knee'].includes(value) ? value : 'same-as-positive'; this.filterbank?.setNegativeResonanceCurve(this.negativeResonanceCurve); return this.negativeResonanceCurve; }
+    setNegativeResonanceAmount(value) { this.negativeResonanceAmount = Number.isFinite(Number(value)) ? Math.min(200, Math.max(0, Number(value))) : 100; this.filterbank?.setNegativeResonanceAmount(this.negativeResonanceAmount); return this.negativeResonanceAmount; }
+    setNegativeResonanceLocal(value) { this.negativeResonanceLocal = Boolean(value); this.filterbank?.setNegativeResonanceLocal(this.negativeResonanceLocal); return this.negativeResonanceLocal; }
+    setNegativeResonanceMain(value) { this.negativeResonanceMain = Boolean(value); this.filterbank?.setNegativeResonanceMain(this.negativeResonanceMain); return this.negativeResonanceMain; }
+    setNegativeResonancePhase(value) { this.negativeResonancePhase = Number.isFinite(Number(value)) ? Math.min(180, Math.max(0, Number(value))) : 90; this.filterbank?.setNegativeResonancePhase(this.negativeResonancePhase); return this.negativeResonancePhase; }
 
     setBandBaseGain(channel, index, value) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
@@ -319,6 +327,7 @@
         , feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
         , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
+        , negativeResonanceMode: this.negativeResonanceMode, negativeResonanceCurve: this.negativeResonanceCurve, negativeResonanceAmount: this.negativeResonanceAmount, negativeResonanceLocal: this.negativeResonanceLocal, negativeResonanceMain: this.negativeResonanceMain, negativeResonancePhase: this.negativeResonancePhase
         , onDiagnostics: this.onDiagnostics
       };
     }
@@ -384,6 +393,12 @@
       this.setFeedbackAllAmount(snapshot?.feedbackAllAmount ?? this.feedbackAllAmount);
       this.setFeedbackAllResonanceCurve(snapshot?.feedbackAllResonanceCurve ?? this.feedbackAllResonanceCurve);
       this.setFeedbackAllSaturationReturn(snapshot?.feedbackAllSaturationReturn ?? this.feedbackAllSaturationReturn);
+      this.setNegativeResonanceMode(snapshot?.negativeResonanceMode ?? this.negativeResonanceMode);
+      this.setNegativeResonanceCurve(snapshot?.negativeResonanceCurve ?? this.negativeResonanceCurve);
+      this.setNegativeResonanceAmount(snapshot?.negativeResonanceAmount ?? this.negativeResonanceAmount);
+      this.setNegativeResonanceLocal(snapshot?.negativeResonanceLocal ?? this.negativeResonanceLocal);
+      this.setNegativeResonanceMain(snapshot?.negativeResonanceMain ?? this.negativeResonanceMain);
+      this.setNegativeResonancePhase(snapshot?.negativeResonancePhase ?? this.negativeResonancePhase);
       if (this.filterbank) this.filterbank.applyState(this.getFilterbankState());
     }
 

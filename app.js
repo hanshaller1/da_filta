@@ -83,7 +83,7 @@ const mastheadThemeEditor = document.querySelector('.theme-editor');
 if (mastheadDevLab && mastheadThemeEditor && devLabToggle) mastheadDevLab.insertBefore(mastheadThemeEditor, devLabToggle);
 const devLabControls = document.querySelector('.dev-lab-panel .dev-lab-controls');
 const devLabGroups = new Map();
-[['input', 'INPUT'], ['keyboard', 'KEYBOARD'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
+[['input', 'INPUT'], ['keyboard', 'KEYBOARD'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['negative-resonance', 'NEGATIVE RESONANCE'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
   const group = document.createElement('section');
   group.className = 'dev-lab-group';
   group.dataset.devLabGroup = value;
@@ -777,7 +777,9 @@ const addDevLabSelector = (label, attribute, options) => {
     'data-post-gain-feedback-weight': 'main',
     'data-feedback-all-level': 'main',
     'data-feedback-all-resonance-curve': 'main',
-    'data-feedback-all-saturation-return': 'main'
+    'data-feedback-all-saturation-return': 'main',
+    'data-negative-resonance-mode': 'negative-resonance', 'data-negative-resonance-curve': 'negative-resonance',
+    'data-negative-resonance-local': 'negative-resonance', 'data-negative-resonance-main': 'negative-resonance'
   }[attribute] ?? 'resonator');
   if (!container) return null;
   const control = document.createElement('label');
@@ -900,6 +902,18 @@ const feedbackAllAmountInput = addDevLabNumberControl({
 });
 const feedbackAllResonanceCurveSelect = addDevLabSelector('DEV RESONANCE CURVE', 'data-feedback-all-resonance-curve', [['current', 'CURRENT'], ['soft-knee', 'SOFT KNEE']]);
 const feedbackAllSaturationReturnSelect = addDevLabSelector('DEV MAIN SAT/RETURN', 'data-feedback-all-saturation-return', [['current', 'CURRENT'], ['drive-4-return-0.2', 'DRIVE 4 / RETURN 0.2']]);
+const negativeResonanceModeSelect = addDevLabSelector('NEG MODE', 'data-negative-resonance-mode', [['signed', 'SIGNED'], ['damping', 'DAMPING'], ['anti-resonance', 'ANTI-RESONANCE'], ['phase', 'PHASE']]);
+const negativeResonanceCurveSelect = addDevLabSelector('NEG CURVE', 'data-negative-resonance-curve', [['same-as-positive', 'SAME AS POSITIVE'], ['linear', 'LINEAR'], ['squared', 'SQUARED'], ['soft-knee', 'SOFT KNEE']]);
+const negativeResonanceAmountInput = addDevLabNumberControl({ label: 'NEG AMOUNT', attribute: 'data-negative-resonance-amount', min: 0, max: 200, step: 1, suffix: '%', tooltip: 'Stärke des negativen Feedback-Experiments; kein Output-Gain.', value: () => audioEngine?.negativeResonanceAmount ?? 100, onChange: value => audioEngine?.setNegativeResonanceAmount(value), group: 'negative-resonance' });
+const negativeResonanceLocalSelect = addDevLabSelector('NEG LOCAL', 'data-negative-resonance-local', [['on', 'ON'], ['off', 'OFF']]);
+const negativeResonanceMainSelect = addDevLabSelector('NEG MAIN', 'data-negative-resonance-main', [['on', 'ON'], ['off', 'OFF']]);
+const negativeResonancePhaseInput = addDevLabNumberControl({ label: 'NEG PHASE', attribute: 'data-negative-resonance-phase', min: 0, max: 180, step: 1, suffix: '°', tooltip: 'PHASE-Experiment: Zielstärke der stabilen negativen Phaseninteraktion.', value: () => audioEngine?.negativeResonancePhase ?? 90, onChange: value => audioEngine?.setNegativeResonancePhase(value), group: 'negative-resonance' });
+const updateNegativeResonanceRelevance = () => { if (negativeResonancePhaseInput) negativeResonancePhaseInput.disabled = negativeResonanceModeSelect?.value !== 'phase'; };
+negativeResonanceModeSelect?.addEventListener('change', event => { audioEngine?.setNegativeResonanceMode(event.target.value); updateNegativeResonanceRelevance(); });
+negativeResonanceCurveSelect?.addEventListener('change', event => audioEngine?.setNegativeResonanceCurve(event.target.value));
+negativeResonanceLocalSelect?.addEventListener('change', event => audioEngine?.setNegativeResonanceLocal(event.target.value === 'on'));
+negativeResonanceMainSelect?.addEventListener('change', event => audioEngine?.setNegativeResonanceMain(event.target.value === 'on'));
+updateNegativeResonanceRelevance();
 const inputPreampStageSelect = addDevLabSelector('DEV INPUT STAGE', 'data-input-preamp-stage', [
   ['linear', 'LINEAR'],
   ['silk', 'SILK'],
@@ -1117,6 +1131,12 @@ const DEV_LAB_HELP = {
     values: [['CURRENT', 'Unveraendert: tanh(K * S).'], ['DRIVE 4 / RETURN 0.2', 'Vierfacher Drive vor tanh, danach 0.2 Return-Level; Kleinsignal-Steigung 0.8.']],
     default: 'CURRENT', note: 'Nur ein MAIN-Return-A/B-Test; keine Topologie-, Pegel- oder Wet-Modell-Aenderung.'
   },
+  'data-negative-resonance-mode': { title: 'NEG MODE', what: 'Wählt den ausschließlich bei negativer Resonance aktiven Feedback-Versuch.', default: 'SIGNED' },
+  'data-negative-resonance-curve': { title: 'NEG CURVE', what: 'Normierte Magnitude für negative Resonance.', default: 'SAME AS POSITIVE' },
+  'data-negative-resonance-amount': { title: 'NEG AMOUNT', what: 'Skaliert die negative Loop-Stärke von 0 bis 200 %, nicht den Output.', default: '100 %' },
+  'data-negative-resonance-local': { title: 'NEG LOCAL', what: 'Schaltet nur den negativen LOCAL-Loop.', default: 'ON' },
+  'data-negative-resonance-main': { title: 'NEG MAIN', what: 'Schaltet nur den negativen gemeinsamen MAIN-Loop.', default: 'ON' },
+  'data-negative-resonance-phase': { title: 'NEG PHASE', what: 'Steuert ausschließlich den PHASE-Modus.', default: '90°' },
   'data-positive-resonance-engine': {
     title: 'DEV RES ENGINE', what: 'Wählt die Engine des positiven lokalen Resonators.',
     scope: 'Nur positive lokale Resonance außerhalb des COMMON-BUS-Modus; negative Resonance und FB ALL bleiben im Legacy-Pfad.',
@@ -1131,6 +1151,7 @@ const DEV_LAB_GROUP_HELP = {
   filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-spread-curve', 'data-spread-max-offset-db', 'data-wet-model'],
   'local-feedback': ['data-feedback-topology', 'data-feedback-core', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
   main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-post-gain-feedback-weight', 'data-feedback-all-level', 'data-feedback-all-amount', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
+  'negative-resonance': ['data-negative-resonance-mode', 'data-negative-resonance-curve', 'data-negative-resonance-amount', 'data-negative-resonance-local', 'data-negative-resonance-main', 'data-negative-resonance-phase'],
   resonator: ['data-positive-resonance-audition', 'data-positive-resonance-drive', 'data-positive-resonance-damping-floor', 'data-positive-resonance-output', 'data-positive-resonance-latency', 'data-positive-resonance-curve', 'data-positive-resonance-engine']
 };
 const RESPONSE_DEV_LAB_HELP = [
@@ -2206,6 +2227,9 @@ const syncUiFromAudioState = snapshot => {
     [feedbackAllSourceSelect, snapshot.feedbackAllSource], [postGainFeedbackWeightSelect, snapshot.postGainFeedbackWeight],
     [feedbackAllLevelSelect, snapshot.feedbackAllLevel], [feedbackAllResonanceCurveSelect, snapshot.feedbackAllResonanceCurve],
     [feedbackAllSaturationReturnSelect, snapshot.feedbackAllSaturationReturn], [resonanceEngineSelect, snapshot.positiveResonanceEngine],
+    [negativeResonanceModeSelect, snapshot.negativeResonanceMode], [negativeResonanceCurveSelect, snapshot.negativeResonanceCurve],
+    [negativeResonanceLocalSelect, snapshot.negativeResonanceLocal === undefined ? undefined : snapshot.negativeResonanceLocal ? 'on' : 'off'],
+    [negativeResonanceMainSelect, snapshot.negativeResonanceMain === undefined ? undefined : snapshot.negativeResonanceMain ? 'on' : 'off'],
     [positiveResonanceAuditionSelect, snapshot.positiveResonanceAuditionGain], [positiveResonanceDriveSelect, snapshot.positiveResonanceDrive],
     [positiveResonanceDampingFloorSelect, snapshot.positiveResonanceDampingFloor], [positiveResonanceOutputSelect, snapshot.positiveResonanceOutputMode],
     [positiveResonanceLatencySelect, snapshot.positiveResonanceLatencyMode], [positiveResonanceCurveSelect, snapshot.positiveResonanceCurve]
@@ -2219,6 +2243,8 @@ const syncUiFromAudioState = snapshot => {
   };
   selectValues.forEach(([select, value]) => setSelectValue(select, value));
   if (feedbackAllAmountInput && snapshot.feedbackAllAmount !== undefined) feedbackAllAmountInput.value = String(snapshot.feedbackAllAmount);
+  if (negativeResonanceAmountInput && snapshot.negativeResonanceAmount !== undefined) negativeResonanceAmountInput.value = String(snapshot.negativeResonanceAmount);
+  if (negativeResonancePhaseInput && snapshot.negativeResonancePhase !== undefined) negativeResonancePhaseInput.value = String(snapshot.negativeResonancePhase);
   setSelectValue(inputPreampStageSelect, snapshot.inputPreampStage);
   if (inputCharacterAmountSlider && snapshot.inputCharacterAmount !== undefined) {
     state.inputCharacterAmount = Number(snapshot.inputCharacterAmount);
@@ -2228,6 +2254,7 @@ const syncUiFromAudioState = snapshot => {
   }
   updateInputCharacterRelevance();
   updateLocalLoopTuningRelevance();
+  updateNegativeResonanceRelevance();
   renderBandSliderValues();
 };
 // This is the complete, explicit DEV/LAB snapshot contract. Normal app state
@@ -2257,6 +2284,12 @@ const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
   ['feedbackAllAmount', value => audioEngine.setFeedbackAllAmount(value)],
   ['feedbackAllResonanceCurve', value => audioEngine.setFeedbackAllResonanceCurve(value)],
   ['feedbackAllSaturationReturn', value => audioEngine.setFeedbackAllSaturationReturn(value)],
+  ['negativeResonanceMode', value => audioEngine.setNegativeResonanceMode(value)],
+  ['negativeResonanceCurve', value => audioEngine.setNegativeResonanceCurve(value)],
+  ['negativeResonanceAmount', value => audioEngine.setNegativeResonanceAmount(value)],
+  ['negativeResonanceLocal', value => audioEngine.setNegativeResonanceLocal(value)],
+  ['negativeResonanceMain', value => audioEngine.setNegativeResonanceMain(value)],
+  ['negativeResonancePhase', value => audioEngine.setNegativeResonancePhase(value)],
   ['positiveResonanceAuditionGain', value => audioEngine.setPositiveResonanceAuditionGain(value)],
   ['positiveResonanceDrive', value => audioEngine.setPositiveResonanceDrive(value)],
   ['positiveResonanceDampingFloor', value => audioEngine.setPositiveResonanceDampingFloor(value)],

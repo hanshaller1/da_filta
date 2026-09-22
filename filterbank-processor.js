@@ -44,6 +44,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.feedbackAllAmountTarget = this.feedbackAllAmount;
     this.feedbackAllResonanceCurve = this.readFeedbackAllResonanceCurve(processorOptions.feedbackAllResonanceCurve);
     this.feedbackAllSaturationReturn = this.readFeedbackAllSaturationReturn(processorOptions.feedbackAllSaturationReturn);
+    this.negativeResonanceMode = this.readNegativeResonanceMode(processorOptions.negativeResonanceMode);
+    this.negativeResonanceCurve = this.readNegativeResonanceCurve(processorOptions.negativeResonanceCurve);
+    this.negativeResonanceAmount = this.readNegativeResonanceAmount(processorOptions.negativeResonanceAmount);
+    this.negativeResonanceLocal = processorOptions.negativeResonanceLocal !== false;
+    this.negativeResonanceMain = processorOptions.negativeResonanceMain !== false;
+    this.negativeResonancePhase = this.readNegativeResonancePhase(processorOptions.negativeResonancePhase);
     this.maxFeedbackGain = this.readPositiveOption(processorOptions.maxFeedbackGain, 1.25);
     this.maxAuditionGain = this.readPositiveOption(processorOptions.maxAuditionGain, 0.25);
     this.resonatorDampingFloor = this.readResonatorDampingFloor(processorOptions.resonatorDampingFloor);
@@ -274,6 +280,26 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   }
   readFeedbackAllResonanceCurve(value) { return value === 'soft-knee' ? 'soft-knee' : 'current'; }
   readFeedbackAllSaturationReturn(value) { return value === 'drive-4-return-0.2' ? 'drive-4-return-0.2' : 'current'; }
+  readNegativeResonanceMode(value) { return ['damping', 'anti-resonance', 'phase'].includes(value) ? value : 'signed'; }
+  readNegativeResonanceCurve(value) { return ['linear', 'squared', 'soft-knee'].includes(value) ? value : 'same-as-positive'; }
+  readNegativeResonanceAmount(value) { const amount = Number(value); return Number.isFinite(amount) ? Math.min(200, Math.max(0, amount)) : 100; }
+  readNegativeResonancePhase(value) { const phase = Number(value); return Number.isFinite(phase) ? Math.min(180, Math.max(0, phase)) : 90; }
+  negativeResonanceMagnitude() {
+    const u = Math.min(1, Math.max(0, -this.resonance));
+    const curve = this.negativeResonanceCurve;
+    const base = curve === 'linear' ? u : curve === 'soft-knee' ? this.feedbackAllSoftKneeGain(u) : u * u;
+    return base * (this.negativeResonanceAmount / 100);
+  }
+  negativeFeedbackGain(scope) {
+    if (this.resonance >= 0 || (scope === 'local' ? !this.negativeResonanceLocal : !this.negativeResonanceMain)) return 0;
+    const modeScale = this.negativeResonanceMode === 'damping' ? 0.5
+      : this.negativeResonanceMode === 'anti-resonance' ? 1.5 : 1;
+    // PHASE remains a negative loop; the phase control changes its stable
+    // blend strength without touching positive processing.
+    const phaseScale = this.negativeResonanceMode === 'phase'
+      ? Math.cos(this.negativeResonancePhase * Math.PI / 360) : 1;
+    return -this.maxFeedbackGain * this.negativeResonanceMagnitude() * modeScale * phaseScale;
+  }
   feedbackAllLevelScale() {
     return this.feedbackAllLevel === 'sqrt2' ? 1 / Math.sqrt(2)
       : this.feedbackAllLevel === 'half' ? 0.5
@@ -636,7 +662,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       mainB += mainWeight * b;
     }
     const signedResonance = Math.sign(this.resonance) * this.resonance * this.resonance;
-    if (signedResonance === 0 || (localA === 0 && mainA === 0)) {
+    const localGain = this.resonance < 0 ? this.negativeFeedbackGain('local') : this.maxFeedbackGain * signedResonance;
+    if ((localGain === 0 && (this.resonance >= 0 || this.negativeFeedbackGain('main') === 0)) || (localA === 0 && mainA === 0)) {
       this.zdfReturn[channel] = 0;
       this.zdfLocalReturn[channel] = 0;
       this.zdfMainReturn[channel] = 0;
@@ -646,13 +673,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       this.zdfSolverResidual[channel] = 0;
       return 0;
     }
-    const localGain = this.maxFeedbackGain * signedResonance;
     const mainCurveGain = this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
       ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : this.resonance * this.resonance;
     // FB ALL AMOUNT is intentionally inside the implicit MAIN loop, before
     // its saturation. LOCAL gain and all LOCAL equations remain untouched.
-    const mainGain = Math.sign(this.resonance) * this.maxFeedbackGain * mainCurveGain
-      * (this.feedbackAllAmount / 100);
+    const mainGain = this.resonance < 0 ? this.negativeFeedbackGain('main') * (this.feedbackAllAmount / 100)
+      : Math.sign(this.resonance) * this.maxFeedbackGain * mainCurveGain * (this.feedbackAllAmount / 100);
     const localConstantCeiling = this.feedbackTopology === 'common-bus'
       && this.commonBusSaturationMode === 'constant-ceiling';
     const localCeiling = localConstantCeiling ? this.commonBusCeiling : 1;
@@ -734,7 +760,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const residualsByBand = this.zdfPerBandSolverResiduals[channel];
     const fallbacksByBand = this.zdfPerBandSolverFallbackCounts[channel];
     const signedResonance = Math.sign(this.resonance) * this.resonance * this.resonance;
-    const feedbackGain = this.maxFeedbackGain * signedResonance;
+    const feedbackGain = this.resonance < 0 ? this.negativeFeedbackGain('local') : this.maxFeedbackGain * signedResonance;
     const constantCeiling = this.feedbackTopology === 'common-bus'
       && this.commonBusSaturationMode === 'constant-ceiling';
     const ceiling = constantCeiling ? this.commonBusCeiling : 1;
@@ -749,7 +775,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const gate = gates[band];
       const audibleGain = 1 + gains[band];
       const weight = gate * (this.feedbackTap === 'post-gain' ? audibleGain : 1);
-      if (Math.abs(signedResonance) <= COMMON_BUS_RESONANCE_EPSILON || weight <= COMMON_BUS_RESONANCE_EPSILON) {
+      if (Math.abs(feedbackGain) <= COMMON_BUS_RESONANCE_EPSILON || weight <= COMMON_BUS_RESONANCE_EPSILON) {
         returns[band] = 0;
         buses[band] = 0;
         iterationsByBand[band] = 0;
@@ -984,13 +1010,13 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const buses = this.zdfPerBandLocalBuses[channel];
     const workspace = this.zdfPerBandWorkspaces[channel];
     const signedResonance = Math.sign(this.resonance) * this.resonance * this.resonance;
-    const localGain = this.maxFeedbackGain * signedResonance;
+    const localGain = this.resonance < 0 ? this.negativeFeedbackGain('local') : this.maxFeedbackGain * signedResonance;
     const mainCurveGain = this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
       ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : this.resonance * this.resonance;
     // Keep FB ALL AMOUNT inside the actual coupled equation: it scales the
     // MAIN loop gain before the shared nonlinear return, never LOCAL.
-    const mainGain = Math.sign(this.resonance) * this.maxFeedbackGain * mainCurveGain
-      * (this.feedbackAllAmount / 100);
+    const mainGain = this.resonance < 0 ? this.negativeFeedbackGain('main') * (this.feedbackAllAmount / 100)
+      : Math.sign(this.resonance) * this.maxFeedbackGain * mainCurveGain * (this.feedbackAllAmount / 100);
     const localConstantCeiling = this.feedbackTopology === 'common-bus'
       && this.commonBusSaturationMode === 'constant-ceiling';
     const localCeiling = localConstantCeiling ? this.commonBusCeiling : 1;
@@ -1485,6 +1511,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   }
   setFeedbackAllResonanceCurve(value) { this.feedbackAllResonanceCurve = this.readFeedbackAllResonanceCurve(value); }
   setFeedbackAllSaturationReturn(value) { this.feedbackAllSaturationReturn = this.readFeedbackAllSaturationReturn(value); }
+  setNegativeResonanceMode(value) { this.negativeResonanceMode = this.readNegativeResonanceMode(value); }
+  setNegativeResonanceCurve(value) { this.negativeResonanceCurve = this.readNegativeResonanceCurve(value); }
+  setNegativeResonanceAmount(value) { this.negativeResonanceAmount = this.readNegativeResonanceAmount(value); }
+  setNegativeResonanceLocal(value) { this.negativeResonanceLocal = Boolean(value); }
+  setNegativeResonanceMain(value) { this.negativeResonanceMain = Boolean(value); }
+  setNegativeResonancePhase(value) { this.negativeResonancePhase = this.readNegativeResonancePhase(value); }
 
   applyState(data) {
     const leftControls = this.readControls(data.bandGainLeft);
@@ -1531,6 +1563,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.feedbackAllAmount !== undefined) this.setFeedbackAllAmount(data.feedbackAllAmount, true);
     if (data.feedbackAllResonanceCurve !== undefined) this.setFeedbackAllResonanceCurve(data.feedbackAllResonanceCurve);
     if (data.feedbackAllSaturationReturn !== undefined) this.setFeedbackAllSaturationReturn(data.feedbackAllSaturationReturn);
+    if (data.negativeResonanceMode !== undefined) this.setNegativeResonanceMode(data.negativeResonanceMode);
+    if (data.negativeResonanceCurve !== undefined) this.setNegativeResonanceCurve(data.negativeResonanceCurve);
+    if (data.negativeResonanceAmount !== undefined) this.setNegativeResonanceAmount(data.negativeResonanceAmount);
+    if (data.negativeResonanceLocal !== undefined) this.setNegativeResonanceLocal(data.negativeResonanceLocal);
+    if (data.negativeResonanceMain !== undefined) this.setNegativeResonanceMain(data.negativeResonanceMain);
+    if (data.negativeResonancePhase !== undefined) this.setNegativeResonancePhase(data.negativeResonancePhase);
     this.initializeResonatorMagnitudes();
   }
 
@@ -1595,6 +1633,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-feedback-all-amount') { this.setFeedbackAllAmount(data.value); return; }
     if (data.type === 'set-feedback-all-resonance-curve') { this.setFeedbackAllResonanceCurve(data.value); return; }
     if (data.type === 'set-feedback-all-saturation-return') { this.setFeedbackAllSaturationReturn(data.value); return; }
+    if (data.type === 'set-negative-resonance-mode') { this.setNegativeResonanceMode(data.value); return; }
+    if (data.type === 'set-negative-resonance-curve') { this.setNegativeResonanceCurve(data.value); return; }
+    if (data.type === 'set-negative-resonance-amount') { this.setNegativeResonanceAmount(data.value); return; }
+    if (data.type === 'set-negative-resonance-local') { this.setNegativeResonanceLocal(data.value); return; }
+    if (data.type === 'set-negative-resonance-main') { this.setNegativeResonanceMain(data.value); return; }
+    if (data.type === 'set-negative-resonance-phase') { this.setNegativeResonancePhase(data.value); return; }
     if (data.type === 'panic') { this.panic(); return; }
     if (data.type === 'apply-state') {
       this.applyState(data);
@@ -1633,16 +1677,19 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     // A positive common-bus loop follows the already smoothed resonance
     // state on its way to zero. A negative target still leaves the positive
     // topology immediately, preserving the legacy negative-path handoff.
+    const negativeLocalActive = this.resonanceTarget < 0 && this.negativeResonanceLocal;
+    const negativeMainActive = this.resonanceTarget < 0 && this.negativeResonanceMain;
     const commonBusActive = !perBandZdfActive && this.feedbackTopology === 'common-bus'
       && (zdfActive ? Math.abs(this.resonance) > COMMON_BUS_RESONANCE_EPSILON
-        : this.resonanceTarget >= 0 && this.resonance > COMMON_BUS_RESONANCE_EPSILON);
+        : (this.resonanceTarget >= 0 && this.resonance > COMMON_BUS_RESONANCE_EPSILON) || negativeLocalActive);
     const localLoopActive = !perBandZdfActive && this.feedbackTopology === 'local-loop-exp'
       && (zdfActive ? Math.abs(this.resonance) > COMMON_BUS_RESONANCE_EPSILON
-        : this.resonanceTarget >= 0 && this.resonance > COMMON_BUS_RESONANCE_EPSILON);
+        : (this.resonanceTarget >= 0 && this.resonance > COMMON_BUS_RESONANCE_EPSILON) || negativeLocalActive);
     const usesCommonBusMainEngine = !perBandZdfActive && this.feedbackTopology !== 'isolated-tpt'
       && this.feedbackAllEngine === 'common-bus'
-      && this.resonanceTarget >= 0;
-    const mainCommonBusActive = !perBandZdfActive && (commonBusActive || localLoopActive)
+      && (this.resonanceTarget >= 0 || negativeMainActive);
+    const mainCommonBusActive = !perBandZdfActive && (commonBusActive || localLoopActive
+      || (!zdfActive && negativeMainActive && this.feedbackTopology !== 'isolated-tpt'))
       && (zdfActive || usesCommonBusMainEngine)
       && feedbackAllGate > COMMON_BUS_RESONANCE_EPSILON;
     // Per-Band Phase 2 has a separate implicit MAIN path. `feedbackAllEngine`
@@ -1830,14 +1877,14 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (!zdfActive) {
       if (hasActiveLegacyFeedbackGate && resonanceMagnitudeSquared > 0) {
         const globalTap = Number.isFinite(globalTapSum) ? globalTapSum * this.feedbackAllNormalization : 0;
-        const feedbackGain = Math.sign(this.resonance) * this.maxFeedbackGain * resonanceMagnitudeSquared;
+        const feedbackGain = this.resonance < 0 ? this.negativeFeedbackGain('local')
+          : Math.sign(this.resonance) * this.maxFeedbackGain * resonanceMagnitudeSquared;
         const auditionGain = this.maxAuditionGain * resonanceMagnitudeSquared;
         for (let band = 0; band < this.bandCount; band += 1) {
           const legacyLocalGate = usesLegacyLocalResonance ? feedbackGates[band] : 0;
-          const rawFeedback = legacyLocalGate * bandOutputs[band]
-            // FB ALL is a separate term in this delayed legacy loop.  Keep
-            // LOCAL exactly as it was and attenuate FB ALL before tanh.
-            + (usesLegacyFeedbackAll ? (this.feedbackAllAmount / 100) * feedbackAllGate * globalTap : 0);
+          const rawFeedback = (this.negativeResonanceLocal ? legacyLocalGate * bandOutputs[band] : 0)
+            + (usesLegacyFeedbackAll && (this.resonance >= 0 || this.negativeResonanceMain)
+              ? (this.feedbackAllAmount / 100) * feedbackAllGate * globalTap : 0);
           const feedbackDrive = feedbackGain * rawFeedback;
           const feedbackReturn = Number.isFinite(feedbackDrive) ? Math.tanh(feedbackDrive) : 0;
           feedbackReturns[band] = Number.isFinite(feedbackReturn) ? feedbackReturn : 0;
@@ -1852,7 +1899,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     }
 
     if (!zdfActive && commonBusActive && resonanceMagnitudeSquared > 0) {
-      const feedbackGain = this.maxFeedbackGain * resonanceMagnitudeSquared;
+      const feedbackGain = this.resonance < 0 ? this.negativeFeedbackGain('local')
+        : this.maxFeedbackGain * resonanceMagnitudeSquared;
       const drive = feedbackGain * commonTapSum;
       const feedbackReturn = this.applyCommonBusSaturation(drive);
       this.commonFeedbackReturns[channel] = feedbackReturn === null ? 0 : feedbackReturn;
@@ -1861,7 +1909,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     }
 
     if (!zdfActive && localLoopActive && resonanceMagnitudeSquared > 0) {
-      const feedbackGain = this.maxFeedbackGain * resonanceMagnitudeSquared;
+      const feedbackGain = this.resonance < 0 ? this.negativeFeedbackGain('local')
+        : this.maxFeedbackGain * resonanceMagnitudeSquared;
       for (let band = 0; band < this.bandCount; band += 1) {
         const feedbackDrive = feedbackGain * feedbackGates[band] * bandOutputs[band];
         const feedbackReturn = Number.isFinite(feedbackDrive) ? Math.tanh(feedbackDrive) : 0;
@@ -1874,8 +1923,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (!zdfActive && mainCommonBusActive && resonanceMagnitudeSquared > 0) {
       // The amount belongs to the recursive MAIN gain, ahead of the MAIN
       // saturation.  It must not touch the concurrent LOCAL loop.
-      const feedbackGain = this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared)
-        * (this.feedbackAllAmount / 100);
+      const feedbackGain = (this.resonance < 0 ? this.negativeFeedbackGain('main')
+        : this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared)) * (this.feedbackAllAmount / 100);
       const mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
       const drive = feedbackGain * mainTapSumScaled;
       const saturation = this.applyMainCommonBusSaturation(drive);
@@ -1990,6 +2039,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       diagnostics.mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
       diagnostics.feedbackAllAmount = this.feedbackAllAmount;
       diagnostics.feedbackAllAmountTarget = this.feedbackAllAmountTarget;
+      diagnostics.negativeResonanceMode = this.negativeResonanceMode;
+      diagnostics.negativeResonanceCurve = this.negativeResonanceCurve;
+      diagnostics.negativeResonanceAmount = this.negativeResonanceAmount;
+      diagnostics.negativeResonanceLocal = this.negativeResonanceLocal;
+      diagnostics.negativeResonanceMain = this.negativeResonanceMain;
+      diagnostics.negativeResonancePhase = this.negativeResonancePhase;
       diagnostics.mainPostGainFeedbackWeightMode = this.postGainFeedbackWeight;
       diagnostics.mainSaturationInput = unifiedZdfActive
         ? Math.sign(this.resonance) * this.maxFeedbackGain

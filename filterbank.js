@@ -78,6 +78,10 @@
   const normalizeFeedbackAllResonanceCurve = value => value === 'soft-knee' ? 'soft-knee' : 'current';
   const normalizeFeedbackAllSaturationReturn = value => value === 'drive-4-return-0.2' ? 'drive-4-return-0.2' : 'current';
   const normalizeFeedbackAllAmount = value => Number.isFinite(Number(value)) ? Math.min(100, Math.max(0, Number(value))) : 100;
+  const normalizeNegativeResonanceMode = value => ['damping', 'anti-resonance', 'phase'].includes(value) ? value : 'signed';
+  const normalizeNegativeResonanceCurve = value => ['linear', 'squared', 'soft-knee'].includes(value) ? value : 'same-as-positive';
+  const normalizeNegativeResonanceAmount = value => Number.isFinite(Number(value)) ? Math.min(200, Math.max(0, Number(value))) : 100;
+  const normalizeNegativeResonancePhase = value => Number.isFinite(Number(value)) ? Math.min(180, Math.max(0, Number(value))) : 90;
   const normalizePositiveResonanceEngine = value => value === 'phase2' ? value : 'tpt';
   const normalizeLocalLoopTuning = value => value === 'compensated' ? 'compensated' : 'current';
   const normalizeFeedbackCore = value => value === 'zdf-per-band' ? 'zdf-per-band' : value === 'zdf' ? 'zdf' : 'current';
@@ -159,6 +163,12 @@
       this.feedbackAllAmount = normalizeFeedbackAllAmount(initialState?.feedbackAllAmount);
       this.feedbackAllResonanceCurve = normalizeFeedbackAllResonanceCurve(initialState?.feedbackAllResonanceCurve);
       this.feedbackAllSaturationReturn = normalizeFeedbackAllSaturationReturn(initialState?.feedbackAllSaturationReturn);
+      this.negativeResonanceMode = normalizeNegativeResonanceMode(initialState?.negativeResonanceMode);
+      this.negativeResonanceCurve = normalizeNegativeResonanceCurve(initialState?.negativeResonanceCurve);
+      this.negativeResonanceAmount = normalizeNegativeResonanceAmount(initialState?.negativeResonanceAmount);
+      this.negativeResonanceLocal = initialState?.negativeResonanceLocal !== false;
+      this.negativeResonanceMain = initialState?.negativeResonanceMain !== false;
+      this.negativeResonancePhase = normalizeNegativeResonancePhase(initialState?.negativeResonancePhase);
       this.onDiagnostics = typeof initialState?.onDiagnostics === 'function' ? initialState.onDiagnostics : null;
       this.inputNode = audioContext.createGain();
       this.outputNode = audioContext.createGain();
@@ -189,6 +199,7 @@
           feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel,
           commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling,
           feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn,
+          negativeResonanceMode: this.negativeResonanceMode, negativeResonanceCurve: this.negativeResonanceCurve, negativeResonanceAmount: this.negativeResonanceAmount, negativeResonanceLocal: this.negativeResonanceLocal, negativeResonanceMain: this.negativeResonanceMain, negativeResonancePhase: this.negativeResonancePhase,
           smoothingTime: PARAMETER_SMOOTHING_SECONDS,
           feedbackGateSmoothingTime: FEEDBACK_GATE_SMOOTHING_SECONDS,
           resonanceSmoothingTime: RESONANCE_SMOOTHING_SECONDS,
@@ -352,6 +363,12 @@
     setFeedbackAllAmount(value) { if (!this.disposed) { this.feedbackAllAmount = normalizeFeedbackAllAmount(value); this.workletNode.port.postMessage({ type: 'set-feedback-all-amount', value: this.feedbackAllAmount }); } return this.feedbackAllAmount; }
     setFeedbackAllResonanceCurve(value) { if (!this.disposed) { this.feedbackAllResonanceCurve = normalizeFeedbackAllResonanceCurve(value); this.workletNode.port.postMessage({ type: 'set-feedback-all-resonance-curve', value: this.feedbackAllResonanceCurve }); } return this.feedbackAllResonanceCurve; }
     setFeedbackAllSaturationReturn(value) { if (!this.disposed) { this.feedbackAllSaturationReturn = normalizeFeedbackAllSaturationReturn(value); this.workletNode.port.postMessage({ type: 'set-feedback-all-saturation-return', value: this.feedbackAllSaturationReturn }); } return this.feedbackAllSaturationReturn; }
+    setNegativeResonanceMode(value) { if (!this.disposed) { this.negativeResonanceMode = normalizeNegativeResonanceMode(value); this.workletNode.port.postMessage({ type: 'set-negative-resonance-mode', value: this.negativeResonanceMode }); } return this.negativeResonanceMode; }
+    setNegativeResonanceCurve(value) { if (!this.disposed) { this.negativeResonanceCurve = normalizeNegativeResonanceCurve(value); this.workletNode.port.postMessage({ type: 'set-negative-resonance-curve', value: this.negativeResonanceCurve }); } return this.negativeResonanceCurve; }
+    setNegativeResonanceAmount(value) { if (!this.disposed) { this.negativeResonanceAmount = normalizeNegativeResonanceAmount(value); this.workletNode.port.postMessage({ type: 'set-negative-resonance-amount', value: this.negativeResonanceAmount }); } return this.negativeResonanceAmount; }
+    setNegativeResonanceLocal(value) { if (!this.disposed) { this.negativeResonanceLocal = Boolean(value); this.workletNode.port.postMessage({ type: 'set-negative-resonance-local', value: this.negativeResonanceLocal }); } return this.negativeResonanceLocal; }
+    setNegativeResonanceMain(value) { if (!this.disposed) { this.negativeResonanceMain = Boolean(value); this.workletNode.port.postMessage({ type: 'set-negative-resonance-main', value: this.negativeResonanceMain }); } return this.negativeResonanceMain; }
+    setNegativeResonancePhase(value) { if (!this.disposed) { this.negativeResonancePhase = normalizeNegativeResonancePhase(value); this.workletNode.port.postMessage({ type: 'set-negative-resonance-phase', value: this.negativeResonancePhase }); } return this.negativeResonancePhase; }
 
     applyState(snapshot) {
       if (this.disposed) return;
@@ -386,6 +403,12 @@
       if (snapshot?.feedbackAllAmount !== undefined) this.feedbackAllAmount = normalizeFeedbackAllAmount(snapshot.feedbackAllAmount);
       this.feedbackAllResonanceCurve = normalizeFeedbackAllResonanceCurve(snapshot?.feedbackAllResonanceCurve ?? this.feedbackAllResonanceCurve);
       this.feedbackAllSaturationReturn = normalizeFeedbackAllSaturationReturn(snapshot?.feedbackAllSaturationReturn ?? this.feedbackAllSaturationReturn);
+      this.negativeResonanceMode = normalizeNegativeResonanceMode(snapshot?.negativeResonanceMode ?? this.negativeResonanceMode);
+      this.negativeResonanceCurve = normalizeNegativeResonanceCurve(snapshot?.negativeResonanceCurve ?? this.negativeResonanceCurve);
+      this.negativeResonanceAmount = normalizeNegativeResonanceAmount(snapshot?.negativeResonanceAmount ?? this.negativeResonanceAmount);
+      this.negativeResonanceLocal = snapshot?.negativeResonanceLocal !== undefined ? Boolean(snapshot.negativeResonanceLocal) : this.negativeResonanceLocal;
+      this.negativeResonanceMain = snapshot?.negativeResonanceMain !== undefined ? Boolean(snapshot.negativeResonanceMain) : this.negativeResonanceMain;
+      this.negativeResonancePhase = normalizeNegativeResonancePhase(snapshot?.negativeResonancePhase ?? this.negativeResonancePhase);
       this.workletNode.port.postMessage({
         type: 'apply-state',
         bandGainLeft: [...this.bandGainLeft],
@@ -405,6 +428,7 @@
         , feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
         , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
+        , negativeResonanceMode: this.negativeResonanceMode, negativeResonanceCurve: this.negativeResonanceCurve, negativeResonanceAmount: this.negativeResonanceAmount, negativeResonanceLocal: this.negativeResonanceLocal, negativeResonanceMain: this.negativeResonanceMain, negativeResonancePhase: this.negativeResonancePhase
       });
     }
 
