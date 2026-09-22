@@ -1470,7 +1470,7 @@ bands.insertAdjacentHTML('afterbegin', '<div class="filterbank-panel-header"><st
 document.querySelectorAll('.band-card').forEach((card, index) => {
   card.querySelector('.fader-wrap')?.classList.add('center-fader');
   const channelFader = (channel, label) => `<div class="channel-fader"><span>${label}</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;
-  card.insertAdjacentHTML('beforeend', `<div class="channel-faders">${channelFader('left', 'L')}<button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false">⛓</button>${channelFader('right', 'R')}</div>`);
+  card.insertAdjacentHTML('beforeend', `<div class="channel-faders">${channelFader('left', 'L')}<button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg></button>${channelFader('right', 'R')}</div>`);
 });
 const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume') return `${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
 
@@ -1845,11 +1845,13 @@ document.querySelectorAll('[data-mod-band]').forEach(button => button.addEventLi
 const fbAllButton = document.querySelector('.fb-all-toggle');
 const perChannelButton = document.querySelector('.per-channel-toggle');
 const spreadControl = document.querySelector('[data-control="spread"]');
+const spreadControlCard = spreadControl?.closest('.control-card');
 const updatePerChannelBands = () => {
   bands.classList.toggle('is-per-channel', state.perChannelBands);
   perChannelButton?.classList.toggle('active', state.perChannelBands);
   perChannelButton?.setAttribute('aria-pressed', String(state.perChannelBands));
   if (spreadControl) spreadControl.disabled = state.perChannelBands;
+  spreadControlCard?.classList.toggle('is-disabled', state.perChannelBands);
   audioEngine?.setPerChannelBands(state.perChannelBands);
   renderBandSliderValues();
 };

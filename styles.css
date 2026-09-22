@@ -143,6 +143,12 @@ body::before { content: ''; position: fixed; inset: 0; pointer-events: none; opa
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .global-controls { display: grid; grid-template-columns: 1.1fr 1.05fr 1.05fr 1.05fr 1fr; gap: 2px; }.control-card, .status-panel, .analyzer, .info-panel, .band-card { border: 1px solid var(--panel-border); background: var(--panel-background); box-shadow: var(--panel-shadow); }.control-card { padding: 10px 15px 8px; min-height: 82px; border-radius: 5px; }.control-label { display: block; font-size: 14px; letter-spacing: 1px; }.control-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; }.control-row input { flex: 1; }.control-row output { min-width: 60px; padding: 5px 8px; border: 1px solid var(--output-border); border-radius: 4px; text-align: center; color: var(--strong-text); font-size: 16px; background: var(--output-background); }.control-scale { display: flex; justify-content: space-between; color: var(--muted-text); font-size: 14px; margin-top: 2px; }
 .control-row output[data-output="volume"] { width: 92px; min-width: 92px; white-space: nowrap; }
+.control-card.is-disabled { opacity: .4; box-shadow: none; }
+.control-card.is-disabled .range-hit-area, .control-card.is-disabled input[type=range] { cursor: not-allowed; }
+.control-card.is-disabled .range-hit-area > input[type=range]::-webkit-slider-runnable-track { background: var(--output-border); }
+.control-card.is-disabled .range-hit-area > input[type=range]::-webkit-slider-thumb { border-color: var(--secondary-text); background: var(--muted-text); box-shadow: none; }
+.control-card.is-disabled .range-hit-area > input[type=range]::-moz-range-track { background: var(--output-border); }
+.control-card.is-disabled .range-hit-area > input[type=range]::-moz-range-thumb { border-color: var(--secondary-text); background: var(--muted-text); box-shadow: none; }
 input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; border-radius: 4px; background: transparent; outline: none; }
 .brand { display: flex; align-items: center; gap: 8px; }
 .brand img { width: 30px; height: 30px; flex: 0 0 30px; object-fit: contain; }
@@ -716,23 +722,27 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   touch-action: none;
 }
 
-/* One shared filterbank surface; band separators deliberately stay subtle. */
-.bands { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); height: auto; margin-top: var(--panel-gap); border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); overflow: hidden; }
-.filterbank-panel-header { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; min-height: 42px; padding: 0 12px; border-bottom: 1px solid var(--panel-border); letter-spacing: 1px; }
+/* The header provides shared context; every band remains an individual control card. */
+.bands { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); grid-template-rows: 42px minmax(0, 1fr); gap: var(--panel-gap); align-items: start; height: auto; margin-top: var(--panel-gap); background: transparent; overflow: visible; }
+.filterbank-panel-header { grid-column: 1 / -1; grid-row: 1; align-self: start; display: flex; justify-content: space-between; align-items: center; height: 42px; min-height: 42px; padding: 0 12px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); letter-spacing: 1px; }
 .filterbank-panel-actions, .filterbank-panel-actions .fb-all-control { display: flex; align-items: center; gap: 8px; }
 .per-channel-toggle, .band-link-toggle { border: 1px solid var(--button-border); border-radius: 3px; background: var(--output-background); color: var(--button-text); cursor: pointer; font: 600 12px 'Trebuchet MS', Arial, sans-serif; }
 .per-channel-toggle { min-width: 43px; height: 24px; }
 .per-channel-toggle.active, .band-link-toggle.active { color: var(--cyan); border-color: var(--cyan); box-shadow: var(--active-shadow); }
 .filterbank-band-grid { display: contents; }
-.band-card { border: 0; border-right: 1px solid color-mix(in srgb, var(--panel-border) 45%, transparent); border-radius: 0; background: transparent; box-shadow: none; }
-.band-card:last-child { border-right: 0; }
-.channel-faders { display: none; align-items: stretch; justify-content: center; gap: clamp(2px, .35vw, 6px); flex: 1; min-height: 0; width: 100%; }
+.band-card { grid-row: 2; box-sizing: border-box; padding: 8px 6px 6px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); }
+.band-card .band-value { order: -1; }
+.band-card .band-actions { order: 0; }
+.band-card .center-fader, .band-card .channel-faders { order: 1; }
+.band-card .band-slider-value { order: 2; min-width: 0; min-height: 20px; margin: 2px 0 0; padding: 0; border: 0; background: transparent; color: var(--strong-text); font-size: 10px; font-weight: 400; line-height: 20px; }
+.channel-faders { display: none; align-items: stretch; justify-content: center; column-gap: 2px; flex: 0 1 78px; min-height: 0; width: min(100%, 78px); }
 .channel-fader { display: grid; grid-template-rows: 15px minmax(0, 1fr) 20px; align-items: center; justify-items: center; min-width: 0; flex: 1; color: var(--secondary-text); font-size: 11px; }
-.channel-fader .fader-track { width: 9px; height: min(190px, 100%); }
+.channel-fader .fader-track { width: 9px; height: min(225px, calc(100% - 10px)); }
 .channel-fader .fader-track::before { left: -9px; right: -9px; }
 .channel-fader .fader-track::after { display: none; }
 .channel-fader output { white-space: nowrap; font-size: 10px; color: var(--strong-text); }
-.band-link-toggle { position: relative; z-index: 4; align-self: center; width: 22px; height: 26px; padding: 0; font-size: 14px; }
+.band-link-toggle { position: relative; z-index: 4; align-self: center; width: 24px; height: 24px; padding: 0; color: var(--secondary-text); }
+.band-link-toggle svg { display: block; width: 15px; height: 15px; margin: auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .bands.is-per-channel .center-fader { display: none; }
 .bands.is-per-channel .channel-faders { display: flex; }
 .bands.is-per-channel .band-slider-value { display: none; }
