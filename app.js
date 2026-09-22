@@ -35,7 +35,6 @@ const ANALYZER_DISPLAY_DEFAULTS = Object.freeze({
   peakGlow: true,
   smoothDecay: true,
   liveStatusStrip: true,
-  collapsedPreview: true,
   spectrumFill: true,
   spectrumTrail: false,
   energyBloom: false,
@@ -84,19 +83,24 @@ const mastheadThemeEditor = document.querySelector('.theme-editor');
 if (mastheadDevLab && mastheadThemeEditor && devLabToggle) mastheadDevLab.insertBefore(mastheadThemeEditor, devLabToggle);
 const devLabControls = document.querySelector('.dev-lab-panel .dev-lab-controls');
 const devLabGroups = new Map();
+const devLabGroupsOpenByDefault = new Set(['input', 'local-feedback', 'main']);
 [['input', 'INPUT'], ['keyboard', 'KEYBOARD'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['negative-resonance', 'NEGATIVE RESONANCE'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
   const group = document.createElement('section');
   group.className = 'dev-lab-group';
   group.dataset.devLabGroup = value;
-  group.innerHTML = `<div class="dev-lab-group-header"><h2>${label}</h2><button class="dev-lab-info-button" type="button" data-dev-lab-help="${value}" aria-label="Hilfe zu ${label}" aria-expanded="false" aria-controls="dev-lab-tooltip">i</button></div>`;
+  const bodyId = `dev-lab-group-${value}-body`;
+  const expanded = devLabGroupsOpenByDefault.has(value);
+  group.classList.toggle('is-collapsed', !expanded);
+  group.innerHTML = `<div class="dev-lab-group-header"><h2>${label}</h2><span class="dev-lab-group-header-actions"><button class="dev-lab-collapse-toggle" type="button" aria-expanded="${expanded}" aria-controls="${bodyId}" aria-label="${label} ${expanded ? 'einklappen' : 'ausklappen'}">${expanded ? '\u25BE' : '\u25B8'}</button><button class="dev-lab-info-button" type="button" data-dev-lab-help="${value}" aria-label="Hilfe zu ${label}" aria-expanded="false" aria-controls="dev-lab-tooltip">i</button></span></div><div class="dev-lab-group-body" id="${bodyId}"${expanded ? '' : ' hidden'}></div>`;
   devLabControls?.append(group);
-  devLabGroups.set(value, group);
+  devLabGroups.set(value, group.querySelector('.dev-lab-group-body'));
 });
 const SWEETSPOT_SLOTS = ['A', 'B', 'C', 'D'];
 const sweetspotGroup = document.createElement('section');
 sweetspotGroup.className = 'dev-lab-group sweetspot-group';
 sweetspotGroup.dataset.devLabGroup = 'sweetspots';
-sweetspotGroup.innerHTML = '<div class="dev-lab-group-header"><h2>SWEETSPOTS</h2></div><div class="sweetspot-list"></div>';
+sweetspotGroup.classList.add('is-collapsed');
+sweetspotGroup.innerHTML = '<div class="dev-lab-group-header"><h2>SWEETSPOTS</h2><span class="dev-lab-group-header-actions"><button class="dev-lab-collapse-toggle" type="button" aria-expanded="false" aria-controls="dev-lab-group-sweetspots-body" aria-label="SWEETSPOTS ausklappen">&#9656;</button></span></div><div class="dev-lab-group-body" id="dev-lab-group-sweetspots-body" hidden><div class="sweetspot-list"></div></div>';
 const sweetspotList = sweetspotGroup.querySelector('.sweetspot-list');
 const sweetspotRows = new Map();
 SWEETSPOT_SLOTS.forEach(slot => {
@@ -107,6 +111,20 @@ SWEETSPOT_SLOTS.forEach(slot => {
   sweetspotRows.set(slot, row);
 });
 devLabControls?.append(sweetspotGroup);
+devLabControls?.querySelectorAll('.dev-lab-collapse-toggle').forEach(button => {
+  button.addEventListener('click', () => {
+    const group = button.closest('.dev-lab-group');
+    const body = document.getElementById(button.getAttribute('aria-controls'));
+    if (!group || !body) return;
+    const expanded = button.getAttribute('aria-expanded') !== 'true';
+    body.hidden = !expanded;
+    group.classList.toggle('is-collapsed', !expanded);
+    button.setAttribute('aria-expanded', String(expanded));
+    const label = group.querySelector('h2')?.textContent || 'Gruppe';
+    button.setAttribute('aria-label', `${label} ${expanded ? 'einklappen' : 'ausklappen'}`);
+    button.textContent = expanded ? '\u25BE' : '\u25B8';
+  });
+});
 const groupForDevControl = control => {
   const attribute = control.querySelector('select')?.getAttributeNames().find(name => name.startsWith('data-')) ?? '';
   if (attribute === 'data-input-preamp-stage') return 'input';
@@ -137,7 +155,6 @@ const analyzerLegend = document.querySelector('.analyzer > .legend');
 analyzerLegend?.remove();
 const analyzer = document.querySelector('.analyzer');
 let analyzerFooter = null;
-let collapsedPreview = null;
 let clearAnalyzerHover = () => {};
 let hideAnalyzerDetails = () => {};
 const analyzerAxisX = document.querySelector('.chart-grid .axis-x');
@@ -153,26 +170,6 @@ if (analyzer && analyzerAxisX) {
   analyzer.append(analyzerFooter);
 }
 const filterbankWorkspace = document.querySelector('.fb-workspace');
-const responseCollapseButton = document.createElement('button');
-responseCollapseButton.type = 'button';
-responseCollapseButton.className = 'response-collapse-toggle';
-const setFilterbankResponseCollapsed = collapsed => {
-  filterbankWorkspace?.classList.toggle('is-collapsed', collapsed);
-  responseCollapseButton.setAttribute('aria-expanded', String(!collapsed));
-  responseCollapseButton.setAttribute('aria-label', collapsed ? 'Filterbank response ausklappen' : 'Filterbank response einklappen');
-  if (collapsedPreview) {
-    collapsedPreview.hidden = !collapsed || !analyzerDisplay.collapsedPreview;
-    hideAnalyzerDetails();
-    if (collapsed) scheduleAnalyzerRender();
-  }
-  responseCollapseButton.textContent = collapsed ? '▾' : '▴';
-};
-if (analyzerHeaderControls && filterbankWorkspace) {
-  setFilterbankResponseCollapsed(false);
-  analyzerHeaderControls.append(responseCollapseButton);
-  responseCollapseButton.addEventListener('click', () => setFilterbankResponseCollapsed(!filterbankWorkspace.classList.contains('is-collapsed')));
-}
-
 // This panel is deliberately a UI-only consumer of the existing worklet
 // diagnostics. It never sends a message back into the audio graph.
 const responseModeControl = document.createElement('div');
@@ -195,7 +192,7 @@ const ANALYZER_OPTION_GROUPS = [
   ['FEEDBACK', [['feedbackActivity', 'Feedback Activity'], ['selfOscillation', 'Self Oscillation', 'Markiert Bänder mit über Zeit stabiler, hoher Feedback-Energie.'], ['dominantBand', 'Dominant Band', 'Hebt den aktuellen Telemetrie-Kandidaten mit der höchsten Bandenergie hervor.'], ['feedbackEnergy', 'Feedback Energy']]],
   ['LEVELS', [['saturationIndicators', 'Saturation / Clip Indicators']]],
   ['STYLE', [['spectrumFill', 'Spectrum Fill', 'Füllt das Output-Spektrum dezent bis zur unteren Kante.'], ['spectrumTrail', 'Spectrum Trail', 'Zeigt einen kurzen, rein visuellen Nachlauf des Output-Spektrums.'], ['energyBloom', 'Energy Bloom', 'Hebt besonders energiereiche Frequenzbereiche dezent hervor.'], ['peakMarkers', 'Peak Markers', 'Zeigt kurzlebige Marker an ausgeprägten lokalen Spectrum-Peaks.'], ['enhancedBars', 'Enhanced Bars', 'Verfeinert die L/R-Control-Balken mit Verlauf und Top-Kante.']]],
-  ['VISUAL', [['peakGlow', 'Peak Glow'], ['smoothDecay', 'Smooth Decay'], ['liveStatusStrip', 'Live Status Strip'], ['collapsedPreview', 'Collapsed Preview']]]
+  ['VISUAL', [['peakGlow', 'Peak Glow'], ['smoothDecay', 'Smooth Decay'], ['liveStatusStrip', 'Live Status Strip']]]
 ];
 const analyzerOptions = document.createElement('div');
 analyzerOptions.className = 'analyzer-options';
@@ -296,7 +293,7 @@ const spectrumRenderer = (() => {
   let lastTrailCaptureAt = 0;
   const frequencyToX = (frequency, width) => Math.log(Math.max(minFrequency, Math.min(maxFrequency, frequency)) / minFrequency) / logFrequencyRange * width;
   const decibelsToY = (decibels, height) => (maxDecibels - Math.max(minDecibels, Math.min(maxDecibels, decibels))) / (maxDecibels - minDecibels) * height;
-  const shouldRender = () => visible && !filterbankWorkspace?.classList.contains('is-collapsed');
+  const shouldRender = () => visible;
   const updateButtons = () => {
     const barsFront = foreground === 'bars';
     spectrumBarsButton.classList.toggle('active', barsFront);
@@ -516,7 +513,6 @@ const spectrumRenderer = (() => {
 window.FilterbankSpectrum = { frequencyToX, decibelsToY };
   return { setVisible, refresh, setForeground, getLayers: () => [...lastLayers] };
 })();
-responseCollapseButton.addEventListener('click', () => requestAnimationFrame(() => spectrumRenderer.refresh()));
 const responseLab = document.createElement('section');
 responseLab.className = 'response-dev-lab';
 responseLab.hidden = true;
@@ -593,14 +589,14 @@ const devLabTelemetry = (() => {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
   };
   const renderLog = () => {
-    if (responseMode !== 'dev-lab' || filterbankWorkspace?.classList.contains('is-collapsed') || debugConsole.hidden) return;
+    if (responseMode !== 'dev-lab' || debugConsole.hidden) return;
     const pinned = debugLog.scrollHeight - debugLog.scrollTop - debugLog.clientHeight < 4;
     debugLog.replaceChildren(...events.map(event => { const row = document.createElement('div'); row.className = `response-debug-event ${event.warning ? 'is-warning' : ''}`; row.innerHTML = `<time>${event.time}</time><span>${event.text}</span>`; return row; }));
     if (pinned) debugLog.scrollTop = debugLog.scrollHeight;
     debugMax.textContent = `SESSION MAX  LOCAL ${number(sessionMax.local)}  MAIN ${number(sessionMax.main)}  SAT IN ${number(sessionMax.saturator)}  SAT ACT ${(sessionMax.satActivity * 100).toFixed(0)} %  BAND ${BAND_DEFINITIONS[sessionMax.bandIndex]?.frequency ?? '—'} Hz  DOM ${(sessionMax.dominantMs / 1000).toFixed(1)} s  RESETS ${sessionMax.resets}`;
   };
   const appendLogRow = event => {
-    if (responseMode !== 'dev-lab' || filterbankWorkspace?.classList.contains('is-collapsed') || debugConsole.hidden) return;
+    if (responseMode !== 'dev-lab' || debugConsole.hidden) return;
     const pinned = debugLog.scrollHeight - debugLog.scrollTop - debugLog.clientHeight < 4;
     const row = document.createElement('div'); row.className = `response-debug-event ${event.warning ? 'is-warning' : ''}`; row.innerHTML = `<time>${event.time}</time><span>${event.text}</span>`;
     debugLog.append(row);
@@ -652,7 +648,7 @@ const devLabTelemetry = (() => {
     keys.forEach((key, keyIndex) => { context.strokeStyle = keyIndex ? getComputedStyle(document.documentElement).getPropertyValue('--secondary-text') : getComputedStyle(document.documentElement).getPropertyValue('--cyan'); context.lineWidth = 1.5; context.beginPath(); history.forEach((item, index) => { const x = history.length < 2 ? 0 : index * width / (maxHistory - 1); const y = height / 2 - finite(item[key]) / max * (height * .44); if (index === 0) context.moveTo(x, y); else context.lineTo(x, y); }); context.stroke(); });
   };
   const render = () => {
-    if (responseMode !== 'dev-lab' || filterbankWorkspace?.classList.contains('is-collapsed')) return;
+    if (responseMode !== 'dev-lab') return;
     if (!latest) { summary.textContent = 'NO AUDIO — keine Telemetrie verfügbar'; bands.replaceChildren(); detail.textContent = ''; return; }
     const { left, right } = latest; const dominant = dominantBand(latest); const energyMetrics = getAnalyzerBandEnergyMetrics(latest); const frequencies = BAND_DEFINITIONS.map(band => band.frequency);
     const items = [
@@ -746,7 +742,6 @@ const devLabTelemetry = (() => {
     const report = [`FILTERBANK DEBUG REPORT`, ...events.map(event => `${event.time}  ${event.text}`), '', `SESSION MAX`, `LOCAL ${number(sessionMax.local)} MAIN ${number(sessionMax.main)} SAT IN ${number(sessionMax.saturator)} SAT ACT ${(sessionMax.satActivity * 100).toFixed(0)} % BAND ${BAND_DEFINITIONS[sessionMax.bandIndex]?.frequency ?? '—'} Hz DOM ${(sessionMax.dominantMs / 1000).toFixed(1)} s RESETS ${sessionMax.resets}`].join('\n');
     try { await navigator.clipboard.writeText(report); copyState.textContent = 'COPIED'; setTimeout(() => { copyState.textContent = ''; }, 1200); } catch { copyState.textContent = 'COPY FAILED'; }
   });
-  responseCollapseButton.addEventListener('click', () => requestAnimationFrame(render));
   setMode('normal');
   return { receive, reset, render, startSession, getLatest: () => latest, getDominant: () => ({ index: dominant.index, stableMs: dominant.index === null ? 0 : performance.now() - dominant.startedAt }), getMetrics: () => latest ? telemetryMetrics(latest) : null, logEvent: log, eventCount: () => events.length, logStateChange: (label, before, after) => { if (before !== after) log(`${label} ${before} → ${after}`, { key: label, throttle: 350 }); }, logPanic: () => log('PANIC'), setAudioOff: () => { log('AUDIO STOP'); if (!frozen) { latest = null; audioLabel.textContent = 'NO AUDIO'; render(); } } };
 })();
@@ -1521,17 +1516,8 @@ analyzerSaturationBadge.className = 'analyzer-saturation-indicator';
 analyzerSaturationBadge.hidden = true;
 analyzerSaturationBadge.textContent = 'SAT';
 responseChart?.append(analyzerSaturationBadge);
-const collapsedAnalyzerDetail = document.createElement('div');
-collapsedAnalyzerDetail.className = 'collapsed-analyzer-detail';
-collapsedAnalyzerDetail.hidden = true;
-collapsedPreview = document.createElement('div');
-collapsedPreview.className = 'collapsed-analyzer-preview';
-collapsedPreview.hidden = true;
-collapsedPreview.innerHTML = '<svg viewBox="0 0 1000 42" preserveAspectRatio="none" aria-hidden="true"><path></path></svg>' + Array.from({ length: BAND_COUNT }, (_, index) => `<button type="button" data-collapsed-band="${index}" aria-label="Band ${index + 1}, ${BAND_DEFINITIONS[index].label}"><i></i><span>${index + 1}</span></button>`).join('');
-analyzerFooter?.append(collapsedPreview, collapsedAnalyzerDetail);
 const analyzerMotion = Array.from({ length: BAND_COUNT }, () => ({ left: 0, right: 0, peakLeft: 0, peakRight: 0, peakLeftAt: 0, peakRightAt: 0 }));
 const analyzerOscillation = Array.from({ length: BAND_COUNT }, () => ({ since: 0, active: false }));
-const collapsedPreviewLevels = Array(BAND_COUNT).fill(0);
 let analyzerAnimationFrame = 0;
 let analyzerLastFrame = performance.now();
 let analyzerDetailMode = 'hidden';
@@ -1560,37 +1546,33 @@ hideAnalyzerDetails = () => {
   hoveredAnalyzerBand = null;
   analyzerDetailMode = 'hidden';
   hideDetailElement(analyzerDetail);
-  hideDetailElement(collapsedAnalyzerDetail);
   bars.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
-  collapsedPreview?.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
 };
 clearAnalyzerHover = () => {
   hoveredAnalyzerBand = null;
   bars.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
-  collapsedPreview?.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
-  hideDetailElement(collapsedAnalyzerDetail);
   if (analyzerDetailMode === 'hover') {
     analyzerDetailMode = 'hidden';
     hideDetailElement(analyzerDetail);
   }
 };
-const renderAnalyzerDetail = (index, anchor, collapsed = false) => {
-  const detail = collapsed ? collapsedAnalyzerDetail : analyzerDetail;
-  const container = collapsed ? analyzerFooter : responseChart;
+const renderAnalyzerDetail = (index, anchor) => {
+  const detail = analyzerDetail;
+  const container = responseChart;
   detail.replaceChildren(...detailText(index).map((line, lineIndex) => { const row = document.createElement(lineIndex === 0 ? 'strong' : 'span'); row.textContent = line; return row; }));
   detail.hidden = false;
   const containerRect = container.getBoundingClientRect();
   const rect = anchor?.getBoundingClientRect?.() || containerRect;
   detail.style.left = `${Math.max(4, Math.min(containerRect.width - 116, rect.left - containerRect.left + rect.width / 2 - 58))}px`;
-  detail.style.top = collapsed ? '2px' : `${Math.max(4, Math.min(containerRect.height - 82, rect.top - containerRect.top + 8))}px`;
+  detail.style.top = `${Math.max(4, Math.min(containerRect.height - 82, rect.top - containerRect.top + 8))}px`;
 };
-const showAnalyzerHover = (index, anchor, collapsed = false) => {
+const showAnalyzerHover = (index, anchor) => {
   if (!analyzerDisplay.hoverValues) return;
   hideAnalyzerDetails();
   hoveredAnalyzerBand = index;
   analyzerDetailMode = 'hover';
   anchor?.classList.add('is-hovered');
-  renderAnalyzerDetail(index, anchor, collapsed);
+  renderAnalyzerDetail(index, anchor);
 };
 const refreshStatusStrip = () => {
   if (!liveStatusStrip) return;
@@ -1641,31 +1623,6 @@ const renderTelemetryIndicators = () => {
   const saturated = Math.max(Number(left?.saturationActiveFrames) || 0, Number(right?.saturationActiveFrames) || 0) / frames > .01 || Math.max(Math.abs(Number(left?.wetPeak) || 0), Math.abs(Number(right?.wetPeak) || 0)) >= .995;
   analyzerSaturationBadge.hidden = !analyzerDisplay.saturationIndicators || !saturated;
 };
-const renderCollapsedPreview = index => {
-  const button = collapsedPreview.querySelector(`[data-collapsed-band="${index}"]`);
-  if (!button) return;
-  const motion = analyzerMotion[index];
-  const packet = getAnalyzerTelemetry();
-  const energyMetrics = getAnalyzerBandEnergyMetrics(packet);
-  const peakEnergy = Math.max(...energyMetrics.energies);
-  const audioLevel = !energyMetrics.isSilent && peakEnergy > 0 ? Math.min(1, Math.sqrt(energyMetrics.energies[index] / peakEnergy)) : 0;
-  const targetLevel = packet && !energyMetrics.isSilent ? Math.min(1, Math.max(Math.abs(motion.left), Math.abs(motion.right)) / 260 + audioLevel * .82) : 0;
-  const previousLevel = collapsedPreviewLevels[index];
-  const level = targetLevel >= previousLevel ? targetLevel : previousLevel + (targetLevel - previousLevel) * .13;
-  collapsedPreviewLevels[index] = level;
-  button.style.setProperty('--preview-level', level.toFixed(3));
-  const info = analyzerBandInfo(index);
-  button.classList.toggle('is-active', info.feedback || info.dominant || info.oscillating);
-  button.title = detailText(index).join('\n');
-};
-const renderCollapsedPreviewLine = () => {
-  const path = collapsedPreview.querySelector('svg path');
-  if (!path) return;
-  const points = collapsedPreviewLevels.map((level, index) => ({ x: (index + .5) * 100, y: 35 - level * 28 }));
-  const edgePoints = [{ x: 0, y: points[0].y }, ...points, { x: 1000, y: points.at(-1).y }];
-  const d = edgePoints.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
-  path.setAttribute('d', d);
-};
 const animateAnalyzer = now => {
   analyzerAnimationFrame = 0;
   const elapsed = Math.min(100, Math.max(1, now - analyzerLastFrame));
@@ -1701,12 +1658,10 @@ const animateAnalyzer = now => {
       pair.querySelector('.analyzer-peak-right').style.setProperty('--peak-level', (Math.sign(motion.right || 1) * motion.peakRight / 2).toFixed(2));
     }
     analyzerAxisX?.children[index]?.classList.toggle('is-dominant', analyzerDisplay.dominantBand && info.dominant);
-    if (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview) renderCollapsedPreview(index);
   }
-  if (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview) renderCollapsedPreviewLine();
   refreshStatusStrip();
   renderTelemetryIndicators();
-  if (needsFrame || (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview)) analyzerAnimationFrame = requestAnimationFrame(animateAnalyzer);
+  if (needsFrame) analyzerAnimationFrame = requestAnimationFrame(animateAnalyzer);
 };
 const scheduleAnalyzerRender = () => { if (!analyzerAnimationFrame) analyzerAnimationFrame = requestAnimationFrame(animateAnalyzer); };
 const setAnalyzerDisplayOption = (key, enabled) => {
@@ -1719,7 +1674,6 @@ const setAnalyzerDisplayOption = (key, enabled) => {
   if (key === 'frequencyLabels') analyzerFooter?.classList.toggle('hide-frequency-labels', !analyzerDisplay[key]);
   if (key === 'bandRegions') responseChart?.classList.toggle('hide-band-regions', !analyzerDisplay[key]);
   if (key === 'grid') responseChart?.classList.toggle('hide-grid', !analyzerDisplay[key]);
-  if (key === 'collapsedPreview') collapsedPreview.hidden = !analyzerDisplay[key] || !filterbankWorkspace?.classList.contains('is-collapsed');
   spectrumRenderer.refresh(); scheduleAnalyzerRender();
 };
 window.FilterbankAnalyzer = { getDisplayState: () => ({ ...analyzerDisplay }), getDetailState: () => ({ mode: analyzerDetailMode, hoveredBand: hoveredAnalyzerBand }), setDisplayOption: setAnalyzerDisplayOption, getBandInfo: index => analyzerBandInfo(index), refresh: scheduleAnalyzerRender, getSpectrumLayers: () => spectrumRenderer.getLayers() };
@@ -1841,12 +1795,6 @@ bars.addEventListener('focusin', event => {
   if (pair) showAnalyzerHover(Number(pair.dataset.analyzerBand), pair);
 });
 bars.addEventListener('focusout', clearAnalyzerHover);
-collapsedPreview.querySelectorAll('[data-collapsed-band]').forEach(button => {
-  button.addEventListener('pointerenter', () => {
-    if (analyzerDisplay.collapsedPreview && filterbankWorkspace?.classList.contains('is-collapsed')) showAnalyzerHover(Number(button.dataset.collapsedBand), button, true);
-  });
-  button.addEventListener('pointerleave', clearAnalyzerHover);
-});
 analyzer?.addEventListener('pointerleave', hideAnalyzerDetails);
 window.addEventListener('blur', hideAnalyzerDetails);
 normalResponseButton.addEventListener('click', hideAnalyzerDetails);
