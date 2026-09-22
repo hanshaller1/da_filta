@@ -63,7 +63,7 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
     const render = async ({
       feedbackAllEngine = 'legacy', feedbackAllSource = 'post-gain-sum', feedbackAllLevel = 'raw', feedbackAll = false,
       local = false, bandGain = 0, wetModel = 'filterbank-sum', resonance = 0.9,
-      saturationMode = 'current', drive = 1, ceiling = 1, duration = 0.8, events = []
+      saturationMode = 'current', drive = 1, ceiling = 1, feedbackAllAmount = 100, duration = 0.8, events = []
     } = {}) => {
       const sampleRate = 48000;
       const length = Math.round(sampleRate * duration);
@@ -90,7 +90,7 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
           feedbackAllNormalization: 1 / Math.sqrt(bandCount), maxFeedbackGain: 1.25,
           feedbackTopology: 'common-bus', feedbackTap: 'post-gain', wetModel,
           commonBusSaturationMode: saturationMode, commonBusDrive: drive, commonBusCeiling: ceiling,
-          feedbackAllEngine, feedbackAllSource, feedbackAllLevel, collectResonatorDiagnostics: true
+          feedbackAllEngine, feedbackAllSource, feedbackAllLevel, feedbackAllAmount, collectResonatorDiagnostics: true
         }
       });
       node.port.onmessage = event => {
@@ -137,6 +137,12 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
     const legacyExplicit = await render({ feedbackAll: true, feedbackAllEngine: 'legacy' });
     const legacyLevel = await render({ feedbackAll: true, feedbackAllEngine: 'legacy', feedbackAllLevel: 'tenth' });
     const mainOnly = await render({ feedbackAll: true, feedbackAllEngine: 'common-bus' });
+    const mainAmounts = await Promise.all([0, 1, 25, 50, 100].map(feedbackAllAmount => render({
+      feedbackAll: true, feedbackAllEngine: 'common-bus', feedbackAllAmount
+    })));
+    const localMainAmounts = await Promise.all([0, 100].map(feedbackAllAmount => render({
+      local: true, feedbackAll: true, feedbackAllEngine: 'common-bus', feedbackAllAmount
+    })));
     const mainSqrt2 = await render({ feedbackAll: true, feedbackAllEngine: 'common-bus', feedbackAllLevel: 'sqrt2' });
     const mainHalf = await render({ feedbackAll: true, feedbackAllEngine: 'common-bus', feedbackAllLevel: 'half' });
     const mainSqrt = await render({ feedbackAll: true, feedbackAllEngine: 'common-bus', feedbackAllLevel: 'sqrt10' });
@@ -186,7 +192,11 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
       legacyLevelParity: maxDifference(legacyImplicit.samples, legacyLevel.samples),
       localParity: maxDifference(localLegacyEngine.samples, localCommonEngine.samples),
       localLevelParity: maxDifference(localCommonEngine.samples, localTenth.samples),
+      localOnly: localCommonEngine.latest,
       mainOnly: mainOnly.latest,
+      mainAmount100Parity: maxDifference(mainAmounts[4].samples, mainOnly.samples),
+      mainAmounts: mainAmounts.map(item => ({ latest: item.latest, rms: item.rms, samples: item.samples })),
+      localMainAmounts: localMainAmounts.map(item => item.latest),
       mainSqrt2: mainSqrt2.latest,
       mainHalf: mainHalf.latest,
       mainSqrt: mainSqrt.latest,
@@ -218,6 +228,13 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
   expect(report.localParity).toBe(0);
   expect(report.localLevelParity).toBe(0);
   expect(report.mainOnly.left.mainCommonFeedbackReturnPeak).toBeGreaterThan(1e-5);
+  expect(report.mainAmounts.map(item => item.latest.left.mainFeedbackGain)).toEqual([0, .0125, .3125, .625, 1.25].map(gain => gain * .81));
+  expect(report.mainAmounts[0].latest.left.mainCommonFeedbackReturnPeak).toBe(0);
+  for (const index of [1, 2, 3, 4]) expect(report.mainAmounts[index].latest.left.mainCommonFeedbackReturnPeak).toBeGreaterThan(0);
+  expect(report.mainAmount100Parity).toBe(0);
+  expect(report.localMainAmounts[0].left.mainCommonFeedbackReturnPeak).toBe(0);
+  expect(report.localMainAmounts[0].left.commonFeedbackReturnPeak).toBe(report.localOnly.left.commonFeedbackReturnPeak);
+  expect(report.localMainAmounts[1].left.commonFeedbackReturnPeak).toBeGreaterThan(1e-5);
   expect(report.mainOnly.left.commonFeedbackReturnPeak).toBe(0);
   expect(report.mainOnly.right.mainCommonFeedbackReturnPeak).toBe(0);
   expect(report.mainOnly.left.mainFeedbackLevelScale).toBe(1);

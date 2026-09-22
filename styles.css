@@ -210,6 +210,8 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .sweetspot-row button:disabled { cursor: not-allowed; opacity: .42; }
 .sweetspot-row button:hover:not(:disabled) { color: var(--cyan); border-color: var(--cyan); }
 .fb-all-control { display: flex; align-items: center; gap: 8px; color: var(--muted-text); font-size: 13px; }
+.control-card:has(.fb-all-control) { position: relative; }
+.control-card:has(.fb-all-control) > .fb-all-control { position: absolute; top: 6px; right: 95px; gap: 5px; }
 .fb-all-toggle { min-width: 43px; height: 24px; padding: 0 7px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 600 12px 'Trebuchet MS', Arial, sans-serif; cursor: pointer; }
 .chart-grid { min-height: 0; width: 100%; }
 .bands { height: clamp(330px, 38vh, 420px); }

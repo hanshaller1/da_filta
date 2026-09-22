@@ -353,7 +353,7 @@ test('ZDF LOCAL, MAIN, dual, signed resonance, stereo, open tap and PANIC', asyn
   const report = await page.evaluate(async () => {
     const frequencies = [...window.Filterbank.BAND_FREQUENCIES];
     const qs = [...window.Filterbank.BAND_QS];
-    const render = async ({ local = [], main = false, resonance = 1, gain = 0, cut = 24, panic = false, core = 'zdf', level = 'sqrt10', allGain = false, drive = 1, ceiling = 1, saturation = 'current' }) => {
+    const render = async ({ local = [], main = false, resonance = 1, gain = 0, cut = 24, panic = false, core = 'zdf', level = 'sqrt10', allGain = false, drive = 1, ceiling = 1, saturation = 'current', feedbackAllAmount = 100 }) => {
       const sampleRate = 48000; const length = Math.round(sampleRate * 0.4);
       const context = new OfflineAudioContext(2, length, sampleRate);
       await context.audioWorklet.addModule(new URL('/filterbank-processor.js', location.href));
@@ -371,6 +371,7 @@ test('ZDF LOCAL, MAIN, dual, signed resonance, stereo, open tap and PANIC', asyn
           feedbackAllLeft: main, feedbackAllRight: false, maxBandBoostDb: 24,
           resonance, feedbackTopology: 'common-bus', feedbackCore: core, feedbackTap: 'post-gain',
           feedbackAllEngine: 'common-bus', feedbackAllSource: 'post-gain-sum', feedbackAllLevel: level,
+          feedbackAllAmount,
           commonBusSaturationMode: saturation, commonBusDrive: drive, commonBusCeiling: ceiling,
           wetModel: 'filterbank-sum', collectResonatorDiagnostics: true
         }
@@ -393,6 +394,8 @@ test('ZDF LOCAL, MAIN, dual, signed resonance, stereo, open tap and PANIC', asyn
         finite: left.every(Number.isFinite) && right.every(Number.isFinite),
         localPeak: Math.max(0, ...packets.map(packet => Math.abs(packet.zdfLocalBus))),
         mainPeak: Math.max(0, ...packets.map(packet => Math.abs(packet.zdfMainBus))),
+        localReturnPeak: Math.max(0, ...packets.map(packet => Math.abs(packet.commonFeedbackReturn))),
+        mainReturnPeak: Math.max(0, ...packets.map(packet => Math.abs(packet.mainCommonFeedbackReturn))),
         tapPeak: Math.max(0, ...packets.map(packet => packet.commonTapSumPeak)),
         fallbackCount: packets.at(-1)?.zdfSolverFallbackCount ?? 0,
         solverMaxIterations: Math.max(0, ...packets.map(packet => packet.zdfSolverMaxIterations)),
@@ -406,6 +409,9 @@ test('ZDF LOCAL, MAIN, dual, signed resonance, stereo, open tap and PANIC', asyn
       main: await render({ main: true }),
       mainRaw: await render({ main: true, level: 'raw' }),
       dual: await render({ local: [5], main: true }),
+      mainAmounts: await Promise.all([0, 1, 25, 50, 100].map(feedbackAllAmount => render({
+        local: [5], main: true, feedbackAllAmount
+      }))),
       multiple: await render({ local: [4, 5, 6], main: true }),
       currentMainRaw: await render({ main: true, level: 'raw', core: 'current' }),
       currentDual: await render({ local: [5], main: true, core: 'current' }),
@@ -421,7 +427,7 @@ test('ZDF LOCAL, MAIN, dual, signed resonance, stereo, open tap and PANIC', asyn
     };
   });
   console.log('UNIFIED ZDF SCENARIOS', JSON.stringify(report));
-  for (const value of [report.local, report.main, report.mainRaw, report.dual, report.multiple, report.currentMainRaw, report.currentDual, report.currentMultiple, report.negativeLocal, report.negativeMain, report.negativeDual, report.currentNegativeDual, report.neutral, report.panic, report.stress, ...report.taps]) {
+  for (const value of [report.local, report.main, report.mainRaw, report.dual, report.multiple, ...report.mainAmounts, report.currentMainRaw, report.currentDual, report.currentMultiple, report.negativeLocal, report.negativeMain, report.negativeDual, report.currentNegativeDual, report.neutral, report.panic, report.stress, ...report.taps]) {
     expect(value.finite).toBe(true);
     expect(value.rightPeak).toBe(0);
     expect(value.nonFiniteResetCount).toBe(0);
@@ -430,6 +436,10 @@ test('ZDF LOCAL, MAIN, dual, signed resonance, stereo, open tap and PANIC', asyn
   expect(report.main.mainPeak).toBeGreaterThan(0);
   expect(report.dual.localPeak).toBeGreaterThan(0);
   expect(report.dual.mainPeak).toBeGreaterThan(0);
+  expect(report.mainAmounts[0].mainReturnPeak).toBe(0);
+  expect(report.mainAmounts[0].localReturnPeak).toBe(report.local.localReturnPeak);
+  for (const index of [1, 2, 3, 4]) expect(report.mainAmounts[index].mainReturnPeak).toBeGreaterThan(1e-8);
+  expect(report.mainAmounts[4].mainReturnPeak).toBe(report.dual.mainReturnPeak);
   expect(report.multiple.localPeak).toBeGreaterThan(0);
   expect(report.multiple.mainPeak).toBeGreaterThan(0);
   expect(report.negativeDual.localPeak).toBeGreaterThan(0);

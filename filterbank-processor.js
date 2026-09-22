@@ -1835,7 +1835,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         for (let band = 0; band < this.bandCount; band += 1) {
           const legacyLocalGate = usesLegacyLocalResonance ? feedbackGates[band] : 0;
           const rawFeedback = legacyLocalGate * bandOutputs[band]
-            + (usesLegacyFeedbackAll ? feedbackAllGate * globalTap : 0);
+            // FB ALL is a separate term in this delayed legacy loop.  Keep
+            // LOCAL exactly as it was and attenuate FB ALL before tanh.
+            + (usesLegacyFeedbackAll ? (this.feedbackAllAmount / 100) * feedbackAllGate * globalTap : 0);
           const feedbackDrive = feedbackGain * rawFeedback;
           const feedbackReturn = Number.isFinite(feedbackDrive) ? Math.tanh(feedbackDrive) : 0;
           feedbackReturns[band] = Number.isFinite(feedbackReturn) ? feedbackReturn : 0;
@@ -1870,7 +1872,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     }
 
     if (!zdfActive && mainCommonBusActive && resonanceMagnitudeSquared > 0) {
-      const feedbackGain = this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared);
+      // The amount belongs to the recursive MAIN gain, ahead of the MAIN
+      // saturation.  It must not touch the concurrent LOCAL loop.
+      const feedbackGain = this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared)
+        * (this.feedbackAllAmount / 100);
       const mainTapSumScaled = mainTapSum * this.feedbackAllLevelScale();
       const drive = feedbackGain * mainTapSumScaled;
       const saturation = this.applyMainCommonBusSaturation(drive);
@@ -1990,6 +1995,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         ? Math.sign(this.resonance) * this.maxFeedbackGain
           * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
             ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
+          * (this.feedbackAllAmount / 100)
           * this.zdfMainBus[channel]
         : perBandCoupledMainActive
           ? Math.sign(this.resonance) * this.maxFeedbackGain
@@ -1998,7 +2004,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
             * (this.feedbackAllAmount / 100)
             * this.zdfPerBandMainBuses[channel]
           : mainCommonBusActive && resonanceMagnitudeSquared > 0
-          ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared) * diagnostics.mainTapSumScaled : 0;
+          ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared)
+            * (this.feedbackAllAmount / 100) * diagnostics.mainTapSumScaled : 0;
       diagnostics.mainSaturationOutput = mainSaturationOutput;
       diagnostics.mainSaturationReturnMode = this.feedbackAllSaturationReturn;
       const localSatDelta = Math.abs(diagnostics.commonSaturationInput - diagnostics.commonSaturationOutput);
@@ -2018,13 +2025,15 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         ? Math.sign(this.resonance) * this.maxFeedbackGain
           * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
             ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
+          * (this.feedbackAllAmount / 100)
         : perBandCoupledMainActive
           ? Math.sign(this.resonance) * this.maxFeedbackGain
             * (this.feedbackAllResonanceCurve === 'soft-knee' && this.feedbackTopology === 'common-bus'
               ? this.feedbackAllSoftKneeGain(Math.abs(this.resonance)) : resonanceMagnitudeSquared)
             * (this.feedbackAllAmount / 100)
           : mainCommonBusActive && resonanceMagnitudeSquared > 0
-          ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared) : 0;
+          ? this.mainCommonBusFeedbackGain(resonanceMagnitudeSquared)
+            * (this.feedbackAllAmount / 100) : 0;
       if (diagnostics.firstMainTapSum === null && Math.abs(mainTapSum) > 0) {
         diagnostics.firstMainTapSum = mainTapSum;
         diagnostics.firstMainTapSumScaled = mainTapSumScaled;
