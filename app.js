@@ -1777,8 +1777,8 @@ const animateAnalyzer = now => {
       const [leftBar, rightBar] = pair.querySelectorAll('i[data-channel]');
       // These bars are manual FILTERBANK controls, not an audio meter or the
       // final effective DSP shape. They update immediately without decay.
-      renderAnalyzerBar(leftBar, info.display.leftControl);
-      renderAnalyzerBar(rightBar, info.display.rightControl);
+      renderAnalyzerBar(leftBar, info.display.leftDb);
+      renderAnalyzerBar(rightBar, info.display.rightDb);
       pair.querySelector('.analyzer-band-delta').textContent = `Δ ${toDb(info.delta)}`;
       pair.querySelector('.analyzer-peak-left').style.setProperty('--peak-level', (Math.sign(motion.left || 1) * motion.peakLeft / 2).toFixed(2));
       pair.querySelector('.analyzer-peak-right').style.setProperty('--peak-level', (Math.sign(motion.right || 1) * motion.peakRight / 2).toFixed(2));
@@ -1834,6 +1834,22 @@ const formatBandSliderValue = value => {
   return `${normalizedGainDb > 0 ? '+' : ''}${normalizedGainDb.toFixed(1)} dB`;
 };
 const renderBandSliderValues = () => faders.forEach((_, index) => renderBand(index));
+// SPREAD is an explicit writer to the authoritative L/R pair. Keep the
+// pre-spread center stable across consecutive writes so channel clamping
+// cannot move that center. Any non-SPREAD band edit invalidates the anchor.
+const spreadCenterDb = Array(BAND_COUNT).fill(0);
+const spreadCenterDirty = Array(BAND_COUNT).fill(true);
+const invalidateSpreadCenter = index => { spreadCenterDirty[index] = true; };
+const invalidateAllSpreadCenters = () => spreadCenterDirty.fill(true);
+const getSpreadCenterDb = (index, boost, cut) => {
+  if (spreadCenterDirty[index]) {
+    const leftDb = controlToBandGainDb(state.bandGainLeft[index], boost, cut);
+    const rightDb = controlToBandGainDb(state.bandGainRight[index], boost, cut);
+    spreadCenterDb[index] = (leftDb + rightDb) / 2;
+    spreadCenterDirty[index] = false;
+  }
+  return spreadCenterDb[index];
+};
 const renderBand = index => {
   const slider = faders[index];
   const leftDb = controlToBandGainDb(state.bandGainLeft[index], getBandBoostDb(), getBandCutDb());
@@ -1871,15 +1887,14 @@ const setBandPairByDb = (index, sourceChannel, targetControl) => {
     const next = setStateBandBaseGain(state, channel, index, control);
     audioEngine?.setBandBaseGain(channel, index, next);
   });
+  invalidateSpreadCenter(index);
   renderBand(index); refreshStatusStrip();
 };
 const materializeSpreadDb = spreadDb => {
   const boost = getBandBoostDb(); const cut = getBandCutDb();
   const offsetDb = Number(spreadDb) || 0;
   for (let index = 0; index < BAND_COUNT; index += 1) {
-    const leftDb = controlToBandGainDb(state.bandGainLeft[index], boost, cut);
-    const rightDb = controlToBandGainDb(state.bandGainRight[index], boost, cut);
-    const centerDb = (leftDb + rightDb) / 2;
+    const centerDb = getSpreadCenterDb(index, boost, cut);
     const nextLeft = setStateBandBaseGain(state, 'left', index, bandGainDbToControl(centerDb - offsetDb, boost, cut));
     const nextRight = setStateBandBaseGain(state, 'right', index, bandGainDbToControl(centerDb + offsetDb, boost, cut));
     audioEngine?.setBandBaseGain('left', index, nextLeft);
@@ -1894,6 +1909,7 @@ const setBandBaseGain = (channel, index, value, singleChannel = false) => {
     const nextValue = setStateBandBaseGain(state, targetChannel, index, value);
     audioEngine?.setBandBaseGain(targetChannel, index, nextValue);
   });
+  invalidateSpreadCenter(index);
   renderBand(index);
   refreshStatusStrip();
   const gainDb = formatBandSliderValue(state.bandGainLeft[index]);
@@ -2288,8 +2304,8 @@ const bindDevLabSelect = (select, apply, fallback) => {
 };
 bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
-bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); renderAnalyzerScale(); renderBandSliderValues(); }, '12');
-bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
+bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); }, '12');
+bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
 bindDevLabSelect(spreadCurveSelect, value => {
   state.spreadCurve = audioEngine.setSpreadCurve(value);
   renderBandSliderValues();
@@ -2402,6 +2418,7 @@ const syncUiFromAudioState = snapshot => {
   if (!snapshot) return;
   state.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => Number(snapshot.bandGainLeft?.[index] ?? 0));
   state.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => Number(snapshot.bandGainRight?.[index] ?? 0));
+  invalidateAllSpreadCenters();
   state.perChannelBands = Boolean(snapshot.perChannelBands);
   state.bandChannelLinked = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.bandChannelLinked?.[index]));
   state.feedbackBandLeft = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.feedbackBandLeft?.[index]));

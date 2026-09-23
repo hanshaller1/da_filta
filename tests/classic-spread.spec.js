@@ -6,6 +6,11 @@ test('SPREAD uses concrete dB and materializes the authoritative L/R pair', asyn
   await expect(spread).toHaveAttribute('min', '-6');
   await expect(spread).toHaveAttribute('max', '6');
   await expect(spread).toHaveAttribute('step', '0.1');
+  const resonance = page.locator('[data-control="resonance"]');
+  await expect(resonance).toHaveAttribute('min', '-1');
+  await expect(resonance).toHaveAttribute('max', '1');
+  await expect(resonance).toHaveAttribute('step', '0.01');
+  await expect(resonance).toHaveValue('0');
   await spread.fill('6');
   await expect(page.locator('[data-output="spread"]')).toHaveText('+6.0 dB');
   const classic = await page.evaluate(() => ({ manual: window.FilterMode.getManualBandState(), effective: window.FilterMode.getAudioEngine().getEffectiveBandGains(0) }));
@@ -48,8 +53,62 @@ test('P/CH edits survive CLASSIC and only a new SPREAD input overwrites them', a
   const rewritten = await page.evaluate(() => window.FilterMode.getAudioEngine().getEffectiveBandGains(0));
   expect(rewritten.leftDb).toBeCloseTo(-0.5, 1);
   expect(rewritten.rightDb).toBeCloseTo(5.5, 1);
+  await spread.fill('0');
+  const centered = await page.evaluate(() => window.FilterMode.getAudioEngine().getEffectiveBandGains(0));
+  expect(centered.leftDb).toBeCloseTo(2.5, 1);
+  expect(centered.rightDb).toBeCloseTo(2.5, 1);
   await page.locator('.per-channel-toggle').click();
-  expect(await page.evaluate(() => window.FilterMode.getAudioEngine().getEffectiveBandGains(0))).toEqual(rewritten);
+  expect(await page.evaluate(() => window.FilterMode.getAudioEngine().getEffectiveBandGains(0))).toEqual(centered);
+});
+
+test('SPREAD keeps its positive and negative center anchors when one channel clamps', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const center = page.locator('.center-fader .band-fader[data-band="0"]');
+  const spread = page.locator('[data-control="spread"]');
+  const pair = () => page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(0).display);
+
+  await center.fill('83.3');
+  await spread.fill('6');
+  let display = await pair();
+  expect(display.leftDb).toBeCloseTo(4, 1);
+  expect(display.rightDb).toBe(12);
+  await spread.fill('3');
+  display = await pair();
+  expect(display.leftDb).toBeCloseTo(7, 1);
+  expect(display.rightDb).toBe(12);
+  await spread.fill('0');
+  display = await pair();
+  expect(display.leftDb).toBeCloseTo(10, 1);
+  expect(display.rightDb).toBeCloseTo(10, 1);
+
+  await center.fill('-83.3');
+  await spread.fill('6');
+  display = await pair();
+  expect(display.leftDb).toBe(-12);
+  expect(display.rightDb).toBeCloseTo(-4, 1);
+  await spread.fill('0');
+  display = await pair();
+  expect(display.leftDb).toBeCloseTo(-10, 1);
+  expect(display.rightDb).toBeCloseTo(-10, 1);
+});
+
+test('DEV SPREAD max clamping reuses the active center anchor', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const center = page.locator('.center-fader .band-fader[data-band="0"]');
+  const spread = page.locator('[data-control="spread"]');
+  const pair = () => page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(0).display);
+
+  await center.fill('83.3');
+  await spread.fill('5');
+  await page.locator('[data-spread-max-offset-db]').evaluate(select => { select.value = '3'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect(spread).toHaveValue('3');
+  let display = await pair();
+  expect(display.leftDb).toBeCloseTo(7, 1);
+  expect(display.rightDb).toBe(12);
+  await spread.fill('0');
+  display = await pair();
+  expect(display.leftDb).toBeCloseTo(10, 1);
+  expect(display.rightDb).toBeCloseTo(10, 1);
 });
 
 test('CLASSIC center moves both stored channels by one clamped delta', async ({ page }) => {

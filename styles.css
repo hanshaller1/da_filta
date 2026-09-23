@@ -718,18 +718,20 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 /* Permanent gain editor and FILTERBANK-only controls use the same ten-column rhythm. */
 .bands { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); gap: var(--panel-gap); align-items: start; height: auto; margin-top: var(--panel-gap); background: transparent; overflow: visible; }
 .channel-mode-panel, .filterbank-controls-panel { box-sizing: border-box; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); }
+.persistent-band-control-panel { display: contents; }
 .channel-mode-panel { display: grid; align-content: start; gap: 10px; padding: 13px 10px; }
 .channel-mode-panel > strong { color: var(--cyan); font-size: 11px; letter-spacing: 1px; }
 .channel-mode-options { display: grid; gap: 6px; }
 .channel-mode-option, .band-link-toggle { border: 1px solid var(--button-border); border-radius: 3px; background: var(--output-background); color: var(--button-text); cursor: pointer; font: 600 11px 'Trebuchet MS', Arial, sans-serif; }
 .channel-mode-option { width: 100%; height: 28px; }
 .channel-mode-option.active, .band-link-toggle.active { color: var(--cyan); border-color: var(--cyan); box-shadow: var(--active-shadow); }
-.filterbank-controls-panel { display: grid; grid-template-rows: 27px minmax(0, 1fr); gap: 4px; padding: 5px 0 6px; }
-.filterbank-controls-header { display: flex; justify-content: flex-end; align-items: center; padding-right: 10px; }
+.filterbank-controls-panel { display: grid; grid-template-rows: 30px minmax(0, 1fr); gap: 10px; padding: 7px 0 8px; }
+.filterbank-controls-header { display: flex; justify-content: space-between; align-items: center; padding: 0 10px 0 12px; }
+.filterbank-controls-header > strong { color: var(--secondary-text); font-size: 9px; letter-spacing: .8px; }
 .filterbank-controls-header .fb-all-control { gap: 5px; }
 .filterbank-band-controls { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: var(--band-gap); min-width: 0; }
-.filterbank-band-control { display: grid; grid-template-rows: repeat(2, 24px); align-content: start; justify-items: center; gap: 3px; min-width: 0; }
-.filterbank-band-control .band-action { width: min(58px, calc(100% - 12px)); height: 24px; margin: 0; padding: 0 5px; font-size: 11px; }
+.filterbank-band-control { display: grid; grid-template-rows: repeat(2, 22px); align-content: start; justify-items: center; gap: 4px; min-width: 0; }
+.filterbank-band-control .band-action { width: min(42px, calc(100% - 12px)); height: 22px; margin: 0; padding: 0 4px; font-size: 9px; }
 .filterbank-band-grid { display: contents; }
 .band-card { grid-row: 1; box-sizing: border-box; padding: 8px 6px 6px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); }
 .band-card .band-value { order: -1; }
@@ -769,6 +771,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 
 /* UI refactor V2: desktop-only workspace structure. */
 @media (min-width: 1200px) {
+  .console { --mode-column-width: 176px; }
   .console {
     position: relative;
     height: calc(100vh - 16px);
@@ -825,7 +828,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   }
   .mode-shell {
     display: grid;
-    grid-template-columns: 138px minmax(0, 1fr);
+    grid-template-columns: var(--mode-column-width) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     row-gap: var(--panel-gap);
     align-items: start;
@@ -848,12 +851,27 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     grid-column: 1;
     grid-row: 1;
   }
-  .channel-mode-panel {
-    grid-column: 1;
+  .persistent-band-control-panel {
+    display: grid;
+    grid-column: 1 / -1;
     grid-row: 2;
+    grid-template-columns: calc(var(--mode-column-width) - 1px) minmax(0, 1fr);
+    box-sizing: border-box;
+    height: 300px;
+    overflow: hidden;
+    border: 1px solid var(--panel-border);
+    border-radius: 5px;
+    background: var(--panel-background);
+    box-shadow: var(--panel-shadow);
+  }
+  .channel-mode-panel {
     align-self: stretch;
-    height: 310px;
-    border-radius: 5px 0 0 5px;
+    height: auto;
+    border: 0;
+    border-right: 1px solid var(--output-border);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
   .mode-tab-row {
     position: relative;
@@ -914,6 +932,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .mode-select > span {
     display: block;
     min-width: 0;
+    white-space: nowrap;
   }
   .mode-icon {
     display: block;
@@ -980,7 +999,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   }
   .filterbank-mode-panel {
     display: grid;
-    grid-template-rows: minmax(0, 1fr) 92px;
+    grid-template-rows: minmax(0, 1fr) 112px;
     gap: var(--panel-gap);
     box-sizing: border-box;
     height: 100%;
@@ -992,40 +1011,39 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     margin: 0;
   }
   .persistent-band-panel {
-    grid-column: 2;
-    grid-row: 2;
     min-width: 0;
     min-height: 0;
+    margin-right: -1px;
     padding-inline: var(--panel-gap);
     box-sizing: border-box;
   }
   .persistent-band-panel > .bands {
-    height: 310px;
-    grid-template-rows: 310px;
-    margin: 0;
+    height: 284px;
+    grid-template-rows: 284px;
+    margin: var(--panel-gap) 0;
     align-items: start;
   }
-  .persistent-band-panel .band-card { height: 310px; }
+  .persistent-band-panel .band-card { height: 284px; padding-inline: 5px; }
   .persistent-band-panel .band-value { font-size: 12px; }
   .filterbank-mode-panel .analyzer-footer .axis-x { font-size: 12px; }
   .persistent-band-panel .fader-wrap {
-    flex: 0 0 250px;
-    height: 250px;
-    min-height: 250px;
+    flex: 0 0 224px;
+    height: 224px;
+    min-height: 224px;
   }
   .persistent-band-panel .fader-track {
-    height: 240px;
+    height: 218px;
   }
   .persistent-band-panel .channel-faders {
-    flex: 0 0 272px;
-    height: 272px;
+    flex: 0 0 246px;
+    height: 246px;
   }
   .persistent-band-panel .bands.is-per-channel .channel-faders,
   .persistent-band-panel .channel-fader {
-    grid-template-rows: 250px 22px;
+    grid-template-rows: 224px 22px;
   }
   .persistent-band-panel .channel-fader .fader-track {
-    height: 240px;
+    height: 218px;
   }
   .persistent-band-panel .channel-fader output {
     align-self: end;
@@ -1085,6 +1103,14 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     height: auto;
     min-height: 0;
   }
+}
+
+@media (min-width: 1500px) {
+  .console { --mode-column-width: 210px; }
+}
+
+@media (min-width: 1700px) {
+  .console { --mode-column-width: 240px; }
 }
 
 @media (min-width: 768px) and (max-width: 1199px) {

@@ -213,6 +213,68 @@ test('FILTERBANK graph and CLASSIC markers share signed dB scaling and live axis
   await expect(page.locator('[data-classic-marker^="0-"]').first()).toHaveCSS('pointer-events', 'none');
 });
 
+test('FILTERBANK graph preserves exact signed dB geometry after analyzer animation frames', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const fader = page.locator('.center-fader .band-fader').first();
+  const settleAnalyzer = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const readGeometry = () => page.evaluate(() => {
+    const index = 0;
+    const manual = window.FilterMode.getManualBandState();
+    const display = window.FilterbankAnalyzer.getBandInfo(index).display;
+    const bar = document.querySelector(`[data-analyzer-band="${index}"] i[data-channel="left"]`);
+    const chart = document.querySelector('.chart-grid');
+    const pair = bar.closest('.bar-pair');
+    const barRect = bar.getBoundingClientRect();
+    const chartRect = chart.getBoundingClientRect();
+    const pairRect = pair.getBoundingClientRect();
+    const boost = Number(document.querySelector('[data-band-boost-db]').value);
+    const cut = Number(document.querySelector('[data-band-cut-db]').value);
+    return {
+      storedLeft: manual.left[index],
+      storedRight: manual.right[index],
+      leftDb: display.leftDb,
+      rightDb: display.rightDb,
+      bipolarPercent: window.ResonantState.bandGainDbToBipolarPercent(display.leftDb, boost, cut),
+      inlineHeightPercent: parseFloat(bar.style.height),
+      chartRatio: barRect.height / chartRect.height,
+      pairRatio: barRect.height / pairRect.height,
+      barTop: barRect.top,
+      barBottom: barRect.bottom,
+      zeroY: pairRect.top + pairRect.height / 2,
+      negative: bar.classList.contains('negative')
+    };
+  });
+
+  for (const db of [1.5, 3, 6, 12, -1.5, -3, -6, -12]) {
+    await fader.fill(String(db / 12 * 100));
+    await settleAnalyzer();
+    const geometry = await readGeometry();
+    const expectedBipolar = db / 12 * 100;
+    const expectedWholeChartRatio = Math.abs(db) / 24;
+    expect(geometry.storedLeft).toBeCloseTo(expectedBipolar, 5);
+    expect(geometry.storedRight).toBeCloseTo(expectedBipolar, 5);
+    expect(geometry.leftDb).toBeCloseTo(db, 5);
+    expect(geometry.rightDb).toBeCloseTo(db, 5);
+    expect(geometry.bipolarPercent).toBeCloseTo(expectedBipolar, 5);
+    expect(geometry.inlineHeightPercent).toBeCloseTo(expectedWholeChartRatio * 100, 5);
+    expect(Math.abs(geometry.chartRatio - expectedWholeChartRatio)).toBeLessThan(0.01);
+    expect(Math.abs(geometry.pairRatio - expectedWholeChartRatio)).toBeLessThan(0.01);
+    expect(geometry.negative).toBe(db < 0);
+    expect(db > 0 ? geometry.barBottom : geometry.barTop).toBeCloseTo(geometry.zeroY, 0);
+  }
+
+  await page.locator('[data-band-boost-db]').evaluate(select => { select.value = '24'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.locator('[data-band-cut-db]').evaluate(select => { select.value = '36'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  for (const [db, control] of [[6, 25], [-9, -25]]) {
+    await fader.fill(String(control));
+    await settleAnalyzer();
+    const geometry = await readGeometry();
+    expect(geometry.leftDb).toBeCloseTo(db, 5);
+    expect(geometry.inlineHeightPercent).toBeCloseTo(12.5, 5);
+    expect(Math.abs(geometry.chartRatio - 0.125)).toBeLessThan(0.01);
+  }
+});
+
 test('analyzer zero bars have no enhanced decoration while small signed values remain visible', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   const fader = page.locator('.band-fader').first();
