@@ -126,3 +126,84 @@ test('FILTER depth scales only attenuation and reaches neutral at zero without r
     expect(Math.min(...resonantAtZeroDepth)).toBeGreaterThanOrEqual(-36);
   }
 });
+
+test('the four classic shapes keep their pre-extension reference values', async ({ page }) => {
+  await page.goto('/');
+  const actual = await page.evaluate(() => Object.fromEntries(['lowpass', 'highpass', 'bandpass', 'notch'].map(type => [type, window.FilterShape.createFilterShape({
+    type, frequencyHz: 777, slope: 50, bandwidth: 50, resonance: 35, depth: 70,
+    bandDefinitions: window.ResonantState.BAND_DEFINITIONS, maxBandBoostDb: 12, maxBandCutDb: 24
+  })])));
+  const reference = {
+    lowpass: [0, 0, 0, 0.000005642245418583282, 0.10701225923013899, -3.4555040295233432, -16.594027381432905, -16.799989224032803, -16.8, -16.8],
+    highpass: [-16.8, -16.8, -16.8, -16.79998645861099, -16.543170577847665, -3.4555040295233432, 0.08582192440295434, 0.000004489986331355424, 0, 0],
+    bandpass: [-16.8, -16.8, -16.799999999900496, -11.563542129554186, -0.02171055460051219, 2.9085270414568565, -0.18072417042192634, -11.791947776610098, -16.79999999987241, -16.8],
+    notch: [0, 2.244319131801437e-7, 0.019465037207131105, -1.712533077495078, -15.608982077130538, -16.799772295766658, -15.310101345298548, -1.6229799502339053, 0.021969121412826403, 0]
+  };
+  for (const type of Object.keys(reference)) actual[type].forEach((value, index) => expect(value).toBeCloseTo(reference[type][index], 7));
+});
+
+test('extended EQ shapes follow logarithmic bell, shelf, tilt and tone behavior', async ({ page }) => {
+  await page.goto('/');
+  const report = await page.evaluate(() => {
+    const create = (type, values = {}) => window.FilterShape.createFilterShape({
+      type, frequencyHz: 777, slope: 50, bandwidth: 50, bandDefinitions: window.ResonantState.BAND_DEFINITIONS,
+      maxBandBoostDb: 12, maxBandCutDb: 12, ...values
+    });
+    return {
+      bell: create('bell', { gainDb: 6 }), bellCut: create('bell', { gainDb: -6 }), bellZero: create('bell'),
+      lowShelf: create('lowshelf', { lowShelfGainDb: 6 }), highShelf: create('highshelf', { highShelfGainDb: -6 }),
+      tilt: create('tilt', { tiltDb: 6 }), tiltReverse: create('tilt', { tiltDb: -6 }), tiltZero: create('tilt'),
+      bass: create('baxandall', { baxandallBassDb: 6 }), treble: create('baxandall', { baxandallTrebleDb: 6 }),
+      opposite: create('baxandall', { baxandallBassDb: 6, baxandallTrebleDb: -6 }), toneZero: create('baxandall')
+    };
+  });
+  expect(report.bell[5]).toBeCloseTo(6, 8);
+  expect(report.bell[5]).toBeGreaterThan(report.bell[4]);
+  expect(report.bell[4]).toBeGreaterThan(report.bell[1]);
+  report.bell.forEach((value, index) => expect(report.bellCut[index]).toBeCloseTo(-value, 8));
+  expect(report.bellZero).toEqual(Array(10).fill(0));
+  expect(report.lowShelf[0]).toBeCloseTo(6, 5);
+  expect(report.lowShelf[9]).toBeCloseTo(0, 5);
+  expect(report.highShelf[0]).toBeCloseTo(0, 5);
+  expect(report.highShelf[9]).toBeCloseTo(-6, 5);
+  expect(report.tilt[0]).toBeCloseTo(-6, 5);
+  expect(report.tilt[5]).toBeCloseTo(0, 5);
+  expect(report.tilt[9]).toBeCloseTo(6, 5);
+  report.tilt.forEach((value, index) => expect(report.tiltReverse[index]).toBeCloseTo(-value, 8));
+  expect(report.tiltZero).toEqual(Array(10).fill(0));
+  expect(report.bass[0]).toBeGreaterThan(5);
+  expect(report.bass[9]).toBeCloseTo(0, 5);
+  expect(report.treble[0]).toBeCloseTo(0, 5);
+  expect(report.treble[9]).toBeGreaterThan(5);
+  expect(report.opposite[0]).toBeGreaterThan(5);
+  expect(report.opposite[9]).toBeLessThan(-5);
+  expect(report.toneZero).toEqual(Array(10).fill(0));
+});
+
+test('formants morph continuously in log frequency, shift by octaves and stay bounded', async ({ page }) => {
+  await page.goto('/');
+  const report = await page.evaluate(() => {
+    const centers = window.FilterShape.formantCenters;
+    const create = values => window.FilterShape.createFilterShape({ type: 'formant', bandDefinitions: window.ResonantState.BAND_DEFINITIONS, maxBandBoostDb: 12, maxBandCutDb: 36, formantAmount: 70, formantWidth: 50, ...values });
+    return {
+      vowels: [0, 1, 2, 3, 4].map(formantVowel => create({ formantVowel })),
+      a: centers(0), half: centers(.5), e: centers(1), octaveUp: centers(0, 12), octaveDown: centers(0, -12),
+      morphs: [0, .25, .5, .75, 1].map(formantVowel => create({ formantVowel })),
+      extreme: create({ formantVowel: 4, formantShiftSemitones: 12, formantWidth: 100, formantAmount: 100 })
+    };
+  });
+  expect(report.a).toEqual([800, 1150, 2900]);
+  expect(report.e).toEqual([400, 1700, 2600]);
+  report.half.forEach((value, index) => expect(value).toBeCloseTo(Math.sqrt(report.a[index] * report.e[index]), 8));
+  report.octaveUp.forEach((value, index) => expect(value).toBeCloseTo(report.a[index] * 2, 8));
+  report.octaveDown.forEach((value, index) => expect(value).toBeCloseTo(report.a[index] / 2, 8));
+  report.vowels.forEach(shape => {
+    expect(shape).toHaveLength(10);
+    expect(shape.every(Number.isFinite)).toBeTruthy();
+    expect(shape.filter(value => value > 1).length).toBeGreaterThanOrEqual(2);
+  });
+  for (let index = 1; index < report.morphs.length; index += 1) {
+    report.morphs[index].forEach((value, band) => expect(Math.abs(value - report.morphs[index - 1][band])).toBeLessThan(5));
+  }
+  expect(report.extreme.every(value => Number.isFinite(value) && value >= -36 && value <= 12)).toBeTruthy();
+});

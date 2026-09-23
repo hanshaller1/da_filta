@@ -1,4 +1,8 @@
 const { test, expect } = require('playwright/test');
+const selectFilterType = async (page, type) => {
+  await page.locator('[data-filter-type-trigger]').click();
+  await page.locator(`[data-filter-type="${type}"]`).click();
+};
 
 test('FILTER power controls its layer across workspaces without changing FILTERBANK state', async ({ page }) => {
   await page.goto('/');
@@ -28,7 +32,7 @@ test('FILTER power controls its layer across workspaces without changing FILTERB
   await expect(page.locator('#mode-filter')).toBeVisible();
   expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filter', filterEnabled: false });
   await page.locator('[data-module-power="filter"]').click();
-  await page.locator('[data-filter-type="bandpass"]').click();
+  await selectFilterType(page, 'bandpass');
   await page.locator('[data-filter-frequency]').fill('575');
   await page.locator('[data-filter-frequency]').dispatchEvent('input');
   await page.locator('[data-filter-slope]').fill('73');
@@ -85,7 +89,7 @@ test('FILTER bandwidth relevance, graph updates and P/CH spread priority persist
   await expect(page.locator('[data-control="spread"]')).toBeDisabled();
   await expect(page.locator('[data-filter-bandwidth]')).toBeDisabled();
   const pathBefore = await page.locator('[data-filter-response-path]').getAttribute('d');
-  await page.locator('[data-filter-type="notch"]').click();
+  await selectFilterType(page, 'notch');
   await expect(page.locator('[data-filter-bandwidth]')).toBeEnabled();
   await page.locator('[data-filter-frequency]').fill('700');
   await page.locator('[data-filter-frequency]').dispatchEvent('input');
@@ -147,7 +151,7 @@ test('FILTER and FILTERBANK layers combine in dB and preserve both parameter sys
   await manualFader.fill('37');
   await manualFader.dispatchEvent('input');
   await page.locator('[data-mode="filter"]').click();
-  await page.locator('[data-filter-type="bandpass"]').click();
+  await selectFilterType(page, 'bandpass');
   await page.locator('[data-filter-frequency]').evaluate((slider, frequency) => {
     slider.value = String(window.FilterShape.frequencyToSlider(frequency));
     slider.dispatchEvent(new Event('input', { bubbles: true }));
@@ -343,7 +347,7 @@ test('FILTERBANK response controls stay bound to manual FILTERBANK state while F
 
   await page.locator('[data-mode="filter"]').click();
   await page.locator('[data-module-power="filter"]').click();
-  await page.locator('[data-filter-type="lowpass"]').click();
+  await selectFilterType(page, 'lowpass');
   await page.locator('[data-filter-frequency]').fill('180');
   await page.locator('[data-filter-frequency]').dispatchEvent('input');
   await page.locator('[data-filter-slope]').fill('100');
@@ -419,17 +423,17 @@ test('FILTER V1 controls remain editable while powered off and restore the ident
   await expect(power).toHaveAttribute('aria-pressed', 'false');
 
   for (const type of ['lowpass', 'highpass']) {
-    await page.locator(`[data-filter-type="${type}"]`).click();
+    await selectFilterType(page, type);
     await expect(page.locator('[data-filter-bandwidth]')).toBeDisabled();
     await expect(page.locator('[data-filter-bandwidth-control]')).toHaveClass(/is-disabled/);
   }
   for (const type of ['bandpass', 'notch']) {
-    await page.locator(`[data-filter-type="${type}"]`).click();
+    await selectFilterType(page, type);
     await expect(page.locator('[data-filter-bandwidth]')).toBeEnabled();
     await expect(page.locator('[data-filter-bandwidth-control]')).not.toHaveClass(/is-disabled/);
   }
 
-  await page.locator('[data-filter-type="notch"]').click();
+  await selectFilterType(page, 'notch');
   await page.locator('[data-filter-frequency]').fill('575');
   await page.locator('[data-filter-slope]').fill('72');
   await page.locator('[data-filter-bandwidth]').fill('38');
@@ -461,7 +465,7 @@ test('FILTER graph uses an asymmetric dB axis and the desktop workspace keeps a 
   await page.locator('[data-mode="filter"]').click();
   await page.locator('[data-band-boost-db]').evaluate(select => { select.value = '24'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.locator('[data-band-cut-db]').evaluate(select => { select.value = '36'; select.dispatchEvent(new Event('change', { bubbles: true })); });
-  await page.locator('[data-filter-type="bandpass"]').click();
+  await selectFilterType(page, 'bandpass');
   await page.locator('[data-filter-resonance]').fill('100');
   await page.locator('[data-filter-depth]').fill('100');
 
@@ -573,7 +577,7 @@ test('FILTER response frequency marker and zero grid share the graph coordinate 
 
   const controlStyles = await page.evaluate(() => {
     const frequency = getComputedStyle(document.querySelector('.filter-frequency-control'));
-    const typeButton = document.querySelector('.filter-type-buttons button').getBoundingClientRect();
+    const typeButton = document.querySelector('.filter-type-trigger').getBoundingClientRect();
     return {
       borderRightWidth: frequency.borderRightWidth,
       borderBottomWidth: frequency.borderBottomWidth,
@@ -582,7 +586,7 @@ test('FILTER response frequency marker and zero grid share the graph coordinate 
   });
   expect(controlStyles.borderRightWidth).toBe('0px');
   expect(Number.parseFloat(controlStyles.borderBottomWidth)).toBeGreaterThan(0);
-  expect(controlStyles.typeButtonHeight).toBeCloseTo(30, 1);
+  expect(controlStyles.typeButtonHeight).toBeCloseTo(32, 1);
 });
 
 test('legacy FILTER snapshots default missing resonance and depth safely', async ({ page }) => {
@@ -598,4 +602,166 @@ test('legacy FILTER snapshots default missing resonance and depth safely', async
   });
   expect(restored.filterResonance).toBe(0);
   expect(restored.filterDepth).toBe(100);
+});
+
+test('FILTER type selector groups ten types and keeps keyboard selection separate from PANIC', async ({ page }) => {
+  await page.setViewportSize({ width: 1914, height: 907 });
+  await page.goto('/');
+  await page.locator('[data-mode="filter"]').click();
+  const trigger = page.locator('[data-filter-type-trigger]');
+  await trigger.click();
+  await expect(page.locator('[data-filter-type-popover]')).toBeVisible();
+  await expect(page.locator('[data-filter-type]')).toHaveCount(10);
+  await expect(page.locator('.filter-type-group > strong')).toHaveText(['CLASSIC', 'EQ / TONE', 'FORMANT']);
+  await page.locator('[data-filter-type="bell"]').click();
+  await expect(trigger).toContainText('PEAK / BELL');
+  await expect(page.locator('[data-filter-control="gain"]')).toBeEnabled();
+  await expect(page.locator('[data-filter-control="bellWidth"]')).toBeEnabled();
+  await expect(page.locator('[data-filter-type-popover]')).toBeHidden();
+
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-filter-type-popover]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-filter-type-popover]')).toBeHidden();
+  await trigger.focus();
+  await page.keyboard.press('Space');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(trigger).toContainText('LOW SHELF');
+  expect(await page.evaluate(() => window.FilterMode.getState().filterType)).toBe('lowshelf');
+  await trigger.click();
+  await page.locator('.filter-response').click();
+  await expect(page.locator('[data-filter-type-popover]')).toBeHidden();
+  await expect(page.locator('[data-control="resonance"]')).toHaveValue('0');
+});
+
+test('extended FILTER controls preserve per-type values, graph markers and power behavior', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="filter"]').click();
+  await page.locator('[data-filter-frequency]').fill('720');
+  const classicFrequency = await page.evaluate(() => window.FilterMode.getState().filterFrequencyHz);
+  await selectFilterType(page, 'bell');
+  await page.locator('[data-filter-control="gain"]').fill('6');
+  await page.locator('[data-filter-control="bellFrequency"]').fill('540');
+  const bellFrequency = await page.evaluate(() => window.FilterMode.getState().filterBellFrequencyHz);
+  expect(bellFrequency).not.toBe(classicFrequency);
+  const bellShape = await page.evaluate(() => window.FilterMode.getShape());
+  expect(Math.max(...bellShape)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.FilterMode.getAudioEngine().effectiveBandGainDbLeft)).toEqual(Array(10).fill(0));
+  await page.locator('[data-module-power="filter"]').click();
+  (await page.evaluate(() => window.FilterMode.getAudioEngine().effectiveBandGainDbLeft))
+    .forEach((value, index) => expect(value).toBeCloseTo(bellShape[index], 8));
+  await selectFilterType(page, 'formant');
+  await expect(page.locator('[data-filter-primary-control] > span')).toHaveText('VOWEL');
+  await expect(page.locator('[data-filter-formant-markers] line')).toHaveCount(3);
+  await expect(page.locator('[data-filter-frequency-marker]')).toBeHidden();
+  await page.locator('[data-filter-control="vowel"]').fill('0.35');
+  await expect(page.locator('[data-filter-frequency-output]')).toContainText('A → E 35 %');
+  await selectFilterType(page, 'baxandall');
+  await expect(page.locator('[data-filter-primary-control] > span')).toHaveText('TONE CENTER');
+  await expect(page.locator('[data-filter-control="bass"]')).toBeEnabled();
+  await expect(page.locator('[data-filter-control="treble"]')).toBeEnabled();
+  await page.locator('[data-filter-control="bass"]').fill('5');
+  const toneShape = await page.evaluate(() => window.FilterMode.getShape());
+  expect(toneShape[0]).toBeGreaterThan(0);
+  await selectFilterType(page, 'lowpass');
+  expect(await page.evaluate(() => window.FilterMode.getState().filterFrequencyHz)).toBe(classicFrequency);
+  await selectFilterType(page, 'bell');
+  await expect(page.locator('[data-filter-control="gain"]')).toHaveValue('6');
+  expect(await page.evaluate(() => window.FilterMode.getState().filterBellFrequencyHz)).toBe(bellFrequency);
+  await page.locator('[data-module-power="filter"]').click();
+  expect(await page.evaluate(() => window.FilterMode.getAudioEngine().effectiveBandGainDbLeft)).toEqual(Array(10).fill(0));
+});
+
+test('extended filter state round-trips and legacy snapshots receive safe defaults', async ({ page }) => {
+  await page.goto('/');
+  const report = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    const values = { filterType: 'formant', filterGainDb: 5.5, filterTiltDb: -4.5, filterFormantVowel: 2.25, filterFormantShiftSemitones: 7, filterFormantWidth: 65, filterFormantAmount: 82, filterBaxandallBassDb: 3.5, filterBaxandallTrebleDb: -2, filterBaxandallCenterHz: 1200, filterBaxandallSlope: 68 };
+    engine.setFilterState(values);
+    const saved = engine.getState();
+    engine.setFilterState({ filterFormantVowel: 4, filterGainDb: 0 });
+    engine.applyState(saved);
+    const restored = engine.getState();
+    const legacy = { ...saved };
+    window.ResonantState.FILTER_EXTRA_FIELDS.forEach(field => delete legacy[field]);
+    engine.applyState(legacy);
+    return { saved, restored, legacy: engine.getState(), defaults: window.ResonantState.normalizeFilterState({}) };
+  });
+  for (const field of await page.evaluate(() => window.ResonantState.FILTER_EXTRA_FIELDS)) {
+    expect(report.restored[field]).toBe(report.saved[field]);
+    expect(report.legacy[field]).toBe(report.defaults[field]);
+  }
+  await page.reload();
+  const reloaded = await page.evaluate(saved => {
+    const engine = window.FilterMode.getAudioEngine();
+    engine.applyState(saved);
+    return engine.getState();
+  }, report.saved);
+  for (const field of await page.evaluate(() => window.ResonantState.FILTER_EXTRA_FIELDS)) expect(reloaded[field]).toBe(report.saved[field]);
+});
+
+test('all extended types update the response and respect FILTER power independently', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="filter"]').click();
+  const power = page.locator('[data-module-power="filter"]');
+  let previousPath = await page.locator('[data-filter-response-path]').getAttribute('d');
+  for (const [type, control, value] of [
+    ['bell', 'gain', '6'], ['lowshelf', 'lowShelfGain', '6'], ['highshelf', 'highShelfGain', '6'],
+    ['tilt', 'tilt', '6'], ['formant', 'vowel', '1.5'], ['baxandall', 'bass', '6']
+  ]) {
+    await selectFilterType(page, type);
+    await page.locator(`[data-filter-control="${control}"]`).fill(value);
+    const path = await page.locator('[data-filter-response-path]').getAttribute('d');
+    expect(path).not.toBe(previousPath);
+    previousPath = path;
+    const shape = await page.evaluate(() => window.FilterMode.getShape());
+    expect(shape.some(value => value > 0)).toBeTruthy();
+    expect(await page.evaluate(() => window.FilterMode.getAudioEngine().effectiveBandGainDbLeft)).toEqual(Array(10).fill(0));
+    await power.click();
+    (await page.evaluate(() => window.FilterMode.getAudioEngine().effectiveBandGainDbLeft))
+      .forEach((gain, index) => expect(gain).toBeCloseTo(shape[index], 7));
+    await power.click();
+  }
+  await expect(page.locator('[data-module-power="filterbank"]')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('gain controls follow DEV boost and cut limits without changing panel geometry', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.locator('[data-mode="filter"]').click();
+  const before = await page.locator('.filter-controls').boundingBox();
+  await selectFilterType(page, 'bell');
+  await page.locator('[data-band-boost-db]').evaluate(select => { select.value = '24'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.locator('[data-band-cut-db]').evaluate(select => { select.value = '36'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect(page.locator('[data-filter-control="gain"]')).toHaveAttribute('min', '-36');
+  await expect(page.locator('[data-filter-control="gain"]')).toHaveAttribute('max', '24');
+  await expect(page.locator('[data-filter-control="gain"]')).toHaveAttribute('step', '0.1');
+  await selectFilterType(page, 'formant');
+  await selectFilterType(page, 'baxandall');
+  const after = await page.locator('.filter-controls').boundingBox();
+  expect(after).toEqual(before);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1440);
+});
+
+test('response graph places positive and negative BELL and TILT samples around zero', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="filter"]').click();
+  const graph = () => page.evaluate(() => ({
+    zero: Number(document.querySelector('[data-filter-response-zero-line]').getAttribute('y1')),
+    points: [...document.querySelectorAll('[data-filter-response-markers] circle')].map(circle => Number(circle.getAttribute('cy')))
+  }));
+  await selectFilterType(page, 'bell');
+  await page.locator('[data-filter-control="gain"]').fill('6');
+  let response = await graph();
+  expect(response.points[5]).toBeLessThan(response.zero);
+  await page.locator('[data-filter-control="gain"]').fill('-6');
+  response = await graph();
+  expect(response.points[5]).toBeGreaterThan(response.zero);
+  await selectFilterType(page, 'tilt');
+  await page.locator('[data-filter-control="tilt"]').fill('6');
+  response = await graph();
+  expect(response.points[0]).toBeGreaterThan(response.zero);
+  expect(response.points[9]).toBeLessThan(response.zero);
 });

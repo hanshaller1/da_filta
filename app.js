@@ -1471,13 +1471,18 @@ const modeTabs = [...document.querySelectorAll('[data-mode]')];
 const modePanels = [...document.querySelectorAll('[data-mode-panel]')];
 const filterbankPowerButton = document.querySelector('[data-module-power="filterbank"]');
 const filterPowerButton = document.querySelector('[data-module-power="filter"]');
+const filterTypeDefinitions = window.FilterShape.FILTER_TYPE_DEFINITIONS;
+const filterControlDefinitions = window.FilterShape.FILTER_CONTROL_DEFINITIONS;
+const filterTypeTrigger = document.querySelector('[data-filter-type-trigger]');
+const filterTypeValue = document.querySelector('[data-filter-type-value]');
+const filterTypePopover = document.querySelector('[data-filter-type-popover]');
+const filterResponseDescriptor = document.querySelector('[data-filter-response-descriptor]');
+const filterFormantMarkers = document.querySelector('[data-filter-formant-markers]');
+const filterPrimaryControl = document.querySelector('[data-filter-primary-control]');
+const filterSecondaryControls = [...document.querySelectorAll('.filter-secondary-controls .filter-parameter-control')];
+const filterControlSlots = [filterPrimaryControl, ...filterSecondaryControls];
+if (filterTypePopover) filterTypePopover.innerHTML = ['CLASSIC', 'EQ / TONE', 'FORMANT'].map(category => `<div class="filter-type-group"><strong>${category}</strong><div class="filter-type-options">${filterTypeDefinitions.filter(definition => definition.category === category).map(definition => `<button type="button" data-filter-type="${definition.id}" role="option" aria-selected="false">${definition.displayName}</button>`).join('')}</div></div>`).join('');
 const filterTypeButtons = [...document.querySelectorAll('[data-filter-type]')];
-const filterFrequencySlider = document.querySelector('[data-filter-frequency]');
-const filterSlopeSlider = document.querySelector('[data-filter-slope]');
-const filterBandwidthSlider = document.querySelector('[data-filter-bandwidth]');
-const filterResonanceSlider = document.querySelector('[data-filter-resonance]');
-const filterDepthSlider = document.querySelector('[data-filter-depth]');
-const filterBandwidthControl = document.querySelector('[data-filter-bandwidth-control]');
 const filterResponsePath = document.querySelector('[data-filter-response-path]');
 const filterResponseMarkers = document.querySelector('[data-filter-response-markers]');
 const filterResponseCeiling = document.querySelector('[data-filter-response-ceiling]');
@@ -1493,12 +1498,7 @@ const formatFilterFrequency = value => {
   return `${(frequency / 1000).toFixed(1).replace(/\.0$/, '')} kHz`;
 };
 const getFilterModeShape = () => audioEngine?.filterModeBandGainsDb ?? window.FilterShape.createFilterShape({
-  type: state.filterType,
-  frequencyHz: state.filterFrequencyHz,
-  slope: state.filterSlope,
-  bandwidth: state.filterBandwidth,
-  resonance: state.filterResonance,
-  depth: state.filterDepth,
+  ...window.FilterShape.shapeParametersFromState(state),
   bandDefinitions: BAND_DEFINITIONS,
   maxBandBoostDb: Number(bandBoostSelect?.value ?? 12),
   maxBandCutDb: Number(bandCutSelect?.value ?? 12)
@@ -1515,6 +1515,41 @@ const filterResponsePathData = points => {
   }
   return path;
 };
+const formatFilterControl = (definition, value) => {
+  if (definition.format === 'frequency') return formatFilterFrequency(value);
+  if (definition.format === 'db') return `${value > 0 ? '+' : ''}${Number(value).toFixed(1)} dB`;
+  if (definition.format === 'semitones') return `${value > 0 ? '+' : ''}${Number(value).toFixed(1).replace(/\.0$/, '')} st`;
+  if (definition.format === 'vowel') {
+    const position = Math.min(4, Math.max(0, Number(value)));
+    const first = Math.floor(position);
+    const fraction = position - first;
+    return fraction < .005 || first === 4 ? window.FilterShape.FORMANT_VOWELS[first]
+      : `${window.FilterShape.FORMANT_VOWELS[first]} → ${window.FilterShape.FORMANT_VOWELS[first + 1]} ${Math.round(fraction * 100)} %`;
+  }
+  return `${Math.round(value)} %`;
+};
+const renderFilterControl = (slot, key, boostDb, cutDb) => {
+  const definition = filterControlDefinitions[key];
+  const input = slot.querySelector('input');
+  const label = slot.querySelector('span');
+  const output = slot.querySelector('output');
+  const disabled = Boolean(definition.disabled || key === 'disabled');
+  label.textContent = definition.label;
+  input.min = String(definition.min === 'cut' ? -cutDb : definition.min);
+  input.max = String(definition.max === 'boost' ? boostDb : definition.max);
+  input.step = String(definition.step);
+  input.getAttributeNames().filter(name => name.startsWith('data-filter-') && name !== 'data-filter-control').forEach(name => input.removeAttribute(name));
+  if (key !== 'disabled') input.setAttribute(`data-filter-${key === 'width' || key === 'widthDisabled' ? 'bandwidth' : key}`, '');
+  input.dataset.filterControl = key;
+  input.setAttribute('aria-label', `Filter ${definition.label.toLowerCase()}`);
+  input.disabled = disabled;
+  slot.classList.toggle('is-disabled', disabled);
+  const value = definition.field ? state[definition.field] : 0;
+  const displayValue = definition.format === 'db' ? Math.min(Number(input.max), Math.max(Number(input.min), value)) : value;
+  input.value = definition.format === 'frequency' ? String(window.FilterShape.frequencyToSlider(displayValue)) : String(displayValue);
+  output.textContent = definition.field ? formatFilterControl(definition, displayValue) : '—';
+  if (definition.format === 'vowel') input.setAttribute('list', 'filter-vowel-ticks'); else input.removeAttribute('list');
+};
 const renderFilterMode = () => {
   const boostDb = Math.max(1, Number(audioEngine?.maxBandBoostDb ?? bandBoostSelect?.value ?? 12));
   const cutDb = Math.max(1, Number(audioEngine?.maxBandCutDb ?? bandCutSelect?.value ?? 12));
@@ -1530,12 +1565,21 @@ const renderFilterMode = () => {
   const points = gains.map((gain, index) => ({ x: 50 + index * 100, y: gainToY(gain) }));
   const frequencyMinHz = BAND_DEFINITIONS[0].frequency;
   const frequencyMaxHz = BAND_DEFINITIONS[BAND_DEFINITIONS.length - 1].frequency;
-  const frequencyPosition = Math.log(state.filterFrequencyHz / frequencyMinHz) / Math.log(frequencyMaxHz / frequencyMinHz);
+  const typeDefinition = filterTypeDefinitions.find(definition => definition.id === state.filterType) || filterTypeDefinitions[0];
+  const markerControl = filterControlDefinitions[typeDefinition.marker];
+  const markerFrequency = markerControl?.field ? state[markerControl.field] : state.filterBaxandallCenterHz;
+  const frequencyPosition = Math.log(markerFrequency / frequencyMinHz) / Math.log(frequencyMaxHz / frequencyMinHz);
   const frequencyX = graphLeft + frequencyPosition * (graphRight - graphLeft);
   const regularGridYs = Array.from({ length: 5 }, (_, index) => graphTop + index / 4 * (graphBottom - graphTop));
   if (filterResponseGrid) filterResponseGrid.innerHTML = `${regularGridYs.map(y => `<line class="filter-response-grid-line" x1="0" y1="${y.toFixed(2)}" x2="1000" y2="${y.toFixed(2)}"></line>`).join('')}<line class="filter-response-grid-line filter-response-zero-grid-line" data-filter-response-zero-grid-line x1="0" y1="${zeroY.toFixed(2)}" x2="1000" y2="${zeroY.toFixed(2)}"></line>`;
   filterFrequencyMarker?.setAttribute('x1', frequencyX.toFixed(2));
   filterFrequencyMarker?.setAttribute('x2', frequencyX.toFixed(2));
+  if (filterFrequencyMarker) filterFrequencyMarker.hidden = typeDefinition.marker === 'formants';
+  if (filterFormantMarkers) filterFormantMarkers.innerHTML = typeDefinition.marker === 'formants'
+    ? window.FilterShape.formantCenters(state.filterFormantVowel, state.filterFormantShiftSemitones).map((frequency, index) => {
+      const x = graphLeft + Math.log(Math.max(frequencyMinHz, Math.min(frequencyMaxHz, frequency)) / frequencyMinHz) / Math.log(frequencyMaxHz / frequencyMinHz) * (graphRight - graphLeft);
+      return `<line x1="${x.toFixed(2)}" y1="${graphTop}" x2="${x.toFixed(2)}" y2="${graphBottom}"><title>F${index + 1}: ${Math.round(frequency)} Hz</title></line>`;
+    }).join('') : '';
   filterResponsePath?.setAttribute('d', filterResponsePathData(points));
   if (filterResponseMarkers) filterResponseMarkers.innerHTML = points.map((point, index) => `<line x1="${point.x}" y1="${zeroY.toFixed(2)}" x2="${point.x}" y2="${point.y.toFixed(2)}"></line><circle cx="${point.x}" cy="${point.y.toFixed(2)}" r="3"><title>${BAND_DEFINITIONS[index].label}: ${gains[index].toFixed(1)} dB</title></circle>`).join('');
   filterResponseZeroLine?.setAttribute('y1', zeroY.toFixed(2));
@@ -1544,46 +1588,67 @@ const renderFilterMode = () => {
   if (filterResponseZeroLabel) filterResponseZeroLabel.style.top = `${zeroY / graphViewBoxHeight * 100}%`;
   if (filterResponseFloor) { filterResponseFloor.textContent = `−${cutDb} dB`; filterResponseFloor.style.top = `${graphBottom / graphViewBoxHeight * 100}%`; }
   if (filterFrequencyMarkerLabel) {
-    filterFrequencyMarkerLabel.textContent = formatFilterFrequency(state.filterFrequencyHz);
+    filterFrequencyMarkerLabel.hidden = typeDefinition.marker === 'formants';
+    filterFrequencyMarkerLabel.textContent = formatFilterFrequency(markerFrequency);
     filterFrequencyMarkerLabel.style.left = `${frequencyX / 10}%`;
     filterFrequencyMarkerLabel.classList.toggle('is-start', frequencyPosition < 0.08);
     filterFrequencyMarkerLabel.classList.toggle('is-end', frequencyPosition > 0.92);
   }
+  if (filterTypeValue) filterTypeValue.textContent = typeDefinition.displayName;
+  if (filterResponseDescriptor) filterResponseDescriptor.textContent = typeDefinition.descriptor;
   filterTypeButtons.forEach(button => {
     const active = button.dataset.filterType === state.filterType;
     button.classList.toggle('active', active);
-    button.setAttribute('aria-pressed', String(active));
+    button.setAttribute('aria-selected', String(active));
   });
-  if (filterFrequencySlider) filterFrequencySlider.value = String(window.FilterShape.frequencyToSlider(state.filterFrequencyHz));
-  if (filterSlopeSlider) filterSlopeSlider.value = String(state.filterSlope);
-  if (filterBandwidthSlider) filterBandwidthSlider.value = String(state.filterBandwidth);
-  if (filterResonanceSlider) filterResonanceSlider.value = String(state.filterResonance);
-  if (filterDepthSlider) filterDepthSlider.value = String(state.filterDepth);
-  const frequencyOutput = document.querySelector('[data-filter-frequency-output]');
-  const slopeOutput = document.querySelector('[data-filter-slope-output]');
-  const bandwidthOutput = document.querySelector('[data-filter-bandwidth-output]');
-  const resonanceOutput = document.querySelector('[data-filter-resonance-output]');
-  const depthOutput = document.querySelector('[data-filter-depth-output]');
-  if (frequencyOutput) frequencyOutput.textContent = formatFilterFrequency(state.filterFrequencyHz);
-  if (slopeOutput) slopeOutput.textContent = `${state.filterSlope} %`;
-  if (bandwidthOutput) bandwidthOutput.textContent = `${state.filterBandwidth} %`;
-  if (resonanceOutput) resonanceOutput.textContent = `${state.filterResonance} %`;
-  if (depthOutput) depthOutput.textContent = `${state.filterDepth} %`;
-  const bandwidthEnabled = state.filterType === 'bandpass' || state.filterType === 'notch';
-  if (filterBandwidthSlider) filterBandwidthSlider.disabled = !bandwidthEnabled;
-  filterBandwidthControl?.classList.toggle('is-disabled', !bandwidthEnabled);
+  [typeDefinition.primary, ...typeDefinition.secondary].forEach((key, index) => renderFilterControl(filterControlSlots[index], key, boostDb, cutDb));
 };
 const updateFilterState = values => {
   Object.assign(state, window.ResonantState.normalizeFilterState({ ...state, ...values }));
   audioEngine?.setFilterState(state);
   renderFilterMode();
 };
-filterTypeButtons.forEach(button => button.addEventListener('click', () => updateFilterState({ filterType: button.dataset.filterType })));
-filterFrequencySlider?.addEventListener('input', () => updateFilterState({ filterFrequencyHz: window.FilterShape.sliderToFrequency(filterFrequencySlider.value) }));
-filterSlopeSlider?.addEventListener('input', () => updateFilterState({ filterSlope: Number(filterSlopeSlider.value) }));
-filterBandwidthSlider?.addEventListener('input', () => updateFilterState({ filterBandwidth: Number(filterBandwidthSlider.value) }));
-filterResonanceSlider?.addEventListener('input', () => updateFilterState({ filterResonance: Number(filterResonanceSlider.value) }));
-filterDepthSlider?.addEventListener('input', () => updateFilterState({ filterDepth: Number(filterDepthSlider.value) }));
+const setFilterTypePopoverOpen = (open, focusOption = false) => {
+  if (!filterTypePopover || !filterTypeTrigger) return;
+  filterTypePopover.hidden = !open;
+  filterTypeTrigger.setAttribute('aria-expanded', String(open));
+  if (open && focusOption) (filterTypeButtons.find(button => button.dataset.filterType === state.filterType) || filterTypeButtons[0])?.focus();
+};
+filterTypeTrigger?.addEventListener('click', () => setFilterTypePopoverOpen(filterTypePopover.hidden));
+filterTypeTrigger?.addEventListener('keydown', event => {
+  if (['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(event.key)) {
+    event.preventDefault(); event.stopPropagation(); setFilterTypePopoverOpen(true, true);
+  }
+  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setFilterTypePopoverOpen(false); }
+});
+filterTypePopover?.addEventListener('keydown', event => {
+  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    event.preventDefault(); event.stopPropagation();
+    const index = filterTypeButtons.indexOf(document.activeElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? filterTypeButtons.length - 1
+      : (index + (event.key === 'ArrowDown' ? 1 : -1) + filterTypeButtons.length) % filterTypeButtons.length;
+    filterTypeButtons[next]?.focus();
+  }
+  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setFilterTypePopoverOpen(false); filterTypeTrigger.focus(); }
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault(); event.stopPropagation();
+    if (document.activeElement?.dataset.filterType) {
+      updateFilterState({ filterType: document.activeElement.dataset.filterType });
+      setFilterTypePopoverOpen(false); filterTypeTrigger.focus();
+    }
+  }
+});
+filterTypeButtons.forEach(button => button.addEventListener('click', () => {
+  updateFilterState({ filterType: button.dataset.filterType });
+  setFilterTypePopoverOpen(false); filterTypeTrigger?.focus();
+}));
+document.addEventListener('click', event => { if (!event.target.closest('.filter-type-control')) setFilterTypePopoverOpen(false); });
+filterControlSlots.forEach(slot => slot.querySelector('input')?.addEventListener('input', event => {
+  const definition = filterControlDefinitions[event.target.dataset.filterControl];
+  if (!definition?.field) return;
+  const value = definition.format === 'frequency' ? window.FilterShape.sliderToFrequency(event.target.value) : Number(event.target.value);
+  updateFilterState({ [definition.field]: value });
+}));
 renderFilterMode();
 window.FilterMode = Object.freeze({
   getState: () => ({
@@ -1595,7 +1660,8 @@ window.FilterMode = Object.freeze({
     filterSlope: state.filterSlope,
     filterBandwidth: state.filterBandwidth,
     filterResonance: state.filterResonance,
-    filterDepth: state.filterDepth
+    filterDepth: state.filterDepth,
+    ...Object.fromEntries(window.ResonantState.FILTER_EXTRA_FIELDS.map(field => [field, state[field]]))
   }),
   getShape: () => [...getFilterModeShape()],
   getManualBandState: () => ({ left: [...state.bandGainLeft], right: [...state.bandGainRight], perChannelBands: state.perChannelBands, linked: [...state.bandChannelLinked] }),
@@ -2485,7 +2551,8 @@ const syncUiFromAudioState = snapshot => {
     filterSlope: snapshot.filterSlope ?? state.filterSlope,
     filterBandwidth: snapshot.filterBandwidth ?? state.filterBandwidth,
     filterResonance: snapshot.filterResonance ?? state.filterResonance,
-    filterDepth: snapshot.filterDepth ?? state.filterDepth
+    filterDepth: snapshot.filterDepth ?? state.filterDepth,
+    ...Object.fromEntries(window.ResonantState.FILTER_EXTRA_FIELDS.map(field => [field, snapshot[field] ?? window.ResonantState.normalizeFilterState({})[field]]))
   }));
   if (snapshot.filterEnabled !== undefined) state.filterEnabled = Boolean(snapshot.filterEnabled);
   if (snapshot.filterbankEnabled !== undefined) state.filterbankEnabled = Boolean(snapshot.filterbankEnabled);

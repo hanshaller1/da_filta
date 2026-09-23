@@ -1164,6 +1164,8 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .filter-response-grid-line { stroke: color-mix(in srgb, var(--secondary-text) 12%, transparent); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .filter-response-zero-grid-line { stroke: color-mix(in srgb, var(--secondary-text) 22%, transparent); }
 .filter-frequency-marker { stroke: var(--cyan); stroke-width: 1; stroke-dasharray: 4 5; opacity: .42; vector-effect: non-scaling-stroke; }
+.filter-frequency-marker[hidden] { display: none; }
+.filter-formant-markers line { stroke: var(--cyan); stroke-width: 1; stroke-dasharray: 2 6; opacity: .24; vector-effect: non-scaling-stroke; }
 .filter-response-zero-line { stroke: var(--graph-zero); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .filter-response-path { fill: none; stroke: var(--cyan); stroke-width: 2.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--cyan) 32%, transparent)); }
 [data-filter-response-markers] line { stroke: color-mix(in srgb, var(--cyan) 20%, transparent); stroke-width: 1; stroke-dasharray: 2 4; vector-effect: non-scaling-stroke; }
@@ -1173,12 +1175,21 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .filter-frequency-marker-label { position: absolute; z-index: 2; top: 5px; color: color-mix(in srgb, var(--cyan) 72%, var(--secondary-text)); font-size: 8px; line-height: 1; white-space: nowrap; pointer-events: none; transform: translateX(-50%); }
 .filter-frequency-marker-label.is-start { transform: translateX(0); }
 .filter-frequency-marker-label.is-end { transform: translateX(-100%); }
+.filter-frequency-marker-label[hidden] { display: none; }
 .filter-response-labels { position: absolute; top: calc(100% + 5px); right: 0; left: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); color: var(--secondary-text); font-size: 10px; text-align: center; pointer-events: none; }
-.filter-controls { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; padding: 16px; gap: 16px; overflow: hidden; }
-.filter-type-control { display: grid; gap: 7px; padding-bottom: 12px; border-bottom: 1px solid var(--output-border); color: var(--muted-text); font-size: 11px; letter-spacing: .9px; }
-.filter-type-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.filter-type-buttons button { height: 30px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--button-background); font: 700 11px 'Trebuchet MS', Arial, sans-serif; letter-spacing: .5px; cursor: pointer; }
-.filter-type-buttons button.active { color: var(--cyan); border-color: var(--cyan); background: var(--active-background); box-shadow: var(--active-shadow); }
+.filter-controls { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; padding: 16px; gap: 16px; overflow: visible; }
+.filter-type-control { position: relative; z-index: 5; display: grid; gap: 7px; padding-bottom: 12px; border-bottom: 1px solid var(--output-border); color: var(--muted-text); font-size: 11px; letter-spacing: .9px; }
+.filter-type-trigger { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--strong-text); background: var(--output-background); font: 700 11px 'Trebuchet MS', Arial, sans-serif; letter-spacing: .5px; cursor: pointer; }
+.filter-type-trigger:hover, .filter-type-trigger:focus-visible, .filter-type-trigger[aria-expanded=true] { border-color: var(--cyan); outline: none; }
+.filter-type-trigger > span:last-child { color: var(--secondary-text); font-size: 13px; }
+.filter-type-popover { position: absolute; z-index: 8; top: calc(100% + 3px); left: 0; width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); background-color: var(--output-background); box-shadow: var(--panel-shadow), 0 10px 24px rgba(0,0,0,.4); }
+.filter-type-popover[hidden] { display: none; }
+.filter-type-group + .filter-type-group { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--output-border); }
+.filter-type-group > strong { display: block; margin-bottom: 5px; color: var(--secondary-text); font-size: 9px; letter-spacing: .8px; }
+.filter-type-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.filter-type-options button { min-width: 0; height: 25px; padding: 0 5px; border: 1px solid transparent; border-radius: 3px; color: var(--button-text); background: var(--button-background); font: 600 9px 'Trebuchet MS', Arial, sans-serif; text-align: left; cursor: pointer; white-space: nowrap; }
+.filter-type-options button:hover, .filter-type-options button:focus-visible { border-color: var(--button-border); color: var(--cyan); outline: none; }
+.filter-type-options button.active { border-color: var(--cyan); color: var(--cyan); background: var(--active-background); }
 .filter-secondary-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: stretch; min-height: 0; border-top: 1px solid color-mix(in srgb, var(--output-border) 48%, transparent); border-left: 1px solid color-mix(in srgb, var(--output-border) 48%, transparent); }
 .filter-parameter-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; align-content: center; gap: 12px 8px; min-width: 0; padding: 14px 12px; border-right: 1px solid color-mix(in srgb, var(--output-border) 48%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--output-border) 48%, transparent); color: var(--muted-text); font-size: 10px; letter-spacing: .8px; }
 .filter-frequency-control { row-gap: 15px; padding: 2px 0 16px; border-top: 0; border-right: 0; border-bottom: 1px solid var(--output-border); border-left: 0; }
@@ -1198,7 +1209,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 @media (min-width: 1200px) and (max-height: 800px) {
   .filter-controls { padding: 12px; gap: 10px; }
   .filter-type-control { gap: 5px; padding-bottom: 9px; }
-  .filter-type-buttons button { height: 28px; }
+  .filter-type-trigger { height: 30px; }
   .filter-frequency-control { padding-bottom: 10px; }
   .filter-parameter-control { gap: 8px 6px; padding: 8px; }
 }

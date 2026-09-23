@@ -105,6 +105,7 @@
       this.filterBandwidth = 50;
       this.filterResonance = 0;
       this.filterDepth = 100;
+      Object.assign(this, normalizeFilterState({}));
       this.filterModeBandGainsDb = Array(BAND_COUNT).fill(0);
       this.filterModeBandControls = Array(BAND_COUNT).fill(0);
       this.bandGainLeft = Array(BAND_COUNT).fill(0);
@@ -265,12 +266,7 @@
 
     rebuildFilterModeBandControls() {
       this.filterModeBandGainsDb = window.FilterShape.createFilterShape({
-        type: this.filterType,
-        frequencyHz: this.filterFrequencyHz,
-        slope: this.filterSlope,
-        bandwidth: this.filterBandwidth,
-        resonance: this.filterResonance,
-        depth: this.filterDepth,
+        ...window.FilterShape.shapeParametersFromState(this),
         bandDefinitions: BAND_DEFINITIONS,
         maxBandBoostDb: this.maxBandBoostDb,
         maxBandCutDb: this.maxBandCutDb
@@ -286,7 +282,8 @@
         filterSlope: nextState.filterSlope ?? this.filterSlope,
         filterBandwidth: nextState.filterBandwidth ?? this.filterBandwidth,
         filterResonance: nextState.filterResonance ?? this.filterResonance,
-        filterDepth: nextState.filterDepth ?? this.filterDepth
+        filterDepth: nextState.filterDepth ?? this.filterDepth,
+        ...Object.fromEntries(window.ResonantState.FILTER_EXTRA_FIELDS.map(field => [field, nextState[field] ?? this[field]]))
       });
       Object.assign(this, normalized);
       this.rebuildFilterModeBandControls();
@@ -439,6 +436,7 @@
         filterBandwidth: this.filterBandwidth,
         filterResonance: this.filterResonance,
         filterDepth: this.filterDepth,
+        ...Object.fromEntries(window.ResonantState.FILTER_EXTRA_FIELDS.map(field => [field, this[field]])),
         feedbackBandLeft: [...this.feedbackBandLeft],
         feedbackBandRight: [...this.feedbackBandRight],
         feedbackAllLeft: this.feedbackAllLeft,
@@ -462,7 +460,8 @@
       this.setFilterState({
         ...snapshot,
         filterResonance: snapshot?.filterResonance ?? 0,
-        filterDepth: snapshot?.filterDepth ?? 100
+        filterDepth: snapshot?.filterDepth ?? 100,
+        ...Object.fromEntries(window.ResonantState.FILTER_EXTRA_FIELDS.map(field => [field, snapshot?.[field] ?? normalizeFilterState({})[field]]))
       });
       this.setFilterEnabled(snapshot?.filterEnabled ?? this.filterEnabled);
       this.feedbackBandLeft = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandLeft?.[index]));

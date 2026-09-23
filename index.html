@@ -479,7 +479,7 @@
             </section>
             <section class="filter-mode-panel" id="mode-filter" role="tabpanel" aria-labelledby="mode-tab-filter" data-mode-panel="filter" hidden>
               <section class="filter-response" aria-label="Filter control response">
-                <header><strong>FILTER RESPONSE</strong><span>10-BAND CONTROL SHAPE</span></header>
+                <header><strong>FILTER RESPONSE</strong><span data-filter-response-descriptor>10-BAND CONTROL SHAPE</span></header>
                 <div class="filter-response-chart">
                   <span class="filter-response-ceiling" data-filter-response-ceiling>+12 dB</span>
                   <span class="filter-response-zero" data-filter-response-zero-label>0 dB</span>
@@ -488,6 +488,7 @@
                   <svg viewBox="0 0 1000 240" preserveAspectRatio="none" role="img" aria-label="Berechnete Filter-Steuerkurve">
                     <g class="filter-response-grid" data-filter-response-grid></g>
                     <line class="filter-frequency-marker" data-filter-frequency-marker x1="550" y1="12" x2="550" y2="220"></line>
+                    <g class="filter-formant-markers" data-filter-formant-markers></g>
                     <line class="filter-response-zero-line" data-filter-response-zero-line x1="0" y1="116" x2="1000" y2="116"></line>
                     <path class="filter-response-path" data-filter-response-path></path>
                     <g data-filter-response-markers></g>
@@ -496,8 +497,8 @@
                 </div>
               </section>
               <section class="filter-controls" aria-label="Filter controls">
-                <div class="filter-type-control"><span>TYPE</span><div class="filter-type-buttons" role="group" aria-label="Filtertyp"><button type="button" data-filter-type="lowpass" aria-label="Lowpass">LP</button><button type="button" data-filter-type="highpass" aria-label="Highpass">HP</button><button type="button" data-filter-type="bandpass" aria-label="Bandpass">BP</button><button type="button" data-filter-type="notch" aria-label="Notch">NOTCH</button></div></div>
-                <label class="filter-parameter-control filter-frequency-control"><span>FREQUENCY</span><output data-filter-frequency-output>777 Hz</output><input type="range" min="0" max="1000" step="1" data-filter-frequency aria-label="Filter frequency"></label>
+                <div class="filter-type-control"><span>FILTER TYPE</span><button class="filter-type-trigger" type="button" data-filter-type-trigger aria-haspopup="listbox" aria-expanded="false" aria-controls="filter-type-popover"><span data-filter-type-value>LOW PASS</span><span aria-hidden="true">▾</span></button><div class="filter-type-popover" id="filter-type-popover" data-filter-type-popover role="listbox" aria-label="Filtertyp" hidden></div></div>
+                <label class="filter-parameter-control filter-frequency-control" data-filter-primary-control><span>FREQUENCY</span><output data-filter-frequency-output>777 Hz</output><input type="range" min="0" max="1000" step="1" data-filter-frequency aria-label="Filter frequency"><datalist id="filter-vowel-ticks"><option value="0" label="A"></option><option value="1" label="E"></option><option value="2" label="I"></option><option value="3" label="O"></option><option value="4" label="U"></option></datalist></label>
                 <div class="filter-secondary-controls">
                   <label class="filter-parameter-control"><span>SLOPE</span><output data-filter-slope-output>50 %</output><input type="range" min="0" max="100" step="1" data-filter-slope aria-label="Filter slope"></label>
                   <label class="filter-parameter-control"><span>RESONANCE</span><output data-filter-resonance-output>0 %</output><input type="range" min="0" max="100" step="1" value="0" data-filter-resonance aria-label="Filter resonance"></label>
