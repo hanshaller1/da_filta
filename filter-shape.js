@@ -30,13 +30,20 @@
     return 1 - smoothstep01((x - edgeLow) / transitionOctaves);
   };
   const highpassWeightAt = (x, cutoff, transitionOctaves) => 1 - lowpassWeightAt(x, cutoff, transitionOctaves);
+  const gaussianAt = (x, center, width) => {
+    const normalizedDistance = (x - center) / Math.max(0.01, width);
+    return Math.exp(-0.5 * normalizedDistance * normalizedDistance);
+  };
 
   const createFilterShape = ({
     type = 'lowpass',
     frequencyHz = 777,
     slope = 50,
     bandwidth = 50,
+    resonance = 0,
+    depth = 100,
     bandDefinitions = [],
+    maxBandBoostDb = 12,
     maxBandCutDb = 12
   } = {}) => {
     const normalizedType = normalizeFilterType(type);
@@ -45,6 +52,10 @@
     const bandwidthOctaves = bandwidthOctavesForPercent(bandwidth);
     const lowerEdge = cutoff - bandwidthOctaves / 2;
     const upperEdge = cutoff + bandwidthOctaves / 2;
+    const depthAmount = normalizeFilterPercent(depth, 100) / 100;
+    const resonanceAmount = Math.pow(normalizeFilterPercent(resonance, 0) / 100, 1.35);
+    const resonanceWidth = Math.min(0.7, Math.max(0.16, transitionOctaves * 0.22));
+    const boostDb = Math.max(0, Number.isFinite(Number(maxBandBoostDb)) ? Number(maxBandBoostDb) : 12);
     const cutDb = Math.max(0, Number.isFinite(Number(maxBandCutDb)) ? Number(maxBandCutDb) : 12);
 
     return bandDefinitions.map(definition => {
@@ -61,8 +72,16 @@
           : normalizedType === 'bandpass'
             ? bandShape
             : 1 - bandShape;
-      const gainDb = -cutDb * (1 - clamp01(passWeight));
-      return Math.min(0, Math.max(-cutDb, Number.isFinite(gainDb) ? gainDb : -cutDb));
+      const cutGainDb = -cutDb * (1 - clamp01(passWeight)) * depthAmount;
+      const resonanceProfile = normalizedType === 'notch'
+        ? Math.max(gaussianAt(x, lowerEdge, resonanceWidth), gaussianAt(x, upperEdge, resonanceWidth))
+        : gaussianAt(x, cutoff, normalizedType === 'bandpass' ? Math.max(resonanceWidth, bandwidthOctaves * 0.12) : resonanceWidth);
+      // At full resonance, the profile center can reach maxBandBoostDb even
+      // when it sits on a partially attenuated filter edge. DEPTH therefore
+      // controls only the cut while resonance remains an independent layer.
+      const resonanceGainDb = resonanceProfile * resonanceAmount * (boostDb + Math.max(0, -cutGainDb));
+      const gainDb = cutGainDb + resonanceGainDb;
+      return Math.min(boostDb, Math.max(-cutDb, Number.isFinite(gainDb) ? gainDb : -cutDb));
     });
   };
 

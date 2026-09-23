@@ -481,10 +481,11 @@
               <section class="filter-response" aria-label="Filter control response">
                 <header><strong>FILTER RESPONSE</strong><span>10-BAND CONTROL SHAPE</span></header>
                 <div class="filter-response-chart">
-                  <span class="filter-response-zero">0 dB</span>
+                  <span class="filter-response-ceiling" data-filter-response-ceiling>+12 dB</span>
+                  <span class="filter-response-zero" data-filter-response-zero-label>0 dB</span>
                   <span class="filter-response-floor" data-filter-response-floor>−12 dB</span>
                   <svg viewBox="0 0 1000 240" preserveAspectRatio="none" role="img" aria-label="Berechnete Filter-Steuerkurve">
-                    <line class="filter-response-zero-line" x1="0" y1="8" x2="1000" y2="8"></line>
+                    <line class="filter-response-zero-line" data-filter-response-zero-line x1="0" y1="116" x2="1000" y2="116"></line>
                     <path class="filter-response-path" data-filter-response-path></path>
                     <g data-filter-response-markers></g>
                   </svg>
@@ -493,9 +494,13 @@
               </section>
               <section class="filter-controls" aria-label="Filter controls">
                 <div class="filter-type-control"><span>TYPE</span><div class="filter-type-buttons" role="group" aria-label="Filtertyp"><button type="button" data-filter-type="lowpass" aria-label="Lowpass">LP</button><button type="button" data-filter-type="highpass" aria-label="Highpass">HP</button><button type="button" data-filter-type="bandpass" aria-label="Bandpass">BP</button><button type="button" data-filter-type="notch" aria-label="Notch">NOTCH</button></div></div>
-                <label class="filter-parameter-control"><span>FREQUENCY</span><input type="range" min="0" max="1000" step="1" data-filter-frequency aria-label="Filter frequency"><output data-filter-frequency-output>777 Hz</output></label>
-                <label class="filter-parameter-control"><span>SLOPE</span><input type="range" min="0" max="100" step="1" data-filter-slope aria-label="Filter slope"><output data-filter-slope-output>50 %</output></label>
-                <label class="filter-parameter-control" data-filter-bandwidth-control><span>BANDWIDTH</span><input type="range" min="0" max="100" step="1" data-filter-bandwidth aria-label="Filter bandwidth"><output data-filter-bandwidth-output>50 %</output></label>
+                <label class="filter-parameter-control filter-frequency-control"><span>FREQUENCY</span><output data-filter-frequency-output>777 Hz</output><input type="range" min="0" max="1000" step="1" data-filter-frequency aria-label="Filter frequency"></label>
+                <div class="filter-secondary-controls">
+                  <label class="filter-parameter-control"><span>SLOPE</span><output data-filter-slope-output>50 %</output><input type="range" min="0" max="100" step="1" data-filter-slope aria-label="Filter slope"></label>
+                  <label class="filter-parameter-control"><span>RESONANCE</span><output data-filter-resonance-output>0 %</output><input type="range" min="0" max="100" step="1" value="0" data-filter-resonance aria-label="Filter resonance"></label>
+                  <label class="filter-parameter-control" data-filter-bandwidth-control><span>WIDTH</span><output data-filter-bandwidth-output>50 %</output><input type="range" min="0" max="100" step="1" data-filter-bandwidth aria-label="Filter bandwidth"></label>
+                  <label class="filter-parameter-control"><span>DEPTH</span><output data-filter-depth-output>100 %</output><input type="range" min="0" max="100" step="1" value="100" data-filter-depth aria-label="Filter depth"></label>
+                </div>
               </section>
             </section>
             <section class="mode-placeholder" id="mode-clock-mod" role="tabpanel" aria-labelledby="mode-tab-clock-mod" data-mode-panel="clock-mod" hidden><strong>CLOCK MOD</strong><span>Clock modulation – coming later</span></section>
@@ -508,11 +513,12 @@
           </div>
           <section class="persistent-band-control-panel" aria-label="Permanente Band Controls">
             <section class="channel-mode-panel" aria-label="Band Channel Mode">
-              <strong>CHANNELS</strong>
-              <div class="channel-mode-options" role="group" aria-label="Band Channel Mode">
-                <button class="channel-mode-option classic-channel-toggle active" type="button" data-channel-mode="classic" aria-pressed="true">CLASSIC</button>
-                <button class="channel-mode-option per-channel-toggle" type="button" data-channel-mode="per-channel" aria-pressed="false">P/CH</button>
-              </div>
+              <button class="channel-mode-reset" type="button" data-band-reset aria-label="Bandwerte zurücksetzen" title="Bandwerte zurücksetzen">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 8a6.5 6.5 0 1 1 1.7 6.1M4 8V3.5M4 8h4.5"/></svg>
+              </button>
+              <button class="channel-mode-toggle classic-channel-toggle per-channel-toggle" type="button" data-channel-toggle aria-pressed="false" aria-label="P/CH aktivieren">
+                <span data-channel-option="classic">CLASSIC</span><span class="channel-mode-toggle-arrow" aria-hidden="true">↔</span><span data-channel-option="per-channel">P/CH</span>
+              </button>
             </section>
             <section class="persistent-band-panel">
               <section class="bands" aria-label="Frequenzbänder"></section>

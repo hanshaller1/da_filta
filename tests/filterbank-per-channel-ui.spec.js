@@ -63,3 +63,59 @@ test('P/CH swaps one center fader for an L/R pair without visual overlap', async
   await expect(centers.first()).toBeVisible();
   await expect(channels.first()).toBeHidden();
 });
+
+test('the permanent panel uses one channel toggle and reset neutralizes both stored channels', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await expect(page.locator('[data-channel-toggle]')).toHaveCount(1);
+  await expect(page.locator('.channel-mode-panel strong')).toHaveCount(0);
+
+  await page.locator('[data-control="spread"]').fill('4');
+  await page.locator('.center-fader .band-fader').first().fill('35');
+  await page.locator('[data-channel-toggle]').click();
+  await page.locator('.band-fader-channel[data-band="0"][data-channel="left"]').fill('40');
+  await page.locator('.band-fader-channel[data-band="0"][data-channel="right"]').fill('-25');
+  await page.locator('[data-band-reset]').click();
+
+  const resetState = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    return {
+      ui: window.FilterMode.getManualBandState(),
+      engineLeft: [...engine.bandGainLeft],
+      engineRight: [...engine.bandGainRight],
+      spread: document.querySelector('[data-control="spread"]').value,
+      analyzer: [...document.querySelectorAll('[data-analyzer-band] i[data-channel]')].map(bar => bar.style.height),
+      mode: document.querySelector('[data-channel-toggle]').getAttribute('aria-pressed')
+    };
+  });
+  expect(resetState.ui.left).toEqual(Array(10).fill(0));
+  expect(resetState.ui.right).toEqual(Array(10).fill(0));
+  expect(resetState.engineLeft).toEqual(Array(10).fill(0));
+  expect(resetState.engineRight).toEqual(Array(10).fill(0));
+  expect(resetState.spread).toBe('0');
+  expect(resetState.analyzer).toEqual(Array(20).fill('0%'));
+  expect(resetState.mode).toBe('true');
+
+  await page.locator('[data-channel-toggle]').click();
+  await expect(page.locator('.center-fader .band-fader').first()).toHaveValue('0');
+  await page.locator('[data-channel-toggle]').click();
+  await expect(page.locator('.band-fader-channel[data-band="0"][data-channel="left"]')).toHaveValue('0');
+  await expect(page.locator('.band-fader-channel[data-band="0"][data-channel="right"]')).toHaveValue('0');
+
+  const backgrounds = await page.evaluate(() => {
+    const panel = document.querySelector('.persistent-band-control-panel');
+    const workspace = document.querySelector('.mode-workspace');
+    const channel = document.querySelector('.channel-mode-panel');
+    return {
+      panel: getComputedStyle(panel).backgroundColor,
+      workspace: getComputedStyle(workspace).backgroundColor,
+      channel: getComputedStyle(channel).backgroundColor,
+      borderRight: getComputedStyle(channel).borderRightWidth,
+      scrollWidth: document.documentElement.scrollWidth
+    };
+  });
+  expect(backgrounds.panel).toBe(backgrounds.workspace);
+  expect(backgrounds.channel).toBe(backgrounds.workspace);
+  expect(backgrounds.borderRight).toBe('0px');
+  expect(backgrounds.scrollWidth).toBe(1440);
+});

@@ -35,6 +35,8 @@ test('FILTER power controls its layer across workspaces without changing FILTERB
   await page.locator('[data-filter-slope]').dispatchEvent('input');
   await page.locator('[data-filter-bandwidth]').fill('26');
   await page.locator('[data-filter-bandwidth]').dispatchEvent('input');
+  await page.locator('[data-filter-resonance]').fill('64');
+  await page.locator('[data-filter-depth]').fill('42');
   const filterState = await page.evaluate(() => ({
     ui: window.FilterMode.getState(),
     shape: window.FilterMode.getShape(),
@@ -44,6 +46,8 @@ test('FILTER power controls its layer across workspaces without changing FILTERB
   expect(filterState.ui.filterType).toBe('bandpass');
   expect(filterState.ui.filterSlope).toBe(73);
   expect(filterState.ui.filterBandwidth).toBe(26);
+  expect(filterState.ui.filterResonance).toBe(64);
+  expect(filterState.ui.filterDepth).toBe(42);
   expect(filterState.ui.filterEnabled).toBe(true);
   expect(filterState.engineEnabled).toBe(true);
   expect(filterState.sameNode).toBeTruthy();
@@ -406,4 +410,98 @@ test('FILTERBANK response controls stay bound to manual FILTERBANK state while F
   await expect(page.locator('[data-filter-response-path]')).toHaveAttribute('d', /^M/);
   expect(await page.evaluate(() => window.FilterbankAnalyzer.getDisplayState().outputSpectrum)).toBe(true);
   expect(await page.evaluate(() => window.FilterMode.getState().filterEnabled)).toBe(true);
+});
+
+test('FILTER V1 controls remain editable while powered off and restore the identical shape when powered on', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="filter"]').click();
+  const power = page.locator('[data-module-power="filter"]');
+  await expect(power).toHaveAttribute('aria-pressed', 'false');
+
+  for (const type of ['lowpass', 'highpass']) {
+    await page.locator(`[data-filter-type="${type}"]`).click();
+    await expect(page.locator('[data-filter-bandwidth]')).toBeDisabled();
+    await expect(page.locator('[data-filter-bandwidth-control]')).toHaveClass(/is-disabled/);
+  }
+  for (const type of ['bandpass', 'notch']) {
+    await page.locator(`[data-filter-type="${type}"]`).click();
+    await expect(page.locator('[data-filter-bandwidth]')).toBeEnabled();
+    await expect(page.locator('[data-filter-bandwidth-control]')).not.toHaveClass(/is-disabled/);
+  }
+
+  await page.locator('[data-filter-type="notch"]').click();
+  await page.locator('[data-filter-frequency]').fill('575');
+  await page.locator('[data-filter-slope]').fill('72');
+  await page.locator('[data-filter-bandwidth]').fill('38');
+  await page.locator('[data-filter-resonance]').fill('80');
+  await page.locator('[data-filter-depth]').fill('30');
+  const poweredOff = await page.evaluate(() => ({
+    state: window.FilterMode.getState(),
+    shape: window.FilterMode.getShape(),
+    effective: window.FilterMode.getAudioEngine().effectiveBandGainDbLeft
+  }));
+  expect(poweredOff.state).toMatchObject({ filterEnabled: false, filterType: 'notch', filterSlope: 72, filterBandwidth: 38, filterResonance: 80, filterDepth: 30 });
+  expect(poweredOff.shape.some(value => value > 0)).toBeTruthy();
+  expect(poweredOff.shape.some(value => value < 0)).toBeTruthy();
+  expect(poweredOff.effective).toEqual(Array(10).fill(0));
+  await expect(page.locator('[data-filter-response-path]')).toHaveAttribute('d', /^M/);
+
+  await power.click();
+  const poweredOn = await page.evaluate(() => ({ shape: window.FilterMode.getShape(), effective: window.FilterMode.getAudioEngine().effectiveBandGainDbLeft }));
+  expect(poweredOn.shape).toEqual(poweredOff.shape);
+  poweredOn.effective.forEach((value, index) => expect(value).toBeCloseTo(poweredOff.shape[index], 8));
+  await power.click();
+  await power.click();
+  expect(await page.evaluate(() => window.FilterMode.getShape())).toEqual(poweredOff.shape);
+});
+
+test('FILTER graph uses an asymmetric dB axis and the desktop workspace keeps a 3:2 visual split', async ({ page }) => {
+  await page.setViewportSize({ width: 1914, height: 907 });
+  await page.goto('/');
+  await page.locator('[data-mode="filter"]').click();
+  await page.locator('[data-band-boost-db]').evaluate(select => { select.value = '24'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.locator('[data-band-cut-db]').evaluate(select => { select.value = '36'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.locator('[data-filter-type="bandpass"]').click();
+  await page.locator('[data-filter-resonance]').fill('100');
+  await page.locator('[data-filter-depth]').fill('100');
+
+  await expect(page.locator('[data-filter-response-ceiling]')).toHaveText('+24 dB');
+  await expect(page.locator('[data-filter-response-floor]')).toHaveText('−36 dB');
+  const report = await page.evaluate(() => {
+    const rect = selector => { const value = document.querySelector(selector).getBoundingClientRect(); return { left: value.left, right: value.right, top: value.top, bottom: value.bottom, width: value.width, height: value.height }; };
+    const markerYs = [...document.querySelectorAll('[data-filter-response-markers] circle')].map(marker => Number(marker.getAttribute('cy')));
+    return {
+      panel: rect('.filter-mode-panel'),
+      graph: rect('.filter-response'),
+      controls: rect('.filter-controls'),
+      chart: rect('.filter-response-chart'),
+      zeroY: Number(document.querySelector('[data-filter-response-zero-line]').getAttribute('y1')),
+      markerYs,
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth
+    };
+  });
+  expect(report.zeroY).toBeCloseTo(95.2, 1);
+  expect(Math.min(...report.markerYs)).toBeCloseTo(12, 5);
+  expect(Math.max(...report.markerYs)).toBeCloseTo(220, 5);
+  expect(report.graph.width / (report.graph.width + report.controls.width)).toBeCloseTo(0.6, 2);
+  expect(report.graph.top).toBeCloseTo(report.controls.top, 5);
+  expect(report.graph.bottom).toBeCloseTo(report.controls.bottom, 5);
+  expect(report.graph.right).toBeLessThan(report.controls.left);
+  expect(report.scrollWidth).toBe(report.innerWidth);
+});
+
+test('legacy FILTER snapshots default missing resonance and depth safely', async ({ page }) => {
+  await page.goto('/');
+  const restored = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    engine.setFilterState({ filterResonance: 87, filterDepth: 13 });
+    const legacy = engine.getState();
+    delete legacy.filterResonance;
+    delete legacy.filterDepth;
+    engine.applyState(legacy);
+    return engine.getState();
+  });
+  expect(restored.filterResonance).toBe(0);
+  expect(restored.filterDepth).toBe(100);
 });

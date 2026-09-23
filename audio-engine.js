@@ -103,6 +103,8 @@
       this.filterFrequencyHz = 777;
       this.filterSlope = 50;
       this.filterBandwidth = 50;
+      this.filterResonance = 0;
+      this.filterDepth = 100;
       this.filterModeBandGainsDb = Array(BAND_COUNT).fill(0);
       this.filterModeBandControls = Array(BAND_COUNT).fill(0);
       this.bandGainLeft = Array(BAND_COUNT).fill(0);
@@ -267,7 +269,10 @@
         frequencyHz: this.filterFrequencyHz,
         slope: this.filterSlope,
         bandwidth: this.filterBandwidth,
+        resonance: this.filterResonance,
+        depth: this.filterDepth,
         bandDefinitions: BAND_DEFINITIONS,
+        maxBandBoostDb: this.maxBandBoostDb,
         maxBandCutDb: this.maxBandCutDb
       });
       this.filterModeBandControls = this.filterModeBandGainsDb.map(gainDb => bandGainDbToControl(gainDb, this.maxBandBoostDb, this.maxBandCutDb));
@@ -279,7 +284,9 @@
         filterType: nextState.filterType ?? this.filterType,
         filterFrequencyHz: nextState.filterFrequencyHz ?? this.filterFrequencyHz,
         filterSlope: nextState.filterSlope ?? this.filterSlope,
-        filterBandwidth: nextState.filterBandwidth ?? this.filterBandwidth
+        filterBandwidth: nextState.filterBandwidth ?? this.filterBandwidth,
+        filterResonance: nextState.filterResonance ?? this.filterResonance,
+        filterDepth: nextState.filterDepth ?? this.filterDepth
       });
       Object.assign(this, normalized);
       this.rebuildFilterModeBandControls();
@@ -430,6 +437,8 @@
         filterFrequencyHz: this.filterFrequencyHz,
         filterSlope: this.filterSlope,
         filterBandwidth: this.filterBandwidth,
+        filterResonance: this.filterResonance,
+        filterDepth: this.filterDepth,
         feedbackBandLeft: [...this.feedbackBandLeft],
         feedbackBandRight: [...this.feedbackBandRight],
         feedbackAllLeft: this.feedbackAllLeft,
@@ -450,7 +459,11 @@
       this.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(left[index] ?? 0));
       this.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(right[index] ?? 0));
       this.filterbankEnabled = Boolean(snapshot?.filterbankEnabled ?? this.filterbankEnabled);
-      this.setFilterState(snapshot);
+      this.setFilterState({
+        ...snapshot,
+        filterResonance: snapshot?.filterResonance ?? 0,
+        filterDepth: snapshot?.filterDepth ?? 100
+      });
       this.setFilterEnabled(snapshot?.filterEnabled ?? this.filterEnabled);
       this.feedbackBandLeft = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandLeft?.[index]));
       this.feedbackBandRight = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandRight?.[index]));

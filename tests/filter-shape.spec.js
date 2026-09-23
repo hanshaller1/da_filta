@@ -57,3 +57,72 @@ test('frequency slider mapping is logarithmic and round-trips actual Hz', async 
   expect(values.at(-1).slider).toBe(1000);
   values.forEach(({ frequency, roundTrip }) => expect(Math.abs(roundTrip - frequency) / frequency).toBeLessThan(.004));
 });
+
+test('FILTER resonance adds bounded type-specific peaks independently from depth', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(() => {
+    const create = (type, overrides = {}) => window.FilterShape.createFilterShape({
+      type,
+      frequencyHz: 777,
+      slope: 50,
+      bandwidth: 50,
+      resonance: 0,
+      depth: 100,
+      bandDefinitions: window.ResonantState.BAND_DEFINITIONS,
+      maxBandBoostDb: 12,
+      maxBandCutDb: 12,
+      ...overrides
+    });
+    return Object.fromEntries(['lowpass', 'highpass', 'bandpass', 'notch'].map(type => [type, {
+      base: create(type),
+      resonant: create(type, { resonance: 100 }),
+      lowDepthHighResonance: create(type, { depth: 30, resonance: 80 })
+    }]));
+  });
+
+  for (const { base, resonant, lowDepthHighResonance } of Object.values(result)) {
+    expect(resonant).toHaveLength(10);
+    expect(resonant.every(Number.isFinite)).toBeTruthy();
+    expect(Math.max(...resonant)).toBeLessThanOrEqual(12);
+    expect(Math.min(...resonant)).toBeGreaterThanOrEqual(-12);
+    expect(resonant.some((value, index) => value > base[index])).toBeTruthy();
+    expect(lowDepthHighResonance.some(value => value > 0)).toBeTruthy();
+  }
+  expect(result.lowpass.resonant[5]).toBe(12);
+  expect(result.highpass.resonant[5]).toBe(12);
+  expect(result.bandpass.resonant[5]).toBe(12);
+  expect(result.notch.resonant[3]).toBeGreaterThan(0);
+  expect(result.notch.resonant[7]).toBeGreaterThan(0);
+  expect(result.notch.resonant[5]).toBeLessThan(0);
+});
+
+test('FILTER depth scales only attenuation and reaches neutral at zero without resonance', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(() => {
+    const create = (type, depth, resonance = 0) => window.FilterShape.createFilterShape({
+      type,
+      frequencyHz: 777,
+      slope: 50,
+      bandwidth: 50,
+      resonance,
+      depth,
+      bandDefinitions: window.ResonantState.BAND_DEFINITIONS,
+      maxBandBoostDb: 24,
+      maxBandCutDb: 36
+    });
+    return Object.fromEntries(['lowpass', 'highpass', 'bandpass', 'notch'].map(type => [type, {
+      full: create(type, 100),
+      half: create(type, 50),
+      neutral: create(type, 0),
+      resonantAtZeroDepth: create(type, 0, 100)
+    }]));
+  });
+
+  for (const { full, half, neutral, resonantAtZeroDepth } of Object.values(result)) {
+    full.forEach((value, index) => expect(half[index]).toBeCloseTo(value / 2, 10));
+    expect(neutral).toEqual(Array(10).fill(0));
+    expect(resonantAtZeroDepth.some(value => value > 0)).toBeTruthy();
+    expect(Math.max(...resonantAtZeroDepth)).toBeLessThanOrEqual(24);
+    expect(Math.min(...resonantAtZeroDepth)).toBeGreaterThanOrEqual(-36);
+  }
+});

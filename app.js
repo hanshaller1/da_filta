@@ -1475,9 +1475,14 @@ const filterTypeButtons = [...document.querySelectorAll('[data-filter-type]')];
 const filterFrequencySlider = document.querySelector('[data-filter-frequency]');
 const filterSlopeSlider = document.querySelector('[data-filter-slope]');
 const filterBandwidthSlider = document.querySelector('[data-filter-bandwidth]');
+const filterResonanceSlider = document.querySelector('[data-filter-resonance]');
+const filterDepthSlider = document.querySelector('[data-filter-depth]');
 const filterBandwidthControl = document.querySelector('[data-filter-bandwidth-control]');
 const filterResponsePath = document.querySelector('[data-filter-response-path]');
 const filterResponseMarkers = document.querySelector('[data-filter-response-markers]');
+const filterResponseCeiling = document.querySelector('[data-filter-response-ceiling]');
+const filterResponseZeroLabel = document.querySelector('[data-filter-response-zero-label]');
+const filterResponseZeroLine = document.querySelector('[data-filter-response-zero-line]');
 const filterResponseFloor = document.querySelector('[data-filter-response-floor]');
 const formatFilterFrequency = value => {
   const frequency = window.FilterShape.normalizeFilterFrequencyHz(value);
@@ -1489,7 +1494,10 @@ const getFilterModeShape = () => audioEngine?.filterModeBandGainsDb ?? window.Fi
   frequencyHz: state.filterFrequencyHz,
   slope: state.filterSlope,
   bandwidth: state.filterBandwidth,
+  resonance: state.filterResonance,
+  depth: state.filterDepth,
   bandDefinitions: BAND_DEFINITIONS,
+  maxBandBoostDb: Number(bandBoostSelect?.value ?? 12),
   maxBandCutDb: Number(bandCutSelect?.value ?? 12)
 });
 const filterResponsePathData = points => {
@@ -1505,11 +1513,21 @@ const filterResponsePathData = points => {
   return path;
 };
 const renderFilterMode = () => {
+  const boostDb = Math.max(1, Number(audioEngine?.maxBandBoostDb ?? bandBoostSelect?.value ?? 12));
   const cutDb = Math.max(1, Number(audioEngine?.maxBandCutDb ?? bandCutSelect?.value ?? 12));
   const gains = getFilterModeShape();
-  const points = gains.map((gain, index) => ({ x: 50 + index * 100, y: 8 + Math.abs(gain) / cutDb * 220 }));
+  const graphTop = 12;
+  const graphBottom = 220;
+  const graphRange = boostDb + cutDb;
+  const zeroY = graphTop + boostDb / graphRange * (graphBottom - graphTop);
+  const gainToY = gain => graphTop + (boostDb - Math.max(-cutDb, Math.min(boostDb, gain))) / graphRange * (graphBottom - graphTop);
+  const points = gains.map((gain, index) => ({ x: 50 + index * 100, y: gainToY(gain) }));
   filterResponsePath?.setAttribute('d', filterResponsePathData(points));
-  if (filterResponseMarkers) filterResponseMarkers.innerHTML = points.map((point, index) => `<line x1="${point.x}" y1="228" x2="${point.x}" y2="${point.y.toFixed(2)}"></line><circle cx="${point.x}" cy="${point.y.toFixed(2)}" r="5"><title>${BAND_DEFINITIONS[index].label}: ${gains[index].toFixed(1)} dB</title></circle>`).join('');
+  if (filterResponseMarkers) filterResponseMarkers.innerHTML = points.map((point, index) => `<line x1="${point.x}" y1="${zeroY.toFixed(2)}" x2="${point.x}" y2="${point.y.toFixed(2)}"></line><circle cx="${point.x}" cy="${point.y.toFixed(2)}" r="4"><title>${BAND_DEFINITIONS[index].label}: ${gains[index].toFixed(1)} dB</title></circle>`).join('');
+  filterResponseZeroLine?.setAttribute('y1', zeroY.toFixed(2));
+  filterResponseZeroLine?.setAttribute('y2', zeroY.toFixed(2));
+  if (filterResponseCeiling) filterResponseCeiling.textContent = `+${boostDb} dB`;
+  if (filterResponseZeroLabel) filterResponseZeroLabel.style.top = `${zeroY / 240 * 100}%`;
   if (filterResponseFloor) filterResponseFloor.textContent = `−${cutDb} dB`;
   filterTypeButtons.forEach(button => {
     const active = button.dataset.filterType === state.filterType;
@@ -1519,12 +1537,18 @@ const renderFilterMode = () => {
   if (filterFrequencySlider) filterFrequencySlider.value = String(window.FilterShape.frequencyToSlider(state.filterFrequencyHz));
   if (filterSlopeSlider) filterSlopeSlider.value = String(state.filterSlope);
   if (filterBandwidthSlider) filterBandwidthSlider.value = String(state.filterBandwidth);
+  if (filterResonanceSlider) filterResonanceSlider.value = String(state.filterResonance);
+  if (filterDepthSlider) filterDepthSlider.value = String(state.filterDepth);
   const frequencyOutput = document.querySelector('[data-filter-frequency-output]');
   const slopeOutput = document.querySelector('[data-filter-slope-output]');
   const bandwidthOutput = document.querySelector('[data-filter-bandwidth-output]');
+  const resonanceOutput = document.querySelector('[data-filter-resonance-output]');
+  const depthOutput = document.querySelector('[data-filter-depth-output]');
   if (frequencyOutput) frequencyOutput.textContent = formatFilterFrequency(state.filterFrequencyHz);
   if (slopeOutput) slopeOutput.textContent = `${state.filterSlope} %`;
   if (bandwidthOutput) bandwidthOutput.textContent = `${state.filterBandwidth} %`;
+  if (resonanceOutput) resonanceOutput.textContent = `${state.filterResonance} %`;
+  if (depthOutput) depthOutput.textContent = `${state.filterDepth} %`;
   const bandwidthEnabled = state.filterType === 'bandpass' || state.filterType === 'notch';
   if (filterBandwidthSlider) filterBandwidthSlider.disabled = !bandwidthEnabled;
   filterBandwidthControl?.classList.toggle('is-disabled', !bandwidthEnabled);
@@ -1538,6 +1562,8 @@ filterTypeButtons.forEach(button => button.addEventListener('click', () => updat
 filterFrequencySlider?.addEventListener('input', () => updateFilterState({ filterFrequencyHz: window.FilterShape.sliderToFrequency(filterFrequencySlider.value) }));
 filterSlopeSlider?.addEventListener('input', () => updateFilterState({ filterSlope: Number(filterSlopeSlider.value) }));
 filterBandwidthSlider?.addEventListener('input', () => updateFilterState({ filterBandwidth: Number(filterBandwidthSlider.value) }));
+filterResonanceSlider?.addEventListener('input', () => updateFilterState({ filterResonance: Number(filterResonanceSlider.value) }));
+filterDepthSlider?.addEventListener('input', () => updateFilterState({ filterDepth: Number(filterDepthSlider.value) }));
 renderFilterMode();
 window.FilterMode = Object.freeze({
   getState: () => ({
@@ -1547,7 +1573,9 @@ window.FilterMode = Object.freeze({
     filterType: state.filterType,
     filterFrequencyHz: state.filterFrequencyHz,
     filterSlope: state.filterSlope,
-    filterBandwidth: state.filterBandwidth
+    filterBandwidth: state.filterBandwidth,
+    filterResonance: state.filterResonance,
+    filterDepth: state.filterDepth
   }),
   getShape: () => [...getFilterModeShape()],
   getManualBandState: () => ({ left: [...state.bandGainLeft], right: [...state.bandGainRight], perChannelBands: state.perChannelBands, linked: [...state.bandChannelLinked] }),
@@ -1985,26 +2013,41 @@ document.querySelectorAll('[data-control]').forEach(slider => {
 document.querySelectorAll('[data-feedback-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.feedbackBand); const nextValue=!state.feedbackBandLeft[index]; setBandFeedback('left', index, nextValue); button.classList.toggle('active',nextValue); button.setAttribute('aria-pressed',String(nextValue)); }));
 document.querySelectorAll('[data-mod-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.modBand); state.modulated[index]=!state.modulated[index]; button.classList.toggle('active',state.modulated[index]); button.setAttribute('aria-pressed',String(state.modulated[index])); }));
 const fbAllButton = document.querySelector('.fb-all-toggle');
-const channelModeButtons = [...document.querySelectorAll('[data-channel-mode]')];
+const channelModeToggle = document.querySelector('[data-channel-toggle]');
+const bandResetButton = document.querySelector('[data-band-reset]');
 const spreadControl = document.querySelector('[data-control="spread"]');
 const spreadControlCard = spreadControl?.closest('.control-card');
 const updatePerChannelBands = () => {
   bands.classList.toggle('is-per-channel', state.perChannelBands);
-  channelModeButtons.forEach(button => {
-    const active = (button.dataset.channelMode === 'per-channel') === state.perChannelBands;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-pressed', String(active));
-  });
+  channelModeToggle?.classList.toggle('is-per-channel', state.perChannelBands);
+  channelModeToggle?.setAttribute('aria-pressed', String(state.perChannelBands));
+  channelModeToggle?.setAttribute('aria-label', state.perChannelBands ? 'CLASSIC aktivieren' : 'P/CH aktivieren');
   const spreadDisabled = state.perChannelBands;
   if (spreadControl) spreadControl.disabled = spreadDisabled;
   spreadControlCard?.classList.toggle('is-disabled', spreadDisabled);
   audioEngine?.setPerChannelBands(state.perChannelBands);
   renderBandSliderValues();
 };
-channelModeButtons.forEach(button => button.addEventListener('click', () => {
-  state.perChannelBands = button.dataset.channelMode === 'per-channel';
+channelModeToggle?.addEventListener('click', () => {
+  state.perChannelBands = !state.perChannelBands;
   updatePerChannelBands();
-}));
+});
+const resetBandControls = () => {
+  renderGlobalControlValue('spread', 0);
+  audioEngine?.setSpread(0);
+  for (let index = 0; index < BAND_COUNT; index += 1) {
+    setStateBandBaseGain(state, 'left', index, BAND_GAIN_NEUTRAL);
+    setStateBandBaseGain(state, 'right', index, BAND_GAIN_NEUTRAL);
+    invalidateSpreadCenter(index);
+    audioEngine?.setBandBaseGain('left', index, BAND_GAIN_NEUTRAL);
+    audioEngine?.setBandBaseGain('right', index, BAND_GAIN_NEUTRAL);
+    renderBand(index);
+  }
+  updatePerChannelBands();
+  refreshStatusStrip();
+  scheduleAnalyzerRender();
+};
+bandResetButton?.addEventListener('click', resetBandControls);
 const fbAllControl = fbAllButton?.closest('.fb-all-control');
 if (fbAllControl) document.querySelector('.filterbank-fb-all-group')?.append(fbAllControl);
 fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent=nextValue?'ON':'OFF'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
@@ -2304,7 +2347,7 @@ const bindDevLabSelect = (select, apply, fallback) => {
 };
 bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
-bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); }, '12');
+bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
 bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
 bindDevLabSelect(spreadCurveSelect, value => {
   state.spreadCurve = audioEngine.setSpreadCurve(value);
@@ -2416,6 +2459,16 @@ const persistSweetspots = () => {
 };
 const syncUiFromAudioState = snapshot => {
   if (!snapshot) return;
+  Object.assign(state, window.ResonantState.normalizeFilterState({
+    filterType: snapshot.filterType ?? state.filterType,
+    filterFrequencyHz: snapshot.filterFrequencyHz ?? state.filterFrequencyHz,
+    filterSlope: snapshot.filterSlope ?? state.filterSlope,
+    filterBandwidth: snapshot.filterBandwidth ?? state.filterBandwidth,
+    filterResonance: snapshot.filterResonance ?? state.filterResonance,
+    filterDepth: snapshot.filterDepth ?? state.filterDepth
+  }));
+  if (snapshot.filterEnabled !== undefined) state.filterEnabled = Boolean(snapshot.filterEnabled);
+  if (snapshot.filterbankEnabled !== undefined) state.filterbankEnabled = Boolean(snapshot.filterbankEnabled);
   state.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => Number(snapshot.bandGainLeft?.[index] ?? 0));
   state.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => Number(snapshot.bandGainRight?.[index] ?? 0));
   invalidateAllSpreadCenters();
@@ -2485,6 +2538,8 @@ const syncUiFromAudioState = snapshot => {
   updateLocalLoopTuningRelevance();
   updateNegativeResonanceRelevance();
   renderBandSliderValues();
+  renderFilterPower();
+  renderFilterMode();
 };
 // This is the complete, explicit DEV/LAB snapshot contract. Normal app state
 // is intentionally absent: DEV/LAB snapshots are experimental configurations,

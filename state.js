@@ -69,7 +69,9 @@
     filterType: window.FilterShape.normalizeFilterType(source?.filterType),
     filterFrequencyHz: window.FilterShape.normalizeFilterFrequencyHz(source?.filterFrequencyHz),
     filterSlope: window.FilterShape.normalizeFilterPercent(source?.filterSlope),
-    filterBandwidth: window.FilterShape.normalizeFilterPercent(source?.filterBandwidth)
+    filterBandwidth: window.FilterShape.normalizeFilterPercent(source?.filterBandwidth),
+    filterResonance: window.FilterShape.normalizeFilterPercent(source?.filterResonance, 0),
+    filterDepth: window.FilterShape.normalizeFilterPercent(source?.filterDepth, 100)
   });
   const normalizeSpreadMaxOffsetDb = value => SPREAD_MAX_OFFSET_VALUES.includes(Number(value)) ? Number(value) : 6;
   const bandGainDbToBipolarPercent = (value, maxBandBoostDb = 12, maxBandCutDb = 12) => {
@@ -112,6 +114,8 @@
     filterFrequencyHz: 777,
     filterSlope: 50,
     filterBandwidth: 50,
+    filterResonance: 0,
+    filterDepth: 100,
     spreadMode: 'CLASSIC',
     channelSelection: 'LR',
     inputGain: GLOBAL_CONTROL_DEFINITIONS.inputGain.defaultValue,
