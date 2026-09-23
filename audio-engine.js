@@ -321,6 +321,10 @@
       const combinedLeftDb = clampBandGainDb(manualLeftDb + filterDb, this.maxBandBoostDb, this.maxBandCutDb);
       const combinedRightDb = clampBandGainDb(manualRightDb + filterDb, this.maxBandBoostDb, this.maxBandCutDb);
       const preserveManualControls = this.filterbankEnabled && !this.filterEnabled;
+      const spectralLayerEnabled = this.filterbankEnabled || this.filterEnabled;
+      const effectiveSpread = spectralLayerEnabled && (this.filterEnabled || !this.perChannelBands)
+        ? this.spread
+        : 0;
       const combinedState = {
         bandGainLeft: [preserveManualControls ? this.bandGainLeft[index] : bandGainDbToControl(combinedLeftDb, this.maxBandBoostDb, this.maxBandCutDb)],
         bandGainRight: [preserveManualControls ? this.bandGainRight[index] : bandGainDbToControl(combinedRightDb, this.maxBandBoostDb, this.maxBandCutDb)],
@@ -331,7 +335,7 @@
       };
       return getEffectiveBandGains(combinedState, 0, {
         maxBandBoostDb: this.maxBandBoostDb,
-        spread: this.filterEnabled || !this.perChannelBands ? this.spread : 0,
+        spread: effectiveSpread,
         maxBandCutDb: this.maxBandCutDb
       });
     }

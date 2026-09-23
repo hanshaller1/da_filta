@@ -283,6 +283,46 @@ test('FILTERBANK power gates gains, feedback and resonance effectively and resto
   expect(report.bothOff).toBe(0);
 });
 
+test('SPREAD is neutral with both spectral layers off and preserves FILTER/FILTERBANK rules', async ({ page }) => {
+  await page.goto('/');
+  const report = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    const gains = () => Array.from({ length: 10 }, (_, index) => {
+      const effective = engine.getEffectiveBandGains(index);
+      return { leftDb: effective.leftDb, rightDb: effective.rightDb };
+    });
+
+    engine.setSpread(0.5);
+    engine.setFilterbankEnabled(false);
+    engine.setFilterEnabled(false);
+    engine.setPerChannelBands(false);
+    const bothOffClassic = gains();
+
+    engine.setPerChannelBands(true);
+    const bothOffPerChannel = gains();
+
+    engine.setFilterEnabled(true);
+    const filterOnlyPerChannel = gains();
+
+    engine.setFilterEnabled(false);
+    engine.setFilterbankEnabled(true);
+    engine.setPerChannelBands(false);
+    const filterbankOnlyClassic = gains();
+
+    engine.setPerChannelBands(true);
+    const filterbankOnlyPerChannel = gains();
+
+    return { bothOffClassic, bothOffPerChannel, filterOnlyPerChannel, filterbankOnlyClassic, filterbankOnlyPerChannel };
+  });
+
+  for (const state of [report.bothOffClassic, report.bothOffPerChannel]) {
+    expect(state.every(({ leftDb, rightDb }) => leftDb === 0 && rightDb === 0)).toBeTruthy();
+  }
+  expect(report.filterOnlyPerChannel.some(({ leftDb, rightDb }) => leftDb !== rightDb)).toBeTruthy();
+  expect(report.filterbankOnlyClassic.some(({ leftDb, rightDb }) => leftDb !== rightDb)).toBeTruthy();
+  expect(report.filterbankOnlyPerChannel.every(({ leftDb, rightDb }) => leftDb === 0 && rightDb === 0)).toBeTruthy();
+});
+
 test('Space, Enter and NumpadEnter keep PANIC semantics and never toggle module power', async ({ page }) => {
   await page.goto('/');
   const filterbankPower = page.locator('[data-module-power="filterbank"]');
