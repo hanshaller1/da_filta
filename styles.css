@@ -110,7 +110,7 @@
 
 /* Canvas and color-mix() require actual colors. The visual bar variables
    above deliberately remain gradients. */
-:root { --graph-left-color: #08a9bf; --graph-right-color: #086b80; }
+:root { --graph-left-color: #08a9bf; --graph-right-color: #086b80; --dev-lab-width: clamp(280px, 17vw, 320px); }
 [data-theme="clean-modern"] { --graph-left-color: #2878ad; --graph-right-color: #5c8297; }
 [data-theme="dark-studio"] { --graph-left-color: #4f8fb9; --graph-right-color: #3f657a; }
 [data-theme="analog-inspired"] { --graph-left-color: #b35e32; --graph-right-color: #86543e; }
@@ -275,7 +275,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .app-shell { display: block; }
 .console {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(280px, 17vw, 320px);
+  grid-template-columns: minmax(0, 1fr) var(--dev-lab-width);
   column-gap: var(--panel-gap);
 }
 .console:has(.dev-lab-panel[hidden]) { grid-template-columns: minmax(0, 1fr); }
@@ -285,7 +285,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   grid-column: 2;
   grid-row: 2 / 6;
   align-self: stretch;
-  width: auto;
+  width: var(--dev-lab-width);
   min-width: 0;
   height: auto;
   margin: var(--panel-gap) 0 0;
@@ -631,11 +631,11 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .masthead-primary .audio-input-source { flex: 1 1 250px; max-width: 360px; }
 .masthead-primary > .audio-device { flex: 1 1 190px; max-width: 285px; }
 .audio-routing-arrow { flex: 0 0 auto; color: var(--cyan); font-size: 18px; line-height: 1; }
-.masthead-controls { flex: 0 0 auto; justify-content: flex-start; gap: 10px; }
-.masthead-dev-lab { flex: 0 0 auto; justify-content: center; width: auto; height: 42px; margin-left: auto; gap: 8px; }
+.masthead-controls { flex: 0 0 auto; justify-content: flex-start; gap: 10px; margin-right: calc(var(--panel-gap) - 12px); }
+.masthead-dev-lab { flex: 0 0 var(--dev-lab-width); justify-content: center; width: var(--dev-lab-width); height: 42px; margin-left: auto; gap: 8px; }
 .masthead-dev-lab .dev-lab-toggle { width: 32px; height: 30px; padding: 5px; border: 0; background: transparent; }
 .masthead-dev-lab .dev-lab-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
-.masthead-dev-lab .theme-picker { flex: 0 0 190px; }
+.masthead-dev-lab .theme-picker { flex: 0 0 calc(var(--dev-lab-width) - 98px); width: calc(var(--dev-lab-width) - 98px); min-width: 0; }
 .theme-editor-panel { left: auto; right: 0; }
 .theme-editor-toggle {
   display: grid;
@@ -647,7 +647,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .theme-editor-toggle svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.8; }
 .masthead-primary .audio-device { gap: 6px; font-size: 11px; }
 .masthead-primary .audio-device select { height: 30px; font-size: 12px; }
-.masthead-controls .audio-button { flex: 0 0 110px; width: 110px; min-width: 110px; height: 30px; min-height: 30px; padding-inline: 9px; font-size: 10px; white-space: nowrap; }
+.masthead-controls .audio-button { flex: 0 0 calc(110px - (var(--dev-lab-width) - 250px) / 3); width: calc(110px - (var(--dev-lab-width) - 250px) / 3); min-width: calc(110px - (var(--dev-lab-width) - 250px) / 3); height: 30px; min-height: 30px; padding-inline: 9px; font-size: 10px; white-space: nowrap; }
 .masthead-controls .audio-button.bypass[aria-pressed=true] { color: var(--cyan); border-color: var(--cyan); background: var(--active-background); box-shadow: var(--active-shadow); }
 .masthead-controls .audio-state { flex: 0 0 165px; width: 165px; min-width: 165px; padding: 2px 0; white-space: nowrap; }
 .masthead-controls .audio-state small { max-width: 130px; }
@@ -968,9 +968,9 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     grid-row: auto;
     top: calc(16px + 48px + var(--panel-gap));
     right: 0;
-    width: clamp(280px, 17vw, 320px);
-    min-width: clamp(280px, 17vw, 320px);
-    max-width: clamp(280px, 17vw, 320px);
+    width: var(--dev-lab-width);
+    min-width: var(--dev-lab-width);
+    max-width: var(--dev-lab-width);
     height: auto;
     margin: 0;
     max-height: calc(100vh - 78px);
