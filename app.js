@@ -1616,8 +1616,9 @@ modeTabs.forEach((tab, index) => {
     selectMode(modeTabs[nextIndex].dataset.mode);
   });
 });
-bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><div class="band-actions"><button class="band-action" type="button" data-feedback-band="${index}">FB</button><button class="band-action" type="button" data-mod-band="${index}">MOD</button></div><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
-bands.insertAdjacentHTML('afterbegin', '<div class="filterbank-panel-header"><span class="filterbank-panel-actions"><span class="filterbank-action-group filterbank-fb-all-group"></span><span class="filterbank-action-group filterbank-per-channel-group"><span class="filterbank-spread-label">SPREAD</span><button class="per-channel-toggle" type="button" aria-pressed="false">P/CH</button></span></span></div>');
+bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
+const filterbankBandControls = document.querySelector('.filterbank-band-controls');
+if (filterbankBandControls) filterbankBandControls.innerHTML = BAND_DEFINITIONS.map((band, index) => `<div class="filterbank-band-control" data-filterbank-band-control="${index}" aria-label="${band.label} Filterbank Controls"><button class="band-action" type="button" data-feedback-band="${index}" aria-pressed="false">FB</button><button class="band-action" type="button" data-mod-band="${index}" aria-pressed="false">MOD</button></div>`).join('');
 document.querySelectorAll('.band-card').forEach((card, index) => {
   card.querySelector('.fader-wrap')?.classList.add('center-fader');
   const channelFader = channel => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;
@@ -1946,20 +1947,26 @@ document.querySelectorAll('[data-control]').forEach(slider => {
 document.querySelectorAll('[data-feedback-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.feedbackBand); const nextValue=!state.feedbackBandLeft[index]; setBandFeedback('left', index, nextValue); button.classList.toggle('active',nextValue); button.setAttribute('aria-pressed',String(nextValue)); }));
 document.querySelectorAll('[data-mod-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.modBand); state.modulated[index]=!state.modulated[index]; button.classList.toggle('active',state.modulated[index]); button.setAttribute('aria-pressed',String(state.modulated[index])); }));
 const fbAllButton = document.querySelector('.fb-all-toggle');
-const perChannelButton = document.querySelector('.per-channel-toggle');
+const channelModeButtons = [...document.querySelectorAll('[data-channel-mode]')];
 const spreadControl = document.querySelector('[data-control="spread"]');
 const spreadControlCard = spreadControl?.closest('.control-card');
 const updatePerChannelBands = () => {
   bands.classList.toggle('is-per-channel', state.perChannelBands);
-  perChannelButton?.classList.toggle('active', state.perChannelBands);
-  perChannelButton?.setAttribute('aria-pressed', String(state.perChannelBands));
+  channelModeButtons.forEach(button => {
+    const active = (button.dataset.channelMode === 'per-channel') === state.perChannelBands;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
   const spreadDisabled = !state.filterEnabled && state.perChannelBands;
   if (spreadControl) spreadControl.disabled = spreadDisabled;
   spreadControlCard?.classList.toggle('is-disabled', spreadDisabled);
   audioEngine?.setPerChannelBands(state.perChannelBands);
   renderBandSliderValues();
 };
-perChannelButton?.addEventListener('click', () => { state.perChannelBands = !state.perChannelBands; updatePerChannelBands(); });
+channelModeButtons.forEach(button => button.addEventListener('click', () => {
+  state.perChannelBands = button.dataset.channelMode === 'per-channel';
+  updatePerChannelBands();
+}));
 const fbAllControl = fbAllButton?.closest('.fb-all-control');
 if (fbAllControl) document.querySelector('.filterbank-fb-all-group')?.append(fbAllControl);
 fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent=nextValue?'ON':'OFF'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });

@@ -397,7 +397,7 @@ test('FILTERBANK response controls stay bound to manual FILTERBANK state while F
   expect(perChannelDisplay.leftDb).toBeCloseTo(4, 1);
   expect(perChannelDisplay.rightDb).toBeCloseTo(-2, 1);
 
-  await page.locator('.per-channel-toggle').click();
+  await page.locator('.classic-channel-toggle').click();
   await page.locator('.center-fader .band-fader').first().fill('0');
   await page.locator('[data-control="spread"]').fill('0.5');
   await page.locator('[data-control="spread"]').dispatchEvent('input');

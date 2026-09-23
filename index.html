@@ -369,6 +369,13 @@
               <button class="mode-select" type="button" role="tab" id="mode-tab-presets" aria-selected="false" aria-controls="mode-presets" data-mode="presets"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h12v14H4zM7 7h6M7 10h6M7 13h4"/></svg><span>PRESETS / SNAPSHOTS</span></button>
             </div>
           </nav>
+          <section class="channel-mode-panel" aria-label="Band Channel Mode">
+            <strong>CHANNELS</strong>
+            <div class="channel-mode-options" role="group" aria-label="Band Channel Mode">
+              <button class="channel-mode-option classic-channel-toggle active" type="button" data-channel-mode="classic" aria-pressed="true">CLASSIC</button>
+              <button class="channel-mode-option per-channel-toggle" type="button" data-channel-mode="per-channel" aria-pressed="false">P/CH</button>
+            </div>
+          </section>
           <div class="mode-content">
           <section class="mode-workspace" aria-label="Workspace">
             <section class="filterbank-mode-panel" id="mode-filterbank" role="tabpanel" aria-labelledby="mode-tab-filterbank" data-mode-panel="filterbank">
@@ -471,6 +478,10 @@
               <span><i></i>L</span><span><i></i>R</span>
             </div>
           </div>
+        </section>
+        <section class="filterbank-controls-panel" aria-label="Filterbank Feedback und Modulation">
+          <div class="filterbank-controls-header"><span class="filterbank-fb-all-group"></span></div>
+          <div class="filterbank-band-controls" aria-label="Filterbank Band Controls"></div>
         </section>
             </section>
             <section class="filter-mode-panel" id="mode-filter" role="tabpanel" aria-labelledby="mode-tab-filter" data-mode-panel="filter" hidden>

@@ -8,8 +8,7 @@ test('P/CH swaps one center fader for an L/R pair without visual overlap', async
   await expect(channels).toHaveCount(10);
   await expect(centers.first()).toBeVisible();
   await expect(channels.first()).toBeHidden();
-  await expect(page.locator('.filterbank-panel-header')).toContainText('FILTERBANK');
-  await expect(page.locator('.filterbank-panel-header .fb-all-toggle')).toBeVisible();
+  await expect(page.locator('.filterbank-controls-panel .fb-all-toggle')).toBeVisible();
   const cardLayout = await page.locator('.bands').evaluate(bands => {
     const [first, second] = [...bands.querySelectorAll('.band-card')];
     const firstRect = first.getBoundingClientRect();
@@ -40,7 +39,7 @@ test('P/CH swaps one center fader for an L/R pair without visual overlap', async
     const left = pair.querySelector('.channel-fader:has([data-channel="left"]) .fader-track').getBoundingClientRect();
     const right = pair.querySelector('.channel-fader:has([data-channel="right"]) .fader-track').getBoundingClientRect();
     const link = pair.querySelector('.band-link-toggle').getBoundingClientRect();
-    const label = pair.querySelector('.channel-fader > span').getBoundingClientRect();
+    const label = pair.querySelector('.channel-fader > output').getBoundingClientRect();
     return { separation: right.x - left.x, trackHeight: left.height, labelTop: label.top, trackBottom: left.bottom, linkOffset: Math.abs((link.x + link.width / 2) - ((left.x + right.x) / 2)) };
   });
   expect(perChannelLayout.separation).toBeLessThanOrEqual(55);
@@ -58,7 +57,7 @@ test('P/CH swaps one center fader for an L/R pair without visual overlap', async
   expect(values.right).toBe('0');
   await page.locator('[data-band-link="0"]').click();
   await expect(page.locator('[data-band-link="0"]')).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('.per-channel-toggle').click();
+  await page.locator('.classic-channel-toggle').click();
   await expect(spread).toBeEnabled();
   await expect(spreadCard).not.toHaveClass(/is-disabled/);
   await expect(centers.first()).toBeVisible();

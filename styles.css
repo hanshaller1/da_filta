@@ -715,19 +715,24 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   touch-action: none;
 }
 
-/* The header provides shared context; every band remains an individual control card. */
-.bands { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); grid-template-rows: 42px minmax(0, 1fr); gap: var(--panel-gap); align-items: start; height: auto; margin-top: var(--panel-gap); background: transparent; overflow: visible; }
-.filterbank-panel-header { grid-column: 1 / -1; grid-row: 1; align-self: start; display: flex; justify-content: space-between; align-items: center; height: 42px; min-height: 42px; padding: 0 12px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); letter-spacing: 1px; }
-.filterbank-panel-actions { display: flex; align-items: center; gap: 20px; }
-.filterbank-action-group, .filterbank-panel-actions .fb-all-control { display: flex; align-items: center; gap: 5px; }
-.filterbank-spread-label { color: var(--muted-text); font-size: 13px; }
-.per-channel-toggle, .band-link-toggle { border: 1px solid var(--button-border); border-radius: 3px; background: var(--output-background); color: var(--button-text); cursor: pointer; font: 600 12px 'Trebuchet MS', Arial, sans-serif; }
-.per-channel-toggle { min-width: 43px; height: 24px; }
-.per-channel-toggle.active, .band-link-toggle.active { color: var(--cyan); border-color: var(--cyan); box-shadow: var(--active-shadow); }
+/* Permanent gain editor and FILTERBANK-only controls use the same ten-column rhythm. */
+.bands { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); gap: var(--panel-gap); align-items: start; height: auto; margin-top: var(--panel-gap); background: transparent; overflow: visible; }
+.channel-mode-panel, .filterbank-controls-panel { box-sizing: border-box; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); }
+.channel-mode-panel { display: grid; align-content: start; gap: 10px; padding: 13px 10px; }
+.channel-mode-panel > strong { color: var(--cyan); font-size: 11px; letter-spacing: 1px; }
+.channel-mode-options { display: grid; gap: 6px; }
+.channel-mode-option, .band-link-toggle { border: 1px solid var(--button-border); border-radius: 3px; background: var(--output-background); color: var(--button-text); cursor: pointer; font: 600 11px 'Trebuchet MS', Arial, sans-serif; }
+.channel-mode-option { width: 100%; height: 28px; }
+.channel-mode-option.active, .band-link-toggle.active { color: var(--cyan); border-color: var(--cyan); box-shadow: var(--active-shadow); }
+.filterbank-controls-panel { display: grid; grid-template-rows: 27px minmax(0, 1fr); gap: 4px; padding: 5px 0 6px; }
+.filterbank-controls-header { display: flex; justify-content: flex-end; align-items: center; padding-right: 10px; }
+.filterbank-controls-header .fb-all-control { gap: 5px; }
+.filterbank-band-controls { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: var(--band-gap); min-width: 0; }
+.filterbank-band-control { display: grid; grid-template-rows: repeat(2, 24px); align-content: start; justify-items: center; gap: 3px; min-width: 0; }
+.filterbank-band-control .band-action { width: min(58px, calc(100% - 12px)); height: 24px; margin: 0; padding: 0 5px; font-size: 11px; }
 .filterbank-band-grid { display: contents; }
-.band-card { grid-row: 2; box-sizing: border-box; padding: 8px 6px 6px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); }
+.band-card { grid-row: 1; box-sizing: border-box; padding: 8px 6px 6px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); }
 .band-card .band-value { order: -1; }
-.band-card .band-actions { order: 0; }
 .band-card .center-fader, .band-card .channel-faders { order: 1; }
 .band-card .band-slider-value { order: 2; min-width: 0; min-height: 20px; margin: 2px 0 0; padding: 0; border: 0; background: transparent; color: var(--strong-text); font-size: 10px; font-weight: 400; line-height: 20px; }
 .channel-faders { display: none; align-self: center; align-items: stretch; justify-content: center; column-gap: 2px; flex: 1 1 auto; min-height: 0; width: min(100%, 78px); }
@@ -815,18 +820,15 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .mode-shell {
     display: grid;
     grid-template-columns: 138px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    row-gap: var(--panel-gap);
     align-items: start;
     align-self: stretch;
     min-height: 0;
     margin-top: var(--panel-gap);
   }
   .mode-content {
-    display: grid;
-    grid-template-rows: minmax(0, 1fr) auto;
-    gap: var(--panel-gap);
-    min-width: 0;
-    min-height: 0;
-    height: 100%;
+    display: contents;
   }
   .mode-tabs {
     position: relative;
@@ -837,6 +839,15 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     align-self: start;
     height: max-content;
     background: transparent;
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .channel-mode-panel {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: stretch;
+    height: 310px;
+    border-radius: 5px 0 0 5px;
   }
   .mode-tab-row {
     position: relative;
@@ -958,9 +969,13 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     border-radius: 0 5px 5px 0;
     background: var(--output-background);
     box-shadow: none;
+    grid-column: 2;
+    grid-row: 1;
   }
   .filterbank-mode-panel {
-    display: block;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) 92px;
+    gap: var(--panel-gap);
     box-sizing: border-box;
     height: 100%;
     padding: var(--panel-gap);
@@ -971,52 +986,40 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     margin: 0;
   }
   .persistent-band-panel {
+    grid-column: 2;
+    grid-row: 2;
     min-width: 0;
     min-height: 0;
     padding-inline: var(--panel-gap);
     box-sizing: border-box;
   }
   .persistent-band-panel > .bands {
-    height: 414px;
-    grid-template-rows: 42px 365px;
+    height: 310px;
+    grid-template-rows: 310px;
     margin: 0;
     align-items: start;
   }
-  .filterbank-panel-header {
-    justify-content: flex-end;
-  }
-  .filterbank-panel-actions { margin-left: auto; }
-  .persistent-band-panel .band-card { height: 365px; }
+  .persistent-band-panel .band-card { height: 310px; }
   .persistent-band-panel .band-value { font-size: 12px; }
-  .persistent-band-panel .band-actions {
-    height: 30px;
-    align-items: center;
-    justify-content: center;
-  }
-  .persistent-band-panel .band-actions .band-action {
-    height: 26px;
-    padding: 0 5px;
-    font-size: 12px;
-  }
   .filterbank-mode-panel .analyzer-footer .axis-x { font-size: 12px; }
   .persistent-band-panel .fader-wrap {
-    flex: 0 0 271px;
-    height: 271px;
-    min-height: 271px;
+    flex: 0 0 250px;
+    height: 250px;
+    min-height: 250px;
   }
   .persistent-band-panel .fader-track {
-    height: 261px;
+    height: 240px;
   }
   .persistent-band-panel .channel-faders {
-    flex: 0 0 293px;
-    height: 293px;
+    flex: 0 0 272px;
+    height: 272px;
   }
   .persistent-band-panel .bands.is-per-channel .channel-faders,
   .persistent-band-panel .channel-fader {
-    grid-template-rows: 271px 22px;
+    grid-template-rows: 250px 22px;
   }
   .persistent-band-panel .channel-fader .fader-track {
-    height: 261px;
+    height: 240px;
   }
   .persistent-band-panel .channel-fader output {
     align-self: end;
@@ -1107,7 +1110,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .filter-response-zero, .filter-response-floor { position: absolute; z-index: 2; left: 5px; color: var(--secondary-text); font-size: 8px; pointer-events: none; }
 .filter-response-zero { top: 3px; }
 .filter-response-floor { bottom: 3px; }
-.filter-response-labels { position: absolute; top: calc(100% + 5px); right: 0; left: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); color: var(--secondary-text); font-size: 10px; text-align: center; }
+.filter-response-labels { position: absolute; top: calc(100% + 5px); right: 0; left: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); color: var(--secondary-text); font-size: 10px; text-align: center; pointer-events: none; }
 .filter-controls { display: grid; overflow: hidden; }
 .filter-type-control, .filter-parameter-control { display: grid; grid-template-columns: 112px minmax(0, 1fr) 78px; align-items: center; min-height: 54px; gap: 12px; padding: 7px 14px; color: var(--muted-text); font-size: 11px; letter-spacing: .8px; }
 .filter-type-control + .filter-parameter-control, .filter-parameter-control + .filter-parameter-control { border-top: 1px solid var(--output-border); }
@@ -1122,3 +1125,11 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .filter-parameter-control output { min-width: 78px; padding: 4px 6px; border: 1px solid var(--output-border); border-radius: 3px; color: var(--strong-text); background: var(--output-background); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
 .filter-parameter-control.is-disabled { opacity: .42; }
 .filter-parameter-control.is-disabled input { cursor: not-allowed; filter: grayscale(1); }
+
+@media (min-width: 1200px) and (max-height: 800px) {
+  .filter-type-control,
+  .filter-parameter-control {
+    min-height: 40px;
+    padding-block: 3px;
+  }
+}
