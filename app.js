@@ -1484,6 +1484,9 @@ const filterResponseCeiling = document.querySelector('[data-filter-response-ceil
 const filterResponseZeroLabel = document.querySelector('[data-filter-response-zero-label]');
 const filterResponseZeroLine = document.querySelector('[data-filter-response-zero-line]');
 const filterResponseFloor = document.querySelector('[data-filter-response-floor]');
+const filterResponseGrid = document.querySelector('[data-filter-response-grid]');
+const filterFrequencyMarker = document.querySelector('[data-filter-frequency-marker]');
+const filterFrequencyMarkerLabel = document.querySelector('[data-filter-frequency-marker-label]');
 const formatFilterFrequency = value => {
   const frequency = window.FilterShape.normalizeFilterFrequencyHz(value);
   if (frequency < 1000) return `${Math.round(frequency)} Hz`;
@@ -1518,17 +1521,34 @@ const renderFilterMode = () => {
   const gains = getFilterModeShape();
   const graphTop = 12;
   const graphBottom = 220;
+  const graphLeft = 50;
+  const graphRight = 950;
+  const graphViewBoxHeight = 240;
   const graphRange = boostDb + cutDb;
   const zeroY = graphTop + boostDb / graphRange * (graphBottom - graphTop);
   const gainToY = gain => graphTop + (boostDb - Math.max(-cutDb, Math.min(boostDb, gain))) / graphRange * (graphBottom - graphTop);
   const points = gains.map((gain, index) => ({ x: 50 + index * 100, y: gainToY(gain) }));
+  const frequencyMinHz = BAND_DEFINITIONS[0].frequency;
+  const frequencyMaxHz = BAND_DEFINITIONS[BAND_DEFINITIONS.length - 1].frequency;
+  const frequencyPosition = Math.log(state.filterFrequencyHz / frequencyMinHz) / Math.log(frequencyMaxHz / frequencyMinHz);
+  const frequencyX = graphLeft + frequencyPosition * (graphRight - graphLeft);
+  const regularGridYs = Array.from({ length: 5 }, (_, index) => graphTop + index / 4 * (graphBottom - graphTop));
+  if (filterResponseGrid) filterResponseGrid.innerHTML = `${regularGridYs.map(y => `<line class="filter-response-grid-line" x1="0" y1="${y.toFixed(2)}" x2="1000" y2="${y.toFixed(2)}"></line>`).join('')}<line class="filter-response-grid-line filter-response-zero-grid-line" data-filter-response-zero-grid-line x1="0" y1="${zeroY.toFixed(2)}" x2="1000" y2="${zeroY.toFixed(2)}"></line>`;
+  filterFrequencyMarker?.setAttribute('x1', frequencyX.toFixed(2));
+  filterFrequencyMarker?.setAttribute('x2', frequencyX.toFixed(2));
   filterResponsePath?.setAttribute('d', filterResponsePathData(points));
-  if (filterResponseMarkers) filterResponseMarkers.innerHTML = points.map((point, index) => `<line x1="${point.x}" y1="${zeroY.toFixed(2)}" x2="${point.x}" y2="${point.y.toFixed(2)}"></line><circle cx="${point.x}" cy="${point.y.toFixed(2)}" r="4"><title>${BAND_DEFINITIONS[index].label}: ${gains[index].toFixed(1)} dB</title></circle>`).join('');
+  if (filterResponseMarkers) filterResponseMarkers.innerHTML = points.map((point, index) => `<line x1="${point.x}" y1="${zeroY.toFixed(2)}" x2="${point.x}" y2="${point.y.toFixed(2)}"></line><circle cx="${point.x}" cy="${point.y.toFixed(2)}" r="3"><title>${BAND_DEFINITIONS[index].label}: ${gains[index].toFixed(1)} dB</title></circle>`).join('');
   filterResponseZeroLine?.setAttribute('y1', zeroY.toFixed(2));
   filterResponseZeroLine?.setAttribute('y2', zeroY.toFixed(2));
-  if (filterResponseCeiling) filterResponseCeiling.textContent = `+${boostDb} dB`;
-  if (filterResponseZeroLabel) filterResponseZeroLabel.style.top = `${zeroY / 240 * 100}%`;
-  if (filterResponseFloor) filterResponseFloor.textContent = `−${cutDb} dB`;
+  if (filterResponseCeiling) { filterResponseCeiling.textContent = `+${boostDb} dB`; filterResponseCeiling.style.top = `${graphTop / graphViewBoxHeight * 100}%`; }
+  if (filterResponseZeroLabel) filterResponseZeroLabel.style.top = `${zeroY / graphViewBoxHeight * 100}%`;
+  if (filterResponseFloor) { filterResponseFloor.textContent = `−${cutDb} dB`; filterResponseFloor.style.top = `${graphBottom / graphViewBoxHeight * 100}%`; }
+  if (filterFrequencyMarkerLabel) {
+    filterFrequencyMarkerLabel.textContent = formatFilterFrequency(state.filterFrequencyHz);
+    filterFrequencyMarkerLabel.style.left = `${frequencyX / 10}%`;
+    filterFrequencyMarkerLabel.classList.toggle('is-start', frequencyPosition < 0.08);
+    filterFrequencyMarkerLabel.classList.toggle('is-end', frequencyPosition > 0.92);
+  }
   filterTypeButtons.forEach(button => {
     const active = button.dataset.filterType === state.filterType;
     button.classList.toggle('active', active);

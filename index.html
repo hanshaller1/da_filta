@@ -484,7 +484,10 @@
                   <span class="filter-response-ceiling" data-filter-response-ceiling>+12 dB</span>
                   <span class="filter-response-zero" data-filter-response-zero-label>0 dB</span>
                   <span class="filter-response-floor" data-filter-response-floor>−12 dB</span>
+                  <span class="filter-frequency-marker-label" data-filter-frequency-marker-label>777 Hz</span>
                   <svg viewBox="0 0 1000 240" preserveAspectRatio="none" role="img" aria-label="Berechnete Filter-Steuerkurve">
+                    <g class="filter-response-grid" data-filter-response-grid></g>
+                    <line class="filter-frequency-marker" data-filter-frequency-marker x1="550" y1="12" x2="550" y2="220"></line>
                     <line class="filter-response-zero-line" data-filter-response-zero-line x1="0" y1="116" x2="1000" y2="116"></line>
                     <path class="filter-response-path" data-filter-response-path></path>
                     <g data-filter-response-markers></g>
@@ -513,12 +516,20 @@
           </div>
           <section class="persistent-band-control-panel" aria-label="Permanente Band Controls">
             <section class="channel-mode-panel" aria-label="Band Channel Mode">
-              <button class="channel-mode-reset" type="button" data-band-reset aria-label="Bandwerte zurücksetzen" title="Bandwerte zurücksetzen">
-                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 8a6.5 6.5 0 1 1 1.7 6.1M4 8V3.5M4 8h4.5"/></svg>
-              </button>
-              <button class="channel-mode-toggle classic-channel-toggle per-channel-toggle" type="button" data-channel-toggle aria-pressed="false" aria-label="P/CH aktivieren">
-                <span data-channel-option="classic">CLASSIC</span><span class="channel-mode-toggle-arrow" aria-hidden="true">↔</span><span data-channel-option="per-channel">P/CH</span>
-              </button>
+              <div class="channel-mode-reset-row">
+                <span class="channel-mode-label">FADER/SPREAD RESET</span>
+                <button class="channel-mode-reset" type="button" data-band-reset aria-label="Bandwerte zurücksetzen" title="Bandwerte zurücksetzen">
+                  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 8a6.5 6.5 0 1 1 1.7 6.1M4 8V3.5M4 8h4.5"/></svg>
+                </button>
+              </div>
+              <div class="channel-mode-row">
+                <span class="channel-mode-label">SPREAD</span>
+                <span class="channel-mode-state" data-channel-option="classic">CLASSIC</span>
+                <button class="channel-mode-toggle classic-channel-toggle per-channel-toggle" type="button" data-channel-toggle aria-pressed="false" aria-label="P/CH aktivieren">
+                  <span class="channel-mode-switch-track" aria-hidden="true"><span class="channel-mode-switch-thumb"></span></span>
+                </button>
+                <span class="channel-mode-state" data-channel-option="per-channel">P/CH</span>
+              </div>
             </section>
             <section class="persistent-band-panel">
               <section class="bands" aria-label="Frequenzbänder"></section>

@@ -491,6 +491,100 @@ test('FILTER graph uses an asymmetric dB axis and the desktop workspace keeps a 
   expect(report.scrollWidth).toBe(report.innerWidth);
 });
 
+test('FILTER response frequency marker and zero grid share the graph coordinate system', async ({ page }) => {
+  await page.setViewportSize({ width: 1914, height: 907 });
+  await page.goto('/');
+  await page.locator('[data-mode="filter"]').click();
+
+  const frequencySlider = page.locator('[data-filter-frequency]');
+  const marker = page.locator('[data-filter-frequency-marker]');
+  const markerLabel = page.locator('[data-filter-frequency-marker-label]');
+  const setFrequency = async frequencyHz => {
+    await frequencySlider.evaluate((slider, frequency) => {
+      slider.value = String(window.FilterShape.frequencyToSlider(frequency));
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+    }, frequencyHz);
+    return page.evaluate(() => {
+      const line = document.querySelector('[data-filter-frequency-marker]');
+      const svg = line.ownerSVGElement;
+      const lineRect = line.getBoundingClientRect();
+      const svgRect = svg.getBoundingClientRect();
+      return {
+        x: Number(line.getAttribute('x1')),
+        pixelRatio: (lineRect.left - svgRect.left) / svgRect.width,
+        label: document.querySelector('[data-filter-frequency-marker-label]').textContent,
+        stateFrequency: window.FilterMode.getState().filterFrequencyHz
+      };
+    });
+  };
+
+  const middle = await page.evaluate(() => {
+    const line = document.querySelector('[data-filter-frequency-marker]');
+    const svg = line.ownerSVGElement;
+    const lineRect = line.getBoundingClientRect();
+    const svgRect = svg.getBoundingClientRect();
+    return {
+      x: Number(line.getAttribute('x1')),
+      pixelRatio: (lineRect.left - svgRect.left) / svgRect.width,
+      label: document.querySelector('[data-filter-frequency-marker-label]').textContent
+    };
+  });
+  const expectedMiddleX = 50 + Math.log(777 / 29) / Math.log(11000 / 29) * 900;
+  expect(middle.x).toBeCloseTo(expectedMiddleX, 1);
+  expect(middle.pixelRatio).toBeCloseTo(expectedMiddleX / 1000, 3);
+  expect(middle.label).toBe('777 Hz');
+
+  const left = await setFrequency(29);
+  expect(left.x).toBeCloseTo(50, 1);
+  expect(left.pixelRatio).toBeCloseTo(0.05, 3);
+  expect(left.stateFrequency).toBeCloseTo(29, 0);
+
+  const right = await setFrequency(11000);
+  expect(right.x).toBeCloseTo(950, 1);
+  expect(right.pixelRatio).toBeCloseTo(0.95, 3);
+  expect(right.stateFrequency).toBeCloseTo(11000, 0);
+  expect(await marker.evaluate(line => line.getBoundingClientRect().height)).toBeGreaterThan(0);
+  expect(await marker.evaluate(line => getComputedStyle(line).stroke)).not.toBe('none');
+  await expect(markerLabel).toBeVisible();
+
+  const zeroAlignment = async () => page.evaluate(() => {
+    const zero = document.querySelector('[data-filter-response-zero-line]');
+    const grid = document.querySelector('[data-filter-response-zero-grid-line]');
+    const zeroRect = zero.getBoundingClientRect();
+    const gridRect = grid.getBoundingClientRect();
+    return {
+      zeroY: Number(zero.getAttribute('y1')),
+      gridY: Number(grid.getAttribute('y1')),
+      pixelDelta: Math.abs(zeroRect.top - gridRect.top)
+    };
+  });
+
+  let alignment = await zeroAlignment();
+  expect(alignment.zeroY).toBeCloseTo(116, 2);
+  expect(alignment.gridY).toBeCloseTo(alignment.zeroY, 5);
+  expect(alignment.pixelDelta).toBeLessThan(1);
+
+  await page.locator('[data-band-boost-db]').evaluate(select => { select.value = '24'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.locator('[data-band-cut-db]').evaluate(select => { select.value = '36'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  alignment = await zeroAlignment();
+  expect(alignment.zeroY).toBeCloseTo(95.2, 2);
+  expect(alignment.gridY).toBeCloseTo(alignment.zeroY, 5);
+  expect(alignment.pixelDelta).toBeLessThan(1);
+
+  const controlStyles = await page.evaluate(() => {
+    const frequency = getComputedStyle(document.querySelector('.filter-frequency-control'));
+    const typeButton = document.querySelector('.filter-type-buttons button').getBoundingClientRect();
+    return {
+      borderRightWidth: frequency.borderRightWidth,
+      borderBottomWidth: frequency.borderBottomWidth,
+      typeButtonHeight: typeButton.height
+    };
+  });
+  expect(controlStyles.borderRightWidth).toBe('0px');
+  expect(Number.parseFloat(controlStyles.borderBottomWidth)).toBeGreaterThan(0);
+  expect(controlStyles.typeButtonHeight).toBeCloseTo(30, 1);
+});
+
 test('legacy FILTER snapshots default missing resonance and depth safely', async ({ page }) => {
   await page.goto('/');
   const restored = await page.evaluate(() => {
