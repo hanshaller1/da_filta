@@ -273,9 +273,9 @@
               ><span class="range-hit-area"
                 ><input
                   type="range"
-                  min="-1"
-                  max="1"
-                  step="0.01"
+                  min="-6"
+                  max="6"
+                  step="0.1"
                   value="0"
                   data-control="resonance"
                   aria-label="Resonance" /></span
@@ -312,9 +312,9 @@
                   value="0"
                   data-control="spread"
                   aria-label="Spread" /></span
-              ><output data-output="spread">0</output></span
+              ><output data-output="spread">0.0 dB</output></span
             ><span class="control-scale"
-              ><span>-1</span><span>0</span><span>+1</span></span
+              ><span data-spread-scale-min>−6</span><span>0</span><span data-spread-scale-max>+6</span></span
             ></label
           >
           <label class="control-card"
@@ -465,7 +465,7 @@
             </div>
             <div class="chart-grid">
               <div class="axis-y">
-                <span>+</span><span>0</span><span>−</span>
+                <span data-axis-boost>+12 dB</span><span>0 dB</span><span data-axis-cut>−12 dB</span>
               </div>
               <div class="bars"></div>
               <div class="axis-x">

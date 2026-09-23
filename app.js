@@ -7,6 +7,7 @@ const {
   GLOBAL_CONTROL_DEFINITIONS,
   controlToBandGainDb,
   bandGainDbToControl,
+  bandGainDbToBipolarPercent,
   createInitialState,
   getEffectiveBandGains,
   setBandBaseGain: setStateBandBaseGain
@@ -18,8 +19,7 @@ let panic = () => {};
 // controls, not the final DSP basis selected by another powered module.
 const getFilterbankDisplayBandGains = index => getEffectiveBandGains(state, index, {
   maxBandBoostDb: getBandBoostDb(),
-  maxBandCutDb: getBandCutDb(),
-  spread: state.perChannelBands ? 0 : state.spread
+  maxBandCutDb: getBandCutDb()
 });
 // Purely presentational: these switches are deliberately not part of the
 // application/DSP state or DEV-LABS snapshots.
@@ -997,14 +997,14 @@ const DEV_LAB_HELP = {
     default: '-12 dB', note: 'Experimenteller Kalibrierwert; kein bestätigter Erica-Hardwarewert.'
   },
   'data-spread-curve': {
-    title: 'SPREAD CURVE', what: 'Wählt die Kennlinie des CLASSIC-SPREAD-Offsets.',
-    scope: 'Nur FB MODE + CLASSIC: Ein gemeinsamer dB-Offset wird symmetrisch auf alle linken und rechten Band-Gains aufgeteilt. FB_CH_SELECT bleibt unverändert.',
-    values: [['LINEAR', 'Offset folgt direkt dem SPREAD-Wert.'], ['QUADRATIC', 'Geringe Wirkung um die Mitte, stärkerer Anstieg zum Maximum.'], ['SMOOTHSTEP', 'Weicher Verlauf an Mitte und Maximum.']],
-    default: 'LINEAR', note: 'DEV/LAB-Vergleich, keine finale Erica-Kennlinie.'
+    title: 'SPREAD CURVE', what: 'Kompatibilitätswert für ältere DEV/LAB-Snapshots.',
+    scope: 'Der globale SPREAD-Regler liefert jetzt bereits den konkreten dB-Offset. Deshalb verformt diese Auswahl den angezeigten Wert aktuell nicht.',
+    values: [['LINEAR', 'Keine zusätzliche Transformation.'], ['QUADRATIC', 'Gespeichert, derzeit ohne zusätzliche Transformation.'], ['SMOOTHSTEP', 'Gespeichert, derzeit ohne zusätzliche Transformation.']],
+    default: 'LINEAR', note: 'Bewusst nicht entfernt, damit bestehende DEV/LAB-Snapshots kompatibel bleiben.'
   },
   'data-spread-max-offset-db': {
     title: 'DEV SPREAD MAX OFFSET', what: 'Legt den maximalen CLASSIC-SPREAD-Offset pro Kanal fest.',
-    scope: 'Nur FB MODE + CLASSIC. Der Offset wird für jeden Kanal separat am aktuellen Band-Gain-Limit geclampet; Basisfaderwerte bleiben unverändert.',
+    scope: 'Legt unmittelbar Min/Max des globalen SPREAD-Reglers fest. Eine notwendige Bereichsklemmung materialisiert neue L/R-Bandwerte.',
     values: [['3 dB', 'Maximal ±3 dB pro Kanal.'], ['6 dB', 'Maximal ±6 dB pro Kanal.'], ['9 dB', 'Maximal ±9 dB pro Kanal.'], ['12 dB', 'Maximal ±12 dB pro Kanal.']],
     default: '6 dB', note: 'Neutraler Test-Startwert, keine Produktionsentscheidung.'
   },
@@ -1616,7 +1616,7 @@ modeTabs.forEach((tab, index) => {
     selectMode(modeTabs[nextIndex].dataset.mode);
   });
 });
-bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
+bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><i class="classic-channel-marker classic-channel-marker-left" data-classic-marker="${index}-left" aria-hidden="true"></i><i class="classic-channel-marker classic-channel-marker-right" data-classic-marker="${index}-right" aria-hidden="true"></i><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
 const filterbankBandControls = document.querySelector('.filterbank-band-controls');
 if (filterbankBandControls) filterbankBandControls.innerHTML = BAND_DEFINITIONS.map((band, index) => `<div class="filterbank-band-control" data-filterbank-band-control="${index}" aria-label="${band.label} Filterbank Controls"><button class="band-action" type="button" data-feedback-band="${index}" aria-pressed="false">FB</button><button class="band-action" type="button" data-mod-band="${index}" aria-pressed="false">MOD</button></div>`).join('');
 document.querySelectorAll('.band-card').forEach((card, index) => {
@@ -1624,7 +1624,7 @@ document.querySelectorAll('.band-card').forEach((card, index) => {
   const channelFader = channel => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;
   card.insertAdjacentHTML('beforeend', `<div class="channel-faders">${channelFader('left')}<button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg></button>${channelFader('right')}</div>`);
 });
-const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume') return `${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
+const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume'||name==='spread') return `${name === 'spread' && Number(value) > 0 ? '+' : ''}${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
 
 const bars = document.querySelector('.bars');
 bars.innerHTML = Array.from({ length: BAND_COUNT }, (_, i) => `<div class="bar-pair" data-analyzer-band="${i}" tabindex="0" aria-label="Band ${i + 1}, ${BAND_DEFINITIONS[i].label}"><i data-channel="left"></i><i data-channel="right"></i><b class="analyzer-peak analyzer-peak-left"></b><b class="analyzer-peak analyzer-peak-right"></b><small class="analyzer-band-delta"></small><em class="analyzer-feedback-marker" aria-hidden="true">FB</em><em class="analyzer-osc-marker" aria-hidden="true">OSC</em></div>`).join('');
@@ -1712,7 +1712,7 @@ const refreshStatusStrip = () => {
     Number(engine.commonBusDrive) > 1 ? `DRIVE ${engine.commonBusDrive}` : null,
     engine.feedbackTopology ? `FB ${String(engine.feedbackTopology).replaceAll('-', ' ').toUpperCase()}` : null,
     engine.feedbackCore ? String(engine.feedbackCore).toUpperCase() : null,
-    `SPREAD ${state.spread >= 0 ? '+' : ''}${Math.round(state.spread * 100)}`,
+    `SPREAD ${state.spread >= 0 ? '+' : ''}${Number(state.spread).toFixed(1)} dB`,
     `OUT ${Number(state.volume).toFixed(1)} dB`,
     engine.feedbackTap ? (engine.feedbackTap === 'post-gain' ? 'POST' : 'PRE') : null,
     mainActive ? 'MAIN' : null,
@@ -1807,11 +1807,7 @@ const ANALYZER_ZERO_EPSILON = 1e-9;
 const renderAnalyzerBar = (bar, value) => {
   const numericValue = Number(value);
   const isZero = Math.abs(numericValue) < ANALYZER_ZERO_EPSILON;
-  const height = numericValue > BAND_GAIN_NEUTRAL
-    ? (numericValue / BAND_GAIN_MAX) * 50
-    : numericValue < BAND_GAIN_NEUTRAL
-      ? (Math.abs(numericValue) / Math.abs(BAND_GAIN_MIN)) * 50
-      : 0;
+  const height = Math.abs(bandGainDbToBipolarPercent(numericValue, getBandBoostDb(), getBandCutDb())) / 2;
   bar.classList.toggle('negative', numericValue < BAND_GAIN_NEUTRAL);
   bar.classList.toggle('is-zero', isZero);
   bar.style.height = `${height}%`;
@@ -1819,12 +1815,19 @@ const renderAnalyzerBar = (bar, value) => {
 const updateAnalyzerBand = index => {
   const [leftBar, rightBar] = document.querySelectorAll(`[data-analyzer-band="${index}"] i`);
   const display = getFilterbankDisplayBandGains(index);
-  renderAnalyzerBar(leftBar, display.leftControl);
-  renderAnalyzerBar(rightBar, display.rightControl);
+  renderAnalyzerBar(leftBar, display.leftDb);
+  renderAnalyzerBar(rightBar, display.rightDb);
   scheduleAnalyzerRender();
 };
 const getBandBoostDb = () => Number(bandBoostSelect?.value ?? 12);
 const getBandCutDb = () => Number(bandCutSelect?.value ?? 12);
+const renderAnalyzerScale = () => {
+  const boost = getBandBoostDb(); const cut = getBandCutDb();
+  const boostLabel = document.querySelector('[data-axis-boost]');
+  const cutLabel = document.querySelector('[data-axis-cut]');
+  if (boostLabel) boostLabel.textContent = `+${boost} dB`;
+  if (cutLabel) cutLabel.textContent = `−${cut} dB`;
+};
 const formatBandSliderValue = value => {
   const gainDb = controlToBandGainDb(value, getBandBoostDb(), getBandCutDb());
   const normalizedGainDb = Math.abs(gainDb) < 1e-9 ? 0 : gainDb;
@@ -1844,6 +1847,10 @@ const renderBand = index => {
   const channelValue = channel => document.querySelector(`[data-band-channel-value="${index}-${channel}"]`);
   if (channelValue('left')) channelValue('left').textContent = formatBandSliderValue(state.bandGainLeft[index]);
   if (channelValue('right')) channelValue('right').textContent = formatBandSliderValue(state.bandGainRight[index]);
+  [['left', leftDb], ['right', rightDb]].forEach(([channel, gainDb]) => {
+    const marker = document.querySelector(`[data-classic-marker="${index}-${channel}"]`);
+    if (marker) marker.style.bottom = `${(bandGainDbToBipolarPercent(gainDb, getBandBoostDb(), getBandCutDb()) + 100) / 2}%`;
+  });
   const link = document.querySelector(`[data-band-link="${index}"]`);
   if (link) { link.classList.toggle('active', Boolean(state.bandChannelLinked[index])); link.setAttribute('aria-pressed', String(Boolean(state.bandChannelLinked[index]))); }
   updateAnalyzerBand(index);
@@ -1865,6 +1872,21 @@ const setBandPairByDb = (index, sourceChannel, targetControl) => {
     audioEngine?.setBandBaseGain(channel, index, next);
   });
   renderBand(index); refreshStatusStrip();
+};
+const materializeSpreadDb = spreadDb => {
+  const boost = getBandBoostDb(); const cut = getBandCutDb();
+  const offsetDb = Number(spreadDb) || 0;
+  for (let index = 0; index < BAND_COUNT; index += 1) {
+    const leftDb = controlToBandGainDb(state.bandGainLeft[index], boost, cut);
+    const rightDb = controlToBandGainDb(state.bandGainRight[index], boost, cut);
+    const centerDb = (leftDb + rightDb) / 2;
+    const nextLeft = setStateBandBaseGain(state, 'left', index, bandGainDbToControl(centerDb - offsetDb, boost, cut));
+    const nextRight = setStateBandBaseGain(state, 'right', index, bandGainDbToControl(centerDb + offsetDb, boost, cut));
+    audioEngine?.setBandBaseGain('left', index, nextLeft);
+    audioEngine?.setBandBaseGain('right', index, nextRight);
+    renderBand(index);
+  }
+  refreshStatusStrip();
 };
 const setBandBaseGain = (channel, index, value, singleChannel = false) => {
   const channels = !singleChannel && state.channelSelection === 'LR' ? ['left', 'right'] : [channel];
@@ -1957,7 +1979,7 @@ const updatePerChannelBands = () => {
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   });
-  const spreadDisabled = !state.filterEnabled && state.perChannelBands;
+  const spreadDisabled = state.perChannelBands;
   if (spreadControl) spreadControl.disabled = spreadDisabled;
   spreadControlCard?.classList.toggle('is-disabled', spreadDisabled);
   audioEngine?.setPerChannelBands(state.perChannelBands);
@@ -1988,12 +2010,25 @@ const renderGlobalControlValue = (name, value) => {
   const definition = GLOBAL_CONTROL_DEFINITIONS[name];
   const slider = document.querySelector(`[data-control="${name}"]`);
   if (!definition || !slider) return;
-  const clamped = Math.min(definition.max, Math.max(definition.min, Number(value)));
+  const minimum = name === 'spread' ? -state.spreadMaxOffsetDb : definition.min;
+  const maximum = name === 'spread' ? state.spreadMaxOffsetDb : definition.max;
+  const clamped = Math.min(maximum, Math.max(minimum, Number(value)));
   const normalized = Number(clamped.toFixed(2));
   state[name] = normalized;
   slider.value = String(normalized);
   const output = document.querySelector(`[data-output="${name}"]`);
   if (output) output.textContent = formatValue(name, normalized);
+};
+const configureSpreadControl = maxOffsetDb => {
+  const limit = Number(maxOffsetDb);
+  if (!spreadControl || !Number.isFinite(limit)) return;
+  spreadControl.min = String(-limit);
+  spreadControl.max = String(limit);
+  spreadControl.step = '0.1';
+  const minLabel = document.querySelector('[data-spread-scale-min]');
+  const maxLabel = document.querySelector('[data-spread-scale-max]');
+  if (minLabel) minLabel.textContent = `−${limit}`;
+  if (maxLabel) maxLabel.textContent = `+${limit}`;
 };
 const setGlobalControlValue = (name, value) => {
   const slider = document.querySelector(`[data-control="${name}"]`);
@@ -2253,15 +2288,21 @@ const bindDevLabSelect = (select, apply, fallback) => {
 };
 bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
-bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); renderBandSliderValues(); }, '12');
-bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); renderBandSliderValues(); renderFilterMode(); }, '12');
+bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); renderAnalyzerScale(); renderBandSliderValues(); }, '12');
+bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
 bindDevLabSelect(spreadCurveSelect, value => {
   state.spreadCurve = audioEngine.setSpreadCurve(value);
   renderBandSliderValues();
 }, 'linear');
 bindDevLabSelect(spreadMaxOffsetSelect, value => {
   state.spreadMaxOffsetDb = audioEngine.setSpreadMaxOffsetDb(value);
-  renderBandSliderValues();
+  configureSpreadControl(state.spreadMaxOffsetDb);
+  const clampedSpread = window.ResonantState.clampSpread(state.spread, state.spreadMaxOffsetDb);
+  if (clampedSpread !== state.spread) {
+    renderGlobalControlValue('spread', clampedSpread);
+    audioEngine.setSpread(clampedSpread);
+    materializeSpreadDb(clampedSpread);
+  } else renderBandSliderValues();
 }, '6');
 const updateLocalLoopTuningRelevance = () => {
   const zdf = feedbackCoreSelect?.value === 'zdf' || feedbackCoreSelect?.value === 'zdf-per-band';
@@ -2327,7 +2368,7 @@ document.querySelector('[data-control="volume"]').addEventListener('input', sync
 document.querySelector('[data-control="resonance"]').addEventListener('input', () => audioEngine.setResonance(state.resonance));
 document.querySelector('[data-control="spread"]').addEventListener('input', () => {
   audioEngine.setSpread(state.spread);
-  renderBandSliderValues();
+  materializeSpreadDb(state.spread);
 });
 ['resonance', 'dryWet', 'inputGain', 'volume', 'spread'].forEach(name => {
   const slider = document.querySelector(`[data-control="${name}"]`); let previous = state[name];
@@ -2367,6 +2408,8 @@ const syncUiFromAudioState = snapshot => {
   state.feedbackBandRight = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.feedbackBandRight?.[index]));
   state.feedbackAllLeft = Boolean(snapshot.feedbackAllLeft);
   state.feedbackAllRight = Boolean(snapshot.feedbackAllRight);
+  if (snapshot.spreadMaxOffsetDb !== undefined) state.spreadMaxOffsetDb = Number(snapshot.spreadMaxOffsetDb);
+  configureSpreadControl(state.spreadMaxOffsetDb);
   if (snapshot.resonance !== undefined) renderGlobalControlValue('resonance', snapshot.resonance);
   if (snapshot.inputGainDb !== undefined) renderGlobalControlValue('inputGain', snapshot.inputGainDb);
   if (snapshot.dryWet !== undefined) renderGlobalControlValue('dryWet', snapshot.dryWet);
@@ -2374,7 +2417,6 @@ const syncUiFromAudioState = snapshot => {
   if (snapshot.volumeDb !== undefined) renderGlobalControlValue('volume', snapshot.volumeDb);
   if (snapshot.spreadMode !== undefined) state.spreadMode = snapshot.spreadMode;
   if (snapshot.spreadCurve !== undefined) state.spreadCurve = snapshot.spreadCurve;
-  if (snapshot.spreadMaxOffsetDb !== undefined) state.spreadMaxOffsetDb = Number(snapshot.spreadMaxOffsetDb);
   faders.forEach((_, index) => renderBand(index));
   document.querySelectorAll('[data-feedback-band]').forEach(button => {
     const active = state.feedbackBandLeft[Number(button.dataset.feedbackBand)];

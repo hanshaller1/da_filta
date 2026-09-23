@@ -73,12 +73,12 @@ test('FILTER power controls its layer across workspaces without changing FILTERB
   expect(after.sameNode).toBeTruthy();
 });
 
-test('FILTER bandwidth relevance, graph updates, persistence and spread ignore stored P/CH', async ({ page }) => {
+test('FILTER bandwidth relevance, graph updates and P/CH spread priority persist across workspaces', async ({ page }) => {
   await page.goto('/');
   await page.locator('.per-channel-toggle').click();
   await page.locator('[data-mode="filter"]').click();
   await page.locator('[data-module-power="filter"]').click();
-  await expect(page.locator('[data-control="spread"]')).toBeEnabled();
+  await expect(page.locator('[data-control="spread"]')).toBeDisabled();
   await expect(page.locator('[data-filter-bandwidth]')).toBeDisabled();
   const pathBefore = await page.locator('[data-filter-response-path]').getAttribute('d');
   await page.locator('[data-filter-type="notch"]').click();
@@ -93,18 +93,6 @@ test('FILTER bandwidth relevance, graph updates, persistence and spread ignore s
   expect(Math.min(...await page.evaluate(() => window.FilterMode.getShape()))).toBeGreaterThanOrEqual(-24);
 
   const spread = page.locator('[data-control="spread"]');
-  await spread.fill('0'); await spread.dispatchEvent('input');
-  const neutral = await page.evaluate(() => {
-    const engine = window.FilterMode.getAudioEngine();
-    return [engine.getEffectiveBandGains(4).leftControl, engine.getEffectiveBandGains(4).rightControl];
-  });
-  expect(neutral[0]).toBe(neutral[1]);
-  await spread.fill('0.5'); await spread.dispatchEvent('input');
-  const spreadValues = await page.evaluate(() => {
-    const engine = window.FilterMode.getAudioEngine();
-    return [engine.getEffectiveBandGains(4).leftControl, engine.getEffectiveBandGains(4).rightControl];
-  });
-  expect(spreadValues[0]).not.toBe(spreadValues[1]);
 
   await page.locator('[data-mode="clock-mod"]').click();
   await page.locator('[data-mode="filter"]').click();
@@ -112,7 +100,7 @@ test('FILTER bandwidth relevance, graph updates, persistence and spread ignore s
   await expect(page.locator('[data-filter-frequency]')).toHaveValue('700');
   await page.locator('[data-mode="filterbank"]').click();
   await expect(page.locator('.per-channel-toggle')).toHaveAttribute('aria-pressed', 'true');
-  await expect(spread).toBeEnabled();
+  await expect(spread).toBeDisabled();
   await page.locator('[data-module-power="filter"]').click();
   await expect(spread).toBeDisabled();
 });
@@ -261,9 +249,9 @@ test('FILTERBANK power gates gains, feedback and resonance effectively and resto
 
   expect(report.bothOn.leftDb).toBeCloseTo(-5, 10);
   expect(report.bothOn.rightDb).toBeCloseTo(-7, 10);
-  expect(report.spreadOnce.leftDb).toBeCloseTo(-8, 10);
-  expect(report.spreadOnce.rightDb).toBeCloseTo(-4, 10);
-  expect(report.off.gainDb).toBeCloseTo(-8, 10);
+  expect(report.spreadOnce.leftDb).toBeCloseTo(-5, 10);
+  expect(report.spreadOnce.rightDb).toBeCloseTo(-7, 10);
+  expect(report.off.gainDb).toBeCloseTo(-7, 10);
   expect(report.off.state).toMatchObject({ filterbankEnabled: false, filterEnabled: true, resonance: 0.72, feedbackAllRight: true });
   expect(report.off.state.feedbackBandLeft[4]).toBe(true);
   expect(report.off.effective).toMatchObject({ resonance: 0, feedbackAllLeft: false, feedbackAllRight: false });
@@ -283,7 +271,7 @@ test('FILTERBANK power gates gains, feedback and resonance effectively and resto
   expect(report.bothOff).toBe(0);
 });
 
-test('SPREAD is neutral with both spectral layers off and preserves FILTER/FILTERBANK rules', async ({ page }) => {
+test('stored L/R is mode-invariant and both powered-off layers remain neutral', async ({ page }) => {
   await page.goto('/');
   const report = await page.evaluate(() => {
     const engine = window.FilterMode.getAudioEngine();
@@ -292,7 +280,8 @@ test('SPREAD is neutral with both spectral layers off and preserves FILTER/FILTE
       return { leftDb: effective.leftDb, rightDb: effective.rightDb };
     });
 
-    engine.setSpread(0.5);
+    engine.setBandBaseGain('left', 0, -50);
+    engine.setBandBaseGain('right', 0, 50);
     engine.setFilterbankEnabled(false);
     engine.setFilterEnabled(false);
     engine.setPerChannelBands(false);
@@ -320,7 +309,7 @@ test('SPREAD is neutral with both spectral layers off and preserves FILTER/FILTE
   }
   expect(report.filterOnlyPerChannel.some(({ leftDb, rightDb }) => leftDb !== rightDb)).toBeTruthy();
   expect(report.filterbankOnlyClassic.some(({ leftDb, rightDb }) => leftDb !== rightDb)).toBeTruthy();
-  expect(report.filterbankOnlyPerChannel.every(({ leftDb, rightDb }) => leftDb === 0 && rightDb === 0)).toBeTruthy();
+  expect(report.filterbankOnlyPerChannel).toEqual(report.filterbankOnlyClassic);
 });
 
 test('Space, Enter and NumpadEnter keep PANIC semantics and never toggle module power', async ({ page }) => {
@@ -399,7 +388,7 @@ test('FILTERBANK response controls stay bound to manual FILTERBANK state while F
 
   await page.locator('.classic-channel-toggle').click();
   await page.locator('.center-fader .band-fader').first().fill('0');
-  await page.locator('[data-control="spread"]').fill('0.5');
+  await page.locator('[data-control="spread"]').fill('3');
   await page.locator('[data-control="spread"]').dispatchEvent('input');
   const spreadDisplay = await page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(0).display);
   expect(spreadDisplay.leftDb).toBeCloseTo(-3, 10);

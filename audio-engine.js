@@ -233,11 +233,11 @@
     setReferenceLevel(value) { this.referenceLevel = [1, 0.75, 0.5, 0.25, 0].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setReferenceLevel(this.referenceLevel); return this.referenceLevel; }
     setBandBoostDb(value) { this.maxBandBoostDb = [12, 18, 24].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandBoostDb(this.maxBandBoostDb); this.rebuildFilterModeBandControls(); this.applyEffectiveBandGains(); return this.maxBandBoostDb; }
     setBandCutDb(value) { this.maxBandCutDb = [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandCutDb(this.maxBandCutDb); this.rebuildFilterModeBandControls(); this.applyEffectiveBandGains(); return this.maxBandCutDb; }
-    setSpread(value) { this.spread = clampSpread(value); this.applyEffectiveBandGains(); return this.spread; }
+    setSpread(value) { this.spread = clampSpread(value, this.spreadMaxOffsetDb); return this.spread; }
     setPerChannelBands(value) { this.perChannelBands = Boolean(value); this.applyEffectiveBandGains(); return this.perChannelBands; }
     setSpreadMode(value) { this.spreadMode = value === 'FB_CH_SELECT' ? 'FB_CH_SELECT' : 'CLASSIC'; this.applyEffectiveBandGains(); return this.spreadMode; }
     setSpreadCurve(value) { this.spreadCurve = normalizeSpreadCurve(value); this.applyEffectiveBandGains(); return this.spreadCurve; }
-    setSpreadMaxOffsetDb(value) { this.spreadMaxOffsetDb = normalizeSpreadMaxOffsetDb(value); this.applyEffectiveBandGains(); return this.spreadMaxOffsetDb; }
+    setSpreadMaxOffsetDb(value) { this.spreadMaxOffsetDb = normalizeSpreadMaxOffsetDb(value); this.spread = clampSpread(this.spread, this.spreadMaxOffsetDb); return this.spreadMaxOffsetDb; }
     setPositiveResonanceEngine(value) { this.positiveResonanceEngine = value === 'phase2' ? value : 'tpt'; this.filterbank?.setPositiveResonanceEngine(this.positiveResonanceEngine); return this.positiveResonanceEngine; }
     setFeedbackTopology(value) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt'; this.filterbank?.setFeedbackTopology(this.feedbackTopology); return this.feedbackTopology; }
     setFeedbackCore(value) { this.feedbackCore = value === 'zdf-per-band' ? 'zdf-per-band' : value === 'zdf' ? 'zdf' : 'current'; this.filterbank?.setFeedbackCore(this.feedbackCore); return this.feedbackCore; }
@@ -311,31 +311,22 @@
 
     getEffectiveBandGains(index) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
-      const manualLeftDb = this.filterbankEnabled
-        ? controlToBandGainDb(this.bandGainLeft[index], this.maxBandBoostDb, this.maxBandCutDb)
-        : 0;
-      const manualRightDb = this.filterbankEnabled
-        ? controlToBandGainDb(this.bandGainRight[index], this.maxBandBoostDb, this.maxBandCutDb)
-        : 0;
+      const storedLeftDb = controlToBandGainDb(this.bandGainLeft[index], this.maxBandBoostDb, this.maxBandCutDb);
+      const storedRightDb = controlToBandGainDb(this.bandGainRight[index], this.maxBandBoostDb, this.maxBandCutDb);
+      const storedCenterDb = (storedLeftDb + storedRightDb) / 2;
+      // The stored pair is authoritative. With FILTERBANK off, its channel
+      // difference remains the global stereo offset around the FILTER shape.
+      const manualLeftDb = this.filterbankEnabled ? storedLeftDb : this.filterEnabled ? storedLeftDb - storedCenterDb : 0;
+      const manualRightDb = this.filterbankEnabled ? storedRightDb : this.filterEnabled ? storedRightDb - storedCenterDb : 0;
       const filterDb = this.filterEnabled ? this.filterModeBandGainsDb[index] : 0;
       const combinedLeftDb = clampBandGainDb(manualLeftDb + filterDb, this.maxBandBoostDb, this.maxBandCutDb);
       const combinedRightDb = clampBandGainDb(manualRightDb + filterDb, this.maxBandBoostDb, this.maxBandCutDb);
-      const preserveManualControls = this.filterbankEnabled && !this.filterEnabled;
-      const spectralLayerEnabled = this.filterbankEnabled || this.filterEnabled;
-      const effectiveSpread = spectralLayerEnabled && (this.filterEnabled || !this.perChannelBands)
-        ? this.spread
-        : 0;
       const combinedState = {
-        bandGainLeft: [preserveManualControls ? this.bandGainLeft[index] : bandGainDbToControl(combinedLeftDb, this.maxBandBoostDb, this.maxBandCutDb)],
-        bandGainRight: [preserveManualControls ? this.bandGainRight[index] : bandGainDbToControl(combinedRightDb, this.maxBandBoostDb, this.maxBandCutDb)],
-        activeMode: 'FB',
-        spreadMode: this.spreadMode,
-        spreadCurve: this.spreadCurve,
-        spreadMaxOffsetDb: this.spreadMaxOffsetDb
+        bandGainLeft: [this.filterbankEnabled && !this.filterEnabled ? this.bandGainLeft[index] : bandGainDbToControl(combinedLeftDb, this.maxBandBoostDb, this.maxBandCutDb)],
+        bandGainRight: [this.filterbankEnabled && !this.filterEnabled ? this.bandGainRight[index] : bandGainDbToControl(combinedRightDb, this.maxBandBoostDb, this.maxBandCutDb)]
       };
       return getEffectiveBandGains(combinedState, 0, {
         maxBandBoostDb: this.maxBandBoostDb,
-        spread: effectiveSpread,
         maxBandCutDb: this.maxBandCutDb
       });
     }
