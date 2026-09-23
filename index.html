@@ -449,7 +449,27 @@
         </section>
         <section class="bands" aria-label="Frequenzbänder"></section>
             </section>
-            <section class="mode-placeholder" id="mode-filter" role="tabpanel" aria-labelledby="mode-tab-filter" data-mode-panel="filter" hidden><strong>FILTER</strong><span>Filter module – coming later</span></section>
+            <section class="filter-mode-panel" id="mode-filter" role="tabpanel" aria-labelledby="mode-tab-filter" data-mode-panel="filter" hidden>
+              <section class="filter-response" aria-label="Filter control response">
+                <header><strong>FILTER RESPONSE</strong><span>10-BAND CONTROL SHAPE</span></header>
+                <div class="filter-response-chart">
+                  <span class="filter-response-zero">0 dB</span>
+                  <span class="filter-response-floor" data-filter-response-floor>−12 dB</span>
+                  <svg viewBox="0 0 1000 240" preserveAspectRatio="none" role="img" aria-label="Berechnete Filter-Steuerkurve">
+                    <line class="filter-response-zero-line" x1="0" y1="8" x2="1000" y2="8"></line>
+                    <path class="filter-response-path" data-filter-response-path></path>
+                    <g data-filter-response-markers></g>
+                  </svg>
+                  <div class="filter-response-labels" aria-hidden="true"><span>29</span><span>61</span><span>115</span><span>218</span><span>411</span><span>777</span><span>1.5k</span><span>2.8k</span><span>5.2k</span><span>11k</span></div>
+                </div>
+              </section>
+              <section class="filter-controls" aria-label="Filter controls">
+                <div class="filter-type-control"><span>TYPE</span><div class="filter-type-buttons" role="group" aria-label="Filtertyp"><button type="button" data-filter-type="lowpass" aria-label="Lowpass">LP</button><button type="button" data-filter-type="highpass" aria-label="Highpass">HP</button><button type="button" data-filter-type="bandpass" aria-label="Bandpass">BP</button><button type="button" data-filter-type="notch" aria-label="Notch">NOTCH</button></div></div>
+                <label class="filter-parameter-control"><span>FREQUENCY</span><input type="range" min="0" max="1000" step="1" data-filter-frequency aria-label="Filter frequency"><output data-filter-frequency-output>777 Hz</output></label>
+                <label class="filter-parameter-control"><span>SLOPE</span><input type="range" min="0" max="100" step="1" data-filter-slope aria-label="Filter slope"><output data-filter-slope-output>50 %</output></label>
+                <label class="filter-parameter-control" data-filter-bandwidth-control><span>BANDWIDTH</span><input type="range" min="0" max="100" step="1" data-filter-bandwidth aria-label="Filter bandwidth"><output data-filter-bandwidth-output>50 %</output></label>
+              </section>
+            </section>
             <section class="mode-placeholder" id="mode-clock-mod" role="tabpanel" aria-labelledby="mode-tab-clock-mod" data-mode-panel="clock-mod" hidden><strong>CLOCK MOD</strong><span>Clock modulation – coming later</span></section>
             <section class="mode-placeholder" id="mode-lfo" role="tabpanel" aria-labelledby="mode-tab-lfo" data-mode-panel="lfo" hidden><strong>LFO</strong><span>LFO module – coming later</span></section>
             <section class="mode-placeholder" id="mode-envelope-follower" role="tabpanel" aria-labelledby="mode-tab-envelope-follower" data-mode-panel="envelope-follower" hidden><strong>ENVELOPE FOLLOWER</strong><span>Envelope follower – coming later</span></section>
@@ -471,6 +491,7 @@
         </aside>
       </main>
     </div>
+    <script src="filter-shape.js"></script>
     <script src="state.js"></script>
     <script src="filterbank.js"></script>
     <script src="audio-engine.js"></script>

@@ -18,6 +18,7 @@
   const BAND_GAIN_NEUTRAL = 0;
   const SPREAD_CURVES = Object.freeze(['linear', 'quadratic', 'smoothstep']);
   const SPREAD_MAX_OFFSET_VALUES = Object.freeze([3, 6, 9, 12]);
+  const SPECTRAL_MODES = Object.freeze(['filterbank', 'filter']);
   const GLOBAL_CONTROL_DEFINITIONS = Object.freeze({
     inputGain: Object.freeze({ min: 0, max: 24, step: 0.5, defaultValue: 0 }),
     inputCharacterAmount: Object.freeze({ min: 0, max: 100, step: 1, defaultValue: 50 }),
@@ -62,6 +63,13 @@
     return clampBandGain((gainDb / limit) * BAND_GAIN_MAX);
   };
   const normalizeSpreadCurve = value => SPREAD_CURVES.includes(value) ? value : 'linear';
+  const normalizeSpectralMode = value => SPECTRAL_MODES.includes(value) ? value : 'filterbank';
+  const normalizeFilterState = source => Object.freeze({
+    filterType: window.FilterShape.normalizeFilterType(source?.filterType),
+    filterFrequencyHz: window.FilterShape.normalizeFilterFrequencyHz(source?.filterFrequencyHz),
+    filterSlope: window.FilterShape.normalizeFilterPercent(source?.filterSlope),
+    filterBandwidth: window.FilterShape.normalizeFilterPercent(source?.filterBandwidth)
+  });
   const normalizeSpreadMaxOffsetDb = value => SPREAD_MAX_OFFSET_VALUES.includes(Number(value)) ? Number(value) : 6;
   const spreadCurveValue = (magnitude, curve = 'linear') => {
     const m = Math.min(1, Math.max(0, Math.abs(Number(magnitude) || 0)));
@@ -107,6 +115,12 @@
 
   const createInitialState = () => ({
     activeMode: 'FB',
+    spectralMode: 'filterbank',
+    selectedWorkspaceMode: 'filterbank',
+    filterType: 'lowpass',
+    filterFrequencyHz: 777,
+    filterSlope: 50,
+    filterBandwidth: 50,
     spreadMode: 'CLASSIC',
     channelSelection: 'LR',
     inputGain: GLOBAL_CONTROL_DEFINITIONS.inputGain.defaultValue,
@@ -145,6 +159,7 @@
     BAND_GAIN_NEUTRAL,
     SPREAD_CURVES,
     SPREAD_MAX_OFFSET_VALUES,
+    SPECTRAL_MODES,
     GLOBAL_CONTROL_DEFINITIONS,
     clampBandGain,
     clampBandGainDb,
@@ -155,6 +170,8 @@
     getEffectiveBandGains,
     normalizeSpreadCurve,
     normalizeSpreadMaxOffsetDb,
+    normalizeSpectralMode,
+    normalizeFilterState,
     setBandBaseGain
   });
 })();

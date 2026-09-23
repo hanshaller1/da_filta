@@ -928,11 +928,20 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     height: 261px;
   }
   .filterbank-mode-panel .channel-faders {
-    flex: 0 0 281px;
-    height: 281px;
+    flex: 0 0 293px;
+    height: 293px;
+  }
+  .filterbank-mode-panel .bands.is-per-channel .channel-faders,
+  .filterbank-mode-panel .channel-fader {
+    grid-template-rows: 271px 22px;
   }
   .filterbank-mode-panel .channel-fader .fader-track {
     height: 261px;
+  }
+  .filterbank-mode-panel .channel-fader output {
+    align-self: end;
+    height: 20px;
+    line-height: 20px;
   }
 
   .mode-placeholder {
@@ -959,11 +968,47 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     grid-row: auto;
     top: calc(16px + 48px + var(--panel-gap));
     right: 0;
+    width: clamp(280px, 17vw, 320px);
+    min-width: clamp(280px, 17vw, 320px);
+    max-width: clamp(280px, 17vw, 320px);
     height: auto;
     margin: 0;
     max-height: calc(100vh - 78px);
+    box-sizing: border-box;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 }
 
 [data-mode-panel][hidden] { display: none; }
+
+.filter-mode-panel { display: grid; gap: var(--panel-gap); padding: var(--panel-gap); }
+.filter-response, .filter-controls { border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); }
+.filter-response { min-height: 0; padding: 10px 14px 9px; }
+.filter-response > header { display: flex; align-items: center; justify-content: space-between; height: 28px; color: var(--cyan); letter-spacing: 1px; }
+.filter-response > header strong { font-size: 15px; }
+.filter-response > header span { color: var(--secondary-text); font-size: 9px; letter-spacing: .7px; }
+.filter-response-chart { position: relative; height: 250px; margin: 3px 0 22px; border: 1px solid var(--output-border); background-color: var(--graph-background); background-image: linear-gradient(to bottom, color-mix(in srgb, var(--secondary-text) 9%, transparent) 1px, transparent 1px), repeating-linear-gradient(90deg, transparent 0, transparent calc(10% - 1px), color-mix(in srgb, var(--secondary-text) 9%, transparent) calc(10% - 1px), color-mix(in srgb, var(--secondary-text) 9%, transparent) 10%); background-size: 100% 25%, auto; }
+.filter-response-chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.filter-response-zero-line { stroke: var(--graph-zero); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.filter-response-path { fill: none; stroke: var(--cyan); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--cyan) 48%, transparent)); }
+[data-filter-response-markers] line { stroke: color-mix(in srgb, var(--cyan) 22%, transparent); stroke-width: 8; vector-effect: non-scaling-stroke; }
+[data-filter-response-markers] circle { fill: var(--output-background); stroke: var(--cyan); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.filter-response-zero, .filter-response-floor { position: absolute; z-index: 2; left: 5px; color: var(--secondary-text); font-size: 8px; pointer-events: none; }
+.filter-response-zero { top: 3px; }
+.filter-response-floor { bottom: 3px; }
+.filter-response-labels { position: absolute; top: calc(100% + 5px); right: 0; left: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); color: var(--secondary-text); font-size: 10px; text-align: center; }
+.filter-controls { display: grid; overflow: hidden; }
+.filter-type-control, .filter-parameter-control { display: grid; grid-template-columns: 112px minmax(0, 1fr) 78px; align-items: center; min-height: 54px; gap: 12px; padding: 7px 14px; color: var(--muted-text); font-size: 11px; letter-spacing: .8px; }
+.filter-type-control + .filter-parameter-control, .filter-parameter-control + .filter-parameter-control { border-top: 1px solid var(--output-border); }
+.filter-type-buttons { grid-column: 2 / 4; display: grid; grid-template-columns: repeat(4, minmax(62px, 1fr)); gap: 5px; }
+.filter-type-buttons button { height: 30px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--button-background); font: 700 11px 'Trebuchet MS', Arial, sans-serif; letter-spacing: .5px; cursor: pointer; }
+.filter-type-buttons button.active { color: var(--cyan); border-color: var(--cyan); background: var(--active-background); box-shadow: var(--active-shadow); }
+.filter-parameter-control input { width: 100%; min-width: 0; cursor: pointer; }
+.filter-parameter-control input::-webkit-slider-runnable-track { height: 5px; border-radius: 4px; background: var(--range-track); }
+.filter-parameter-control input::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 10px; height: 20px; margin-top: -7.5px; border: 2px solid var(--range-thumb-border); border-radius: 3px; background: var(--cyan); box-shadow: var(--range-thumb-shadow); }
+.filter-parameter-control input::-moz-range-track { height: 5px; border: 0; border-radius: 4px; background: var(--range-track); }
+.filter-parameter-control input::-moz-range-thumb { width: 10px; height: 20px; border: 2px solid var(--range-thumb-border); border-radius: 3px; background: var(--cyan); box-shadow: var(--range-thumb-shadow); }
+.filter-parameter-control output { min-width: 78px; padding: 4px 6px; border: 1px solid var(--output-border); border-radius: 3px; color: var(--strong-text); background: var(--output-background); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.filter-parameter-control.is-disabled { opacity: .42; }
+.filter-parameter-control.is-disabled input { cursor: not-allowed; filter: grayscale(1); }

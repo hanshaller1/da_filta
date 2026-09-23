@@ -83,7 +83,7 @@ const mastheadThemeEditor = document.querySelector('.theme-editor');
 if (mastheadDevLab && mastheadThemeEditor && devLabToggle) mastheadDevLab.insertBefore(mastheadThemeEditor, devLabToggle);
 const devLabControls = document.querySelector('.dev-lab-panel .dev-lab-controls');
 const devLabGroups = new Map();
-const devLabGroupsOpenByDefault = new Set(['input', 'local-feedback', 'main']);
+const devLabGroupsOpenByDefault = new Set(['local-feedback', 'main']);
 [['input', 'INPUT'], ['keyboard', 'KEYBOARD'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['negative-resonance', 'NEGATIVE RESONANCE'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
   const group = document.createElement('section');
   group.className = 'dev-lab-group';
@@ -1463,10 +1463,95 @@ window.DaFiltaThemeEditor = { applyCustomTheme, clearCustomTheme, getState: () =
 const bands = document.querySelector('.bands');
 const modeTabs = [...document.querySelectorAll('[data-mode]')];
 const modePanels = [...document.querySelectorAll('[data-mode-panel]')];
-let selectedMode = 'filterbank';
+const filterTypeButtons = [...document.querySelectorAll('[data-filter-type]')];
+const filterFrequencySlider = document.querySelector('[data-filter-frequency]');
+const filterSlopeSlider = document.querySelector('[data-filter-slope]');
+const filterBandwidthSlider = document.querySelector('[data-filter-bandwidth]');
+const filterBandwidthControl = document.querySelector('[data-filter-bandwidth-control]');
+const filterResponsePath = document.querySelector('[data-filter-response-path]');
+const filterResponseMarkers = document.querySelector('[data-filter-response-markers]');
+const filterResponseFloor = document.querySelector('[data-filter-response-floor]');
+const formatFilterFrequency = value => {
+  const frequency = window.FilterShape.normalizeFilterFrequencyHz(value);
+  if (frequency < 1000) return `${Math.round(frequency)} Hz`;
+  return `${(frequency / 1000).toFixed(1).replace(/\.0$/, '')} kHz`;
+};
+const getFilterModeShape = () => audioEngine?.filterModeBandGainsDb ?? window.FilterShape.createFilterShape({
+  type: state.filterType,
+  frequencyHz: state.filterFrequencyHz,
+  slope: state.filterSlope,
+  bandwidth: state.filterBandwidth,
+  bandDefinitions: BAND_DEFINITIONS,
+  maxBandCutDb: Number(bandCutSelect?.value ?? 12)
+});
+const filterResponsePathData = points => {
+  if (!points.length) return '';
+  if (points.length === 1) return `M${points[0].x} ${points[0].y}`;
+  let path = `M${points[0].x} ${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const midpointX = (current.x + next.x) / 2;
+    path += ` C${midpointX} ${current.y.toFixed(2)} ${midpointX} ${next.y.toFixed(2)} ${next.x} ${next.y}`;
+  }
+  return path;
+};
+const renderFilterMode = () => {
+  const cutDb = Math.max(1, Number(audioEngine?.maxBandCutDb ?? bandCutSelect?.value ?? 12));
+  const gains = getFilterModeShape();
+  const points = gains.map((gain, index) => ({ x: 50 + index * 100, y: 8 + Math.abs(gain) / cutDb * 220 }));
+  filterResponsePath?.setAttribute('d', filterResponsePathData(points));
+  if (filterResponseMarkers) filterResponseMarkers.innerHTML = points.map((point, index) => `<line x1="${point.x}" y1="228" x2="${point.x}" y2="${point.y.toFixed(2)}"></line><circle cx="${point.x}" cy="${point.y.toFixed(2)}" r="5"><title>${BAND_DEFINITIONS[index].label}: ${gains[index].toFixed(1)} dB</title></circle>`).join('');
+  if (filterResponseFloor) filterResponseFloor.textContent = `−${cutDb} dB`;
+  filterTypeButtons.forEach(button => {
+    const active = button.dataset.filterType === state.filterType;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  if (filterFrequencySlider) filterFrequencySlider.value = String(window.FilterShape.frequencyToSlider(state.filterFrequencyHz));
+  if (filterSlopeSlider) filterSlopeSlider.value = String(state.filterSlope);
+  if (filterBandwidthSlider) filterBandwidthSlider.value = String(state.filterBandwidth);
+  const frequencyOutput = document.querySelector('[data-filter-frequency-output]');
+  const slopeOutput = document.querySelector('[data-filter-slope-output]');
+  const bandwidthOutput = document.querySelector('[data-filter-bandwidth-output]');
+  if (frequencyOutput) frequencyOutput.textContent = formatFilterFrequency(state.filterFrequencyHz);
+  if (slopeOutput) slopeOutput.textContent = `${state.filterSlope} %`;
+  if (bandwidthOutput) bandwidthOutput.textContent = `${state.filterBandwidth} %`;
+  const bandwidthEnabled = state.filterType === 'bandpass' || state.filterType === 'notch';
+  if (filterBandwidthSlider) filterBandwidthSlider.disabled = !bandwidthEnabled;
+  filterBandwidthControl?.classList.toggle('is-disabled', !bandwidthEnabled);
+};
+const updateFilterState = values => {
+  Object.assign(state, window.ResonantState.normalizeFilterState({ ...state, ...values }));
+  audioEngine?.setFilterState(state);
+  renderFilterMode();
+};
+filterTypeButtons.forEach(button => button.addEventListener('click', () => updateFilterState({ filterType: button.dataset.filterType })));
+filterFrequencySlider?.addEventListener('input', () => updateFilterState({ filterFrequencyHz: window.FilterShape.sliderToFrequency(filterFrequencySlider.value) }));
+filterSlopeSlider?.addEventListener('input', () => updateFilterState({ filterSlope: Number(filterSlopeSlider.value) }));
+filterBandwidthSlider?.addEventListener('input', () => updateFilterState({ filterBandwidth: Number(filterBandwidthSlider.value) }));
+renderFilterMode();
+window.FilterMode = Object.freeze({
+  getState: () => ({
+    spectralMode: state.spectralMode,
+    selectedWorkspaceMode: state.selectedWorkspaceMode,
+    filterType: state.filterType,
+    filterFrequencyHz: state.filterFrequencyHz,
+    filterSlope: state.filterSlope,
+    filterBandwidth: state.filterBandwidth
+  }),
+  getShape: () => [...getFilterModeShape()],
+  getManualBandState: () => ({ left: [...state.bandGainLeft], right: [...state.bandGainRight], perChannelBands: state.perChannelBands, linked: [...state.bandChannelLinked] }),
+  getAudioEngine: () => audioEngine
+});
 const selectMode = mode => {
   if (!modePanels.some(panel => panel.dataset.modePanel === mode)) return;
-  selectedMode = mode;
+  state.selectedWorkspaceMode = mode;
+  if (mode === 'filterbank' || mode === 'filter') {
+    state.spectralMode = mode;
+    audioEngine?.setSpectralMode(mode);
+    updatePerChannelBands();
+  }
   modeTabs.forEach(tab => {
     const selected = tab.dataset.mode === mode;
     tab.classList.toggle('active', selected);
@@ -1474,6 +1559,7 @@ const selectMode = mode => {
     tab.tabIndex = selected ? 0 : -1;
   });
   modePanels.forEach(panel => { panel.hidden = panel.dataset.modePanel !== mode; });
+  if (mode === 'filter') renderFilterMode();
 };
 modeTabs.forEach((tab, index) => {
   tab.tabIndex = tab.classList.contains('active') ? 0 : -1;
@@ -1494,8 +1580,8 @@ bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-car
 bands.insertAdjacentHTML('afterbegin', '<div class="filterbank-panel-header"><span class="filterbank-panel-actions"><span class="filterbank-action-group filterbank-fb-all-group"></span><span class="filterbank-action-group filterbank-per-channel-group"><span class="filterbank-spread-label">SPREAD</span><button class="per-channel-toggle" type="button" aria-pressed="false">P/CH</button></span></span></div>');
 document.querySelectorAll('.band-card').forEach((card, index) => {
   card.querySelector('.fader-wrap')?.classList.add('center-fader');
-  const channelFader = (channel, label) => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">${label} 0.0 dB</output></div>`;
-  card.insertAdjacentHTML('beforeend', `<div class="channel-faders">${channelFader('left', 'L')}<button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg></button>${channelFader('right', 'R')}</div>`);
+  const channelFader = channel => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;
+  card.insertAdjacentHTML('beforeend', `<div class="channel-faders">${channelFader('left')}<button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg></button>${channelFader('right')}</div>`);
 });
 const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume') return `${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
 
@@ -1716,8 +1802,8 @@ const renderBand = index => {
     input.value = String(input.dataset.channel === 'left' ? state.bandGainLeft[index] : state.bandGainRight[index]);
   });
   const channelValue = channel => document.querySelector(`[data-band-channel-value="${index}-${channel}"]`);
-  if (channelValue('left')) channelValue('left').textContent = `L ${formatBandSliderValue(state.bandGainLeft[index])}`;
-  if (channelValue('right')) channelValue('right').textContent = `R ${formatBandSliderValue(state.bandGainRight[index])}`;
+  if (channelValue('left')) channelValue('left').textContent = formatBandSliderValue(state.bandGainLeft[index]);
+  if (channelValue('right')) channelValue('right').textContent = formatBandSliderValue(state.bandGainRight[index]);
   const link = document.querySelector(`[data-band-link="${index}"]`);
   if (link) { link.classList.toggle('active', Boolean(state.bandChannelLinked[index])); link.setAttribute('aria-pressed', String(Boolean(state.bandChannelLinked[index]))); }
   updateAnalyzerBand(index);
@@ -1828,8 +1914,9 @@ const updatePerChannelBands = () => {
   bands.classList.toggle('is-per-channel', state.perChannelBands);
   perChannelButton?.classList.toggle('active', state.perChannelBands);
   perChannelButton?.setAttribute('aria-pressed', String(state.perChannelBands));
-  if (spreadControl) spreadControl.disabled = state.perChannelBands;
-  spreadControlCard?.classList.toggle('is-disabled', state.perChannelBands);
+  const spreadDisabled = state.spectralMode === 'filterbank' && state.perChannelBands;
+  if (spreadControl) spreadControl.disabled = spreadDisabled;
+  spreadControlCard?.classList.toggle('is-disabled', spreadDisabled);
   audioEngine?.setPerChannelBands(state.perChannelBands);
   renderBandSliderValues();
 };
@@ -2121,7 +2208,7 @@ const bindDevLabSelect = (select, apply, fallback) => {
 bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
 bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); renderBandSliderValues(); }, '12');
-bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); renderBandSliderValues(); }, '12');
+bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); renderBandSliderValues(); renderFilterMode(); }, '12');
 bindDevLabSelect(spreadCurveSelect, value => {
   state.spreadCurve = audioEngine.setSpreadCurve(value);
   renderBandSliderValues();
