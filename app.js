@@ -14,6 +14,13 @@ const {
 const state = createInitialState();
 let audioEngine = null;
 let panic = () => {};
+// FILTERBANK editor visuals intentionally describe the manual FILTERBANK
+// controls, not the final DSP basis selected by another powered module.
+const getFilterbankDisplayBandGains = index => getEffectiveBandGains(state, index, {
+  maxBandBoostDb: getBandBoostDb(),
+  maxBandCutDb: getBandCutDb(),
+  spread: state.perChannelBands ? 0 : state.spread
+});
 // Purely presentational: these switches are deliberately not part of the
 // application/DSP state or DEV-LABS snapshots.
 const ANALYZER_DISPLAY_DEFAULTS = Object.freeze({
@@ -418,7 +425,6 @@ const spectrumRenderer = (() => {
     outputTrail = outputTrail.slice(0, 3);
     lastTrailCaptureAt = now;
   };
-  const effectiveGain = index => audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, { maxBandBoostDb: getBandBoostDb(), maxBandCutDb: getBandCutDb() });
   const drawFilterResponse = (channel, color) => {
     context.globalAlpha = .52;
     context.strokeStyle = color;
@@ -429,7 +435,7 @@ const spectrumRenderer = (() => {
       const frequency = minFrequency * Math.exp((x / cssWidth) * logFrequencyRange);
       let linearGain = 1;
       BAND_DEFINITIONS.forEach((band, index) => {
-        const gainDb = effectiveGain(index)[channel === 'left' ? 'leftDb' : 'rightDb'];
+        const gainDb = getFilterbankDisplayBandGains(index)[channel === 'left' ? 'leftDb' : 'rightDb'];
         const ratio = frequency / band.frequency;
         // The linear, no-feedback BPF magnitude is intentionally an
         // approximation: it communicates the configured bank, not a solver prediction.
@@ -1624,7 +1630,6 @@ let analyzerLastFrame = performance.now();
 let analyzerDetailMode = 'hidden';
 let hoveredAnalyzerBand = null;
 const toDb = value => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)} dB`;
-const getAnalyzerEffective = index => audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, { maxBandBoostDb: getBandBoostDb(), maxBandCutDb: getBandCutDb(), spread: state.perChannelBands ? 0 : state.spread });
 const getAnalyzerTelemetry = () => devLabTelemetry.getLatest?.() || null;
 const getEnergyPair = (packet, index) => {
   const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band';
@@ -1633,14 +1638,14 @@ const getEnergyPair = (packet, index) => {
   return (Number(left?.[index]) || 0) + (Number(right?.[index]) || 0);
 };
 const analyzerBandInfo = index => {
-  const effective = getAnalyzerEffective(index);
+  const display = getFilterbankDisplayBandGains(index);
   const packet = getAnalyzerTelemetry();
   const feedback = Boolean(state.feedbackBandLeft[index] || state.feedbackBandRight[index]);
-  return { index, effective, delta: effective.leftDb - effective.rightDb, feedback, dominant: devLabTelemetry.getDominant?.().index === index, oscillating: analyzerOscillation[index].active, energy: getEnergyPair(packet, index) };
+  return { index, display, delta: display.leftDb - display.rightDb, feedback, dominant: devLabTelemetry.getDominant?.().index === index, oscillating: analyzerOscillation[index].active, energy: getEnergyPair(packet, index) };
 };
 const detailText = index => {
   const info = analyzerBandInfo(index);
-  return [`BAND ${index + 1} · ${BAND_DEFINITIONS[index].label}`, `L ${toDb(info.effective.leftDb)}`, `R ${toDb(info.effective.rightDb)}`, ...(analyzerDisplay.spreadDelta || Math.abs(info.delta) > .005 ? [`Δ ${toDb(info.delta)}`] : []), info.feedback ? 'FB ON' : 'FB OFF', ...(state.feedbackAllLeft || state.feedbackAllRight ? ['MAIN'] : []), ...(info.dominant ? ['DOM'] : []), ...(info.oscillating ? ['OSC'] : [])];
+  return [`BAND ${index + 1} · ${BAND_DEFINITIONS[index].label}`, `L ${toDb(info.display.leftDb)}`, `R ${toDb(info.display.rightDb)}`, ...(analyzerDisplay.spreadDelta || Math.abs(info.delta) > .005 ? [`Δ ${toDb(info.delta)}`] : []), info.feedback ? 'FB ON' : 'FB OFF', ...(state.feedbackAllLeft || state.feedbackAllRight ? ['MAIN'] : []), ...(info.dominant ? ['DOM'] : []), ...(info.oscillating ? ['OSC'] : [])];
 };
 const hideDetailElement = detail => { detail.hidden = true; };
 hideAnalyzerDetails = () => {
@@ -1732,7 +1737,7 @@ const animateAnalyzer = now => {
   updateOscillation();
   for (let index = 0; index < BAND_COUNT; index += 1) {
     const info = analyzerBandInfo(index); const motion = analyzerMotion[index];
-    [['left', info.effective.leftControl, 'peakLeft', 'peakLeftAt'], ['right', info.effective.rightControl, 'peakRight', 'peakRightAt']].forEach(([channel, target, peakKey, peakAtKey]) => {
+    [['left', info.display.leftControl, 'peakLeft', 'peakLeftAt'], ['right', info.display.rightControl, 'peakRight', 'peakRightAt']].forEach(([channel, target, peakKey, peakAtKey]) => {
       const previous = motion[channel];
       const current = !analyzerDisplay.smoothDecay || Math.abs(target) >= Math.abs(previous) ? target : previous + (target - previous) * (1 - Math.exp(-elapsed / 150));
       motion[channel] = current;
@@ -1743,17 +1748,17 @@ const animateAnalyzer = now => {
     });
     const pair = bars.querySelector(`[data-analyzer-band="${index}"]`);
     if (pair) {
-      pair.dataset.leftDb = info.effective.leftDb.toFixed(3); pair.dataset.rightDb = info.effective.rightDb.toFixed(3); pair.dataset.deltaDb = info.delta.toFixed(3);
+      pair.dataset.leftDb = info.display.leftDb.toFixed(3); pair.dataset.rightDb = info.display.rightDb.toFixed(3); pair.dataset.deltaDb = info.delta.toFixed(3);
       pair.classList.toggle('has-feedback', analyzerDisplay.feedbackActivity && info.feedback);
       pair.classList.toggle('is-dominant', analyzerDisplay.dominantBand && info.dominant);
       pair.classList.toggle('is-oscillating', analyzerDisplay.selfOscillation && info.oscillating);
       pair.classList.toggle('has-glow', analyzerDisplay.peakGlow && Math.max(Math.abs(motion.left), Math.abs(motion.right)) > 4);
       pair.classList.toggle('hide-lr-bars', !analyzerDisplay.lrBars);
       const [leftBar, rightBar] = pair.querySelectorAll('i[data-channel]');
-      // These bars are the current effective control values, not an audio
-      // meter. They intentionally bypass visual decay and change on this frame.
-      renderAnalyzerBar(leftBar, info.effective.leftControl);
-      renderAnalyzerBar(rightBar, info.effective.rightControl);
+      // These bars are manual FILTERBANK controls, not an audio meter or the
+      // final effective DSP shape. They update immediately without decay.
+      renderAnalyzerBar(leftBar, info.display.leftControl);
+      renderAnalyzerBar(rightBar, info.display.rightControl);
       pair.querySelector('.analyzer-band-delta').textContent = `Δ ${toDb(info.delta)}`;
       pair.querySelector('.analyzer-peak-left').style.setProperty('--peak-level', (Math.sign(motion.left || 1) * motion.peakLeft / 2).toFixed(2));
       pair.querySelector('.analyzer-peak-right').style.setProperty('--peak-level', (Math.sign(motion.right || 1) * motion.peakRight / 2).toFixed(2));
@@ -1793,9 +1798,9 @@ const renderAnalyzerBar = (bar, value) => {
 };
 const updateAnalyzerBand = index => {
   const [leftBar, rightBar] = document.querySelectorAll(`[data-analyzer-band="${index}"] i`);
-  const effective = getAnalyzerEffective(index);
-  renderAnalyzerBar(leftBar, effective.leftControl);
-  renderAnalyzerBar(rightBar, effective.rightControl);
+  const display = getFilterbankDisplayBandGains(index);
+  renderAnalyzerBar(leftBar, display.leftControl);
+  renderAnalyzerBar(rightBar, display.rightControl);
   scheduleAnalyzerRender();
 };
 const getBandBoostDb = () => Number(bandBoostSelect?.value ?? 12);

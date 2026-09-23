@@ -213,3 +213,71 @@ test('Space, Enter and NumpadEnter keep PANIC semantics and never toggle FILTER 
     await expect(resonance).toHaveValue('0');
   }
 });
+
+test('FILTERBANK response controls stay bound to manual FILTERBANK state while FILTER remains audible', async ({ page }) => {
+  await page.goto('/');
+  const barStyles = () => page.locator('[data-analyzer-band] i[data-channel]').evaluateAll(bars => bars.map(bar => bar.style.height));
+  expect(await barStyles()).toEqual(Array(20).fill('0%'));
+
+  await page.locator('[data-mode="filter"]').click();
+  await page.locator('[data-module-power="filter"]').click();
+  await page.locator('[data-filter-type="lowpass"]').click();
+  await page.locator('[data-filter-frequency]').fill('180');
+  await page.locator('[data-filter-frequency]').dispatchEvent('input');
+  await page.locator('[data-filter-slope]').fill('100');
+  await page.locator('[data-filter-slope]').dispatchEvent('input');
+  const filterShape = await page.evaluate(() => ({
+    shape: window.FilterMode.getShape(),
+    effective: window.FilterMode.getAudioEngine().effectiveBandGainDbLeft
+  }));
+  expect(Math.min(...filterShape.shape)).toBeLessThan(-1);
+  filterShape.effective.forEach((gain, index) => expect(gain).toBeCloseTo(filterShape.shape[index], 10));
+
+  await page.locator('[data-mode="filterbank"]').click();
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: true });
+  expect(await barStyles()).toEqual(Array(20).fill('0%'));
+  const neutralDisplay = await page.evaluate(() => Array.from({ length: 10 }, (_, index) => window.FilterbankAnalyzer.getBandInfo(index).display));
+  expect(neutralDisplay.every(gain => gain.leftDb === 0 && gain.rightDb === 0)).toBeTruthy();
+
+  const bandTenControl = await page.evaluate(() => window.ResonantState.bandGainDbToControl(2.9, 12, 12));
+  await page.locator('.center-fader .band-fader').nth(9).evaluate((input, value) => {
+    input.value = String(value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }, bandTenControl);
+  const bandTen = await page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(9));
+  expect(bandTen.display.leftDb).toBeCloseTo(2.9, 1);
+  expect(bandTen.display.rightDb).toBeCloseTo(2.9, 1);
+  await page.locator('[data-analyzer-band="9"]').hover();
+  await expect(page.locator('.analyzer-band-detail')).toContainText('L +2.9 dB');
+  await expect(page.locator('.analyzer-band-detail')).toContainText('R +2.9 dB');
+
+  await page.locator('.per-channel-toggle').click();
+  const channelControls = await page.evaluate(() => ({
+    left: window.ResonantState.bandGainDbToControl(4, 12, 12),
+    right: window.ResonantState.bandGainDbToControl(-2, 12, 12)
+  }));
+  await page.locator('.band-fader-channel[data-band="3"][data-channel="left"]').evaluate((input, value) => {
+    input.value = String(value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }, channelControls.left);
+  await page.locator('.band-fader-channel[data-band="3"][data-channel="right"]').evaluate((input, value) => {
+    input.value = String(value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }, channelControls.right);
+  const perChannelDisplay = await page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(3).display);
+  expect(perChannelDisplay.leftDb).toBeCloseTo(4, 1);
+  expect(perChannelDisplay.rightDb).toBeCloseTo(-2, 1);
+
+  await page.locator('.per-channel-toggle').click();
+  await page.locator('.center-fader .band-fader').first().fill('0');
+  await page.locator('[data-control="spread"]').fill('0.5');
+  await page.locator('[data-control="spread"]').dispatchEvent('input');
+  const spreadDisplay = await page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(0).display);
+  expect(spreadDisplay.leftDb).toBeCloseTo(-3, 10);
+  expect(spreadDisplay.rightDb).toBeCloseTo(3, 10);
+
+  await page.locator('[data-mode="filter"]').click();
+  await expect(page.locator('[data-filter-response-path]')).toHaveAttribute('d', /^M/);
+  expect(await page.evaluate(() => window.FilterbankAnalyzer.getDisplayState().outputSpectrum)).toBe(true);
+  expect(await page.evaluate(() => window.FilterMode.getState().filterEnabled)).toBe(true);
+});

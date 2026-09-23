@@ -156,11 +156,11 @@ test('Analyzer VIEW popover remains reachable within a tablet viewport', async (
   await expect(lastOption).toBeVisible();
 });
 
-test('effective L/R control bars are immediate while peak and preview animation stay independent', async ({ page }) => {
+test('FILTERBANK display L/R control bars are immediate while peak and preview animation stay independent', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto('/', { waitUntil: 'networkidle' });
-  const fader = page.locator('.band-fader').nth(3);
+  const fader = page.locator('.center-fader .band-fader').nth(3);
   const bars = page.locator('[data-analyzer-band="3"] i[data-channel]');
 
   await fader.fill('100');

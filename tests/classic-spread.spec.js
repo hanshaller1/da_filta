@@ -57,7 +57,7 @@ test('CLASSIC SPREAD derives symmetric, clamped L/R gains from non-destructive b
   expect(result.bases).toEqual([[50, 100 / 12, 200 / 3, 100], [50, 100 / 12, 200 / 3, 100]]);
 });
 
-test('CLASSIC SPREAD uses the shared effective values for analyzer and live Filterbank handoff', async ({ page }) => {
+test('CLASSIC SPREAD keeps FILTERBANK display and live handoff aligned while FILTER is off', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto('/', { waitUntil: 'networkidle' });
