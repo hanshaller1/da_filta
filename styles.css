@@ -760,8 +760,8 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 @media (min-width: 1200px) {
   .console {
     position: relative;
-    height: auto;
-    grid-template-rows: auto auto auto;
+    height: calc(100vh - 16px);
+    grid-template-rows: auto auto minmax(0, 1fr);
     align-items: start;
   }
 
@@ -816,9 +816,17 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     display: grid;
     grid-template-columns: 138px minmax(0, 1fr);
     align-items: start;
-    align-self: start;
-    height: auto;
+    align-self: stretch;
+    min-height: 0;
     margin-top: var(--panel-gap);
+  }
+  .mode-content {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: var(--panel-gap);
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
   }
   .mode-tabs {
     position: relative;
@@ -943,8 +951,9 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     position: relative;
     z-index: 1;
     min-width: 0;
-    height: auto;
-    overflow: visible;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
     border: 1px solid var(--panel-border);
     border-radius: 0 5px 5px 0;
     background: var(--output-background);
@@ -952,57 +961,64 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   }
   .filterbank-mode-panel {
     display: block;
-    height: auto;
+    box-sizing: border-box;
+    height: 100%;
     padding: var(--panel-gap);
   }
   .filterbank-mode-panel > .fb-workspace {
     width: auto;
-    height: clamp(240px, 27vh, 280px);
+    height: 100%;
     margin: 0;
   }
-  .filterbank-mode-panel > .bands {
+  .persistent-band-panel {
+    min-width: 0;
+    min-height: 0;
+    padding-inline: var(--panel-gap);
+    box-sizing: border-box;
+  }
+  .persistent-band-panel > .bands {
     height: 414px;
     grid-template-rows: 42px 365px;
-    margin-top: var(--panel-gap);
+    margin: 0;
     align-items: start;
   }
   .filterbank-panel-header {
     justify-content: flex-end;
   }
   .filterbank-panel-actions { margin-left: auto; }
-  .filterbank-mode-panel .band-card { height: 365px; }
-  .filterbank-mode-panel .band-value { font-size: 12px; }
-  .filterbank-mode-panel .band-actions {
+  .persistent-band-panel .band-card { height: 365px; }
+  .persistent-band-panel .band-value { font-size: 12px; }
+  .persistent-band-panel .band-actions {
     height: 30px;
     align-items: center;
     justify-content: center;
   }
-  .filterbank-mode-panel .band-actions .band-action {
+  .persistent-band-panel .band-actions .band-action {
     height: 26px;
     padding: 0 5px;
     font-size: 12px;
   }
   .filterbank-mode-panel .analyzer-footer .axis-x { font-size: 12px; }
-  .filterbank-mode-panel .fader-wrap {
+  .persistent-band-panel .fader-wrap {
     flex: 0 0 271px;
     height: 271px;
     min-height: 271px;
   }
-  .filterbank-mode-panel .fader-track {
+  .persistent-band-panel .fader-track {
     height: 261px;
   }
-  .filterbank-mode-panel .channel-faders {
+  .persistent-band-panel .channel-faders {
     flex: 0 0 293px;
     height: 293px;
   }
-  .filterbank-mode-panel .bands.is-per-channel .channel-faders,
-  .filterbank-mode-panel .channel-fader {
+  .persistent-band-panel .bands.is-per-channel .channel-faders,
+  .persistent-band-panel .channel-fader {
     grid-template-rows: 271px 22px;
   }
-  .filterbank-mode-panel .channel-fader .fader-track {
+  .persistent-band-panel .channel-fader .fader-track {
     height: 261px;
   }
-  .filterbank-mode-panel .channel-fader output {
+  .persistent-band-panel .channel-fader output {
     align-self: end;
     height: 20px;
     line-height: 20px;
@@ -1010,7 +1026,9 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 
   .mode-placeholder {
     display: grid;
-    min-height: 280px;
+    box-sizing: border-box;
+    height: 100%;
+    min-height: 0;
     padding: 28px;
     align-content: center;
     justify-items: center;
@@ -1027,20 +1045,48 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .mode-placeholder span { font-size: 12px; }
 
   .console > .dev-lab-panel {
-    position: absolute;
-    grid-column: auto;
-    grid-row: auto;
-    top: calc(16px + 48px + var(--panel-gap));
-    right: 0;
+    position: static;
+    grid-column: 2;
+    grid-row: 2 / 4;
+    align-self: stretch;
     width: var(--dev-lab-width);
     min-width: var(--dev-lab-width);
     max-width: var(--dev-lab-width);
     height: auto;
-    margin: 0;
-    max-height: calc(100vh - 78px);
+    margin: var(--panel-gap) 0 0;
+    max-height: none;
     box-sizing: border-box;
     overflow-y: auto;
     scrollbar-gutter: stable;
+  }
+
+  .filter-mode-panel {
+    box-sizing: border-box;
+    grid-template-rows: minmax(0, 1fr) auto;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .filter-mode-panel .filter-response {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+  }
+  .filter-mode-panel .filter-response-chart {
+    height: auto;
+    min-height: 0;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .persistent-band-panel > .bands {
+    height: clamp(320px, 44vw, 390px);
+  }
+}
+
+@media (min-width: 1000px) and (max-width: 1199px) {
+  .persistent-band-panel > .bands {
+    height: clamp(250px, 38dvh, 315px);
   }
 }
 
