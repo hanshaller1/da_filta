@@ -114,6 +114,7 @@
   const createInitialState = () => ({
     activeMode: 'FB',
     selectedWorkspaceMode: 'filterbank',
+    filterbankEnabled: true,
     filterEnabled: false,
     filterType: 'lowpass',
     filterFrequencyHz: 777,

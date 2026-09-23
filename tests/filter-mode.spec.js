@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('FILTER power controls the existing spectral core across workspaces without changing manual filterbank state', async ({ page }) => {
+test('FILTER power controls its layer across workspaces without changing FILTERBANK state', async ({ page }) => {
   await page.goto('/');
   const firstManual = page.locator('.center-fader .band-fader').first();
   await firstManual.fill('37');
@@ -117,11 +117,12 @@ test('FILTER bandwidth relevance, graph updates, persistence and spread ignore s
   await expect(spread).toBeDisabled();
 });
 
-test('workspace selection and FILTER power remain independent pointer interactions', async ({ page }) => {
+test('workspace selection and module power remain independent pointer interactions', async ({ page }) => {
   await page.goto('/');
+  const filterbankPower = page.locator('[data-module-power="filterbank"]');
   const power = page.locator('[data-module-power="filter"]');
 
-  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: false });
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterbankEnabled: true, filterEnabled: false });
   await page.locator('[data-mode="filter"]').click();
   expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filter', filterEnabled: false });
 
@@ -133,17 +134,22 @@ test('workspace selection and FILTER power remain independent pointer interactio
 
   await page.locator('[data-mode="filter"]').click();
   expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filter', filterEnabled: true });
+  await filterbankPower.click();
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filter', filterbankEnabled: false, filterEnabled: true });
+  await expect(filterbankPower).toHaveAttribute('aria-pressed', 'false');
+  await filterbankPower.click();
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filter', filterbankEnabled: true, filterEnabled: true });
   await power.click();
   expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filter', filterEnabled: false });
 
   await page.locator('[data-mode="filterbank"]').click();
   expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: false });
   await expect(page.locator('.mode-power:disabled')).toHaveCount(5);
-  await expect(page.locator('[data-mode="filterbank"]').locator('xpath=..').locator('.mode-power-slot')).toHaveCount(1);
+  await expect(page.locator('[data-mode="filterbank"]').locator('xpath=..').locator('[data-module-power="filterbank"]')).toHaveCount(1);
   await expect(page.locator('[data-mode="presets"]').locator('xpath=..').locator('.mode-power-slot')).toHaveCount(1);
 });
 
-test('FILTER power swaps only the effective band basis and preserves both parameter systems', async ({ page }) => {
+test('FILTER and FILTERBANK layers combine in dB and preserve both parameter systems', async ({ page }) => {
   await page.goto('/');
   const manualFader = page.locator('.center-fader .band-fader').first();
   await manualFader.fill('37');
@@ -170,9 +176,13 @@ test('FILTER power swaps only the effective band basis and preserves both parame
   await power.click();
   const onBasis = await page.evaluate(() => {
     const engine = window.FilterMode.getAudioEngine();
-    return { effective: engine.getEffectiveBandGains(0).leftControl, filter: engine.filterModeBandControls[0] };
+    return {
+      effectiveDb: engine.getEffectiveBandGains(0).leftDb,
+      manualDb: window.ResonantState.controlToBandGainDb(engine.bandGainLeft[0], engine.maxBandBoostDb, engine.maxBandCutDb),
+      filterDb: engine.filterModeBandGainsDb[0]
+    };
   });
-  expect(onBasis.effective).toBe(onBasis.filter);
+  expect(onBasis.effectiveDb).toBeCloseTo(Math.max(-12, Math.min(12, onBasis.manualDb + onBasis.filterDb)), 10);
 
   await page.locator('[data-mode="lfo"]').click();
   await page.locator('[data-mode="filter"]').click();
@@ -197,8 +207,85 @@ test('FILTER power swaps only the effective band basis and preserves both parame
   expect(restored.manualState.left[0]).toBeCloseTo(37, 10);
 });
 
-test('Space, Enter and NumpadEnter keep PANIC semantics and never toggle FILTER power', async ({ page }) => {
+test('FILTERBANK power gates gains, feedback and resonance effectively and restores stored state', async ({ page }) => {
   await page.goto('/');
+  const report = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    const calls = { band: [], feedback: [], all: [], resonance: [] };
+    const worklet = {
+      setBandBaseGain: (channel, index, value) => calls.band.push({ channel, index, value }),
+      setBandFeedback: (channel, index, enabled) => calls.feedback.push({ channel, index, enabled }),
+      setFeedbackAll: (channel, enabled) => calls.all.push({ channel, enabled }),
+      setResonance: value => calls.resonance.push(value)
+    };
+    engine.filterbank = worklet;
+    const manualLeftControl = window.ResonantState.bandGainDbToControl(3, engine.maxBandBoostDb, engine.maxBandCutDb);
+    const manualRightControl = window.ResonantState.bandGainDbToControl(1, engine.maxBandBoostDb, engine.maxBandCutDb);
+    engine.setBandBaseGain('left', 5, manualLeftControl);
+    engine.setBandBaseGain('right', 5, manualRightControl);
+    engine.setPerChannelBands(true);
+    engine.filterModeBandGainsDb[5] = -8;
+    engine.setFilterEnabled(true);
+    engine.setBandFeedback('left', 4, true);
+    engine.setFeedbackAll('right', true);
+    engine.setResonance(0.72);
+    const bothOn = engine.getEffectiveBandGains(5);
+    engine.setSpread(0.5);
+    const spreadOnce = engine.getEffectiveBandGains(5);
+    engine.setSpread(0);
+    const nodeBefore = engine.filterbank;
+    engine.setFilterbankEnabled(false);
+    const off = {
+      gainDb: engine.getEffectiveBandGains(5).leftDb,
+      state: engine.getState(),
+      effective: engine.getFilterbankState(),
+      sameNode: nodeBefore === engine.filterbank,
+      latestFeedback: calls.feedback.slice(-20),
+      latestAll: calls.all.slice(-2),
+      latestResonance: calls.resonance.at(-1)
+    };
+    engine.setFilterbankEnabled(true);
+    const restored = {
+      gainDb: engine.getEffectiveBandGains(5).leftDb,
+      effective: engine.getFilterbankState(),
+      sameNode: nodeBefore === engine.filterbank,
+      latestFeedback: calls.feedback.slice(-20),
+      latestAll: calls.all.slice(-2),
+      latestResonance: calls.resonance.at(-1)
+    };
+    engine.setFilterEnabled(false);
+    engine.setFilterbankEnabled(false);
+    const bothOff = engine.getEffectiveBandGains(5).leftDb;
+    return { bothOn, spreadOnce, off, restored, bothOff };
+  });
+
+  expect(report.bothOn.leftDb).toBeCloseTo(-5, 10);
+  expect(report.bothOn.rightDb).toBeCloseTo(-7, 10);
+  expect(report.spreadOnce.leftDb).toBeCloseTo(-8, 10);
+  expect(report.spreadOnce.rightDb).toBeCloseTo(-4, 10);
+  expect(report.off.gainDb).toBeCloseTo(-8, 10);
+  expect(report.off.state).toMatchObject({ filterbankEnabled: false, filterEnabled: true, resonance: 0.72, feedbackAllRight: true });
+  expect(report.off.state.feedbackBandLeft[4]).toBe(true);
+  expect(report.off.effective).toMatchObject({ resonance: 0, feedbackAllLeft: false, feedbackAllRight: false });
+  expect(report.off.effective.feedbackBandLeft.every(value => value === false)).toBeTruthy();
+  expect(report.off.latestFeedback.every(call => call.enabled === false)).toBeTruthy();
+  expect(report.off.latestAll.every(call => call.enabled === false)).toBeTruthy();
+  expect(report.off.latestResonance).toBe(0);
+  expect(report.off.sameNode).toBeTruthy();
+  expect(report.restored.gainDb).toBeCloseTo(-5, 10);
+  expect(report.restored.effective.feedbackBandLeft[4]).toBe(true);
+  expect(report.restored.effective.feedbackAllRight).toBe(true);
+  expect(report.restored.effective.resonance).toBeCloseTo(0.72, 10);
+  expect(report.restored.latestFeedback.find(call => call.channel === 'left' && call.index === 4)?.enabled).toBe(true);
+  expect(report.restored.latestAll.find(call => call.channel === 'right')?.enabled).toBe(true);
+  expect(report.restored.latestResonance).toBeCloseTo(0.72, 10);
+  expect(report.restored.sameNode).toBeTruthy();
+  expect(report.bothOff).toBe(0);
+});
+
+test('Space, Enter and NumpadEnter keep PANIC semantics and never toggle module power', async ({ page }) => {
+  await page.goto('/');
+  const filterbankPower = page.locator('[data-module-power="filterbank"]');
   const power = page.locator('[data-module-power="filter"]');
   await power.click();
   await power.focus();
@@ -209,7 +296,9 @@ test('Space, Enter and NumpadEnter keep PANIC semantics and never toggle FILTER 
     await resonance.dispatchEvent('input');
     await power.focus();
     await page.keyboard.press(key);
-    expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: true });
+    expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterbankEnabled: true, filterEnabled: true });
+    await expect(filterbankPower).toHaveAttribute('aria-pressed', 'true');
+    await expect(power).toHaveAttribute('aria-pressed', 'true');
     await expect(resonance).toHaveValue('0');
   }
 });
@@ -276,7 +365,15 @@ test('FILTERBANK response controls stay bound to manual FILTERBANK state while F
   expect(spreadDisplay.leftDb).toBeCloseTo(-3, 10);
   expect(spreadDisplay.rightDb).toBeCloseTo(3, 10);
 
+  const filterbankDisplayBeforePowerOff = await page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(3).display);
+  await page.locator('[data-module-power="filterbank"]').click();
+  const poweredOffDisplay = await page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(3).display);
+  expect(poweredOffDisplay).toEqual(filterbankDisplayBeforePowerOff);
+
   await page.locator('[data-mode="filter"]').click();
+  const filterPathBefore = await page.locator('[data-filter-response-path]').getAttribute('d');
+  await page.locator('[data-module-power="filterbank"]').click();
+  await expect(page.locator('[data-filter-response-path]')).toHaveAttribute('d', filterPathBefore);
   await expect(page.locator('[data-filter-response-path]')).toHaveAttribute('d', /^M/);
   expect(await page.evaluate(() => window.FilterbankAnalyzer.getDisplayState().outputSpectrum)).toBe(true);
   expect(await page.evaluate(() => window.FilterMode.getState().filterEnabled)).toBe(true);

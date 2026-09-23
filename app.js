@@ -1469,6 +1469,7 @@ window.DaFiltaThemeEditor = { applyCustomTheme, clearCustomTheme, getState: () =
 const bands = document.querySelector('.bands');
 const modeTabs = [...document.querySelectorAll('[data-mode]')];
 const modePanels = [...document.querySelectorAll('[data-mode-panel]')];
+const filterbankPowerButton = document.querySelector('[data-module-power="filterbank"]');
 const filterPowerButton = document.querySelector('[data-module-power="filter"]');
 const filterTypeButtons = [...document.querySelectorAll('[data-filter-type]')];
 const filterFrequencySlider = document.querySelector('[data-filter-frequency]');
@@ -1541,6 +1542,7 @@ renderFilterMode();
 window.FilterMode = Object.freeze({
   getState: () => ({
     selectedWorkspaceMode: state.selectedWorkspaceMode,
+    filterbankEnabled: state.filterbankEnabled,
     filterEnabled: state.filterEnabled,
     filterType: state.filterType,
     filterFrequencyHz: state.filterFrequencyHz,
@@ -1552,9 +1554,20 @@ window.FilterMode = Object.freeze({
   getAudioEngine: () => audioEngine
 });
 const renderFilterPower = () => {
-  if (!filterPowerButton) return;
-  filterPowerButton.setAttribute('aria-pressed', String(state.filterEnabled));
-  filterPowerButton.setAttribute('aria-label', state.filterEnabled ? 'FILTER ausschalten' : 'FILTER einschalten');
+  if (filterbankPowerButton) {
+    filterbankPowerButton.setAttribute('aria-pressed', String(state.filterbankEnabled));
+    filterbankPowerButton.setAttribute('aria-label', state.filterbankEnabled ? 'FILTERBANK ausschalten' : 'FILTERBANK einschalten');
+  }
+  if (filterPowerButton) {
+    filterPowerButton.setAttribute('aria-pressed', String(state.filterEnabled));
+    filterPowerButton.setAttribute('aria-label', state.filterEnabled ? 'FILTER ausschalten' : 'FILTER einschalten');
+  }
+};
+const setFilterbankEnabled = enabled => {
+  state.filterbankEnabled = Boolean(enabled);
+  audioEngine?.setFilterbankEnabled(state.filterbankEnabled);
+  renderFilterPower();
+  return state.filterbankEnabled;
 };
 const setFilterEnabled = enabled => {
   state.filterEnabled = Boolean(enabled);
@@ -1564,6 +1577,12 @@ const setFilterEnabled = enabled => {
   return state.filterEnabled;
 };
 renderFilterPower();
+filterbankPowerButton?.addEventListener('click', event => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.detail === 0) return;
+  setFilterbankEnabled(!state.filterbankEnabled);
+});
 filterPowerButton?.addEventListener('click', event => {
   event.preventDefault();
   event.stopPropagation();
