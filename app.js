@@ -1463,6 +1463,7 @@ window.DaFiltaThemeEditor = { applyCustomTheme, clearCustomTheme, getState: () =
 const bands = document.querySelector('.bands');
 const modeTabs = [...document.querySelectorAll('[data-mode]')];
 const modePanels = [...document.querySelectorAll('[data-mode-panel]')];
+const filterPowerButton = document.querySelector('[data-module-power="filter"]');
 const filterTypeButtons = [...document.querySelectorAll('[data-filter-type]')];
 const filterFrequencySlider = document.querySelector('[data-filter-frequency]');
 const filterSlopeSlider = document.querySelector('[data-filter-slope]');
@@ -1533,8 +1534,8 @@ filterBandwidthSlider?.addEventListener('input', () => updateFilterState({ filte
 renderFilterMode();
 window.FilterMode = Object.freeze({
   getState: () => ({
-    spectralMode: state.spectralMode,
     selectedWorkspaceMode: state.selectedWorkspaceMode,
+    filterEnabled: state.filterEnabled,
     filterType: state.filterType,
     filterFrequencyHz: state.filterFrequencyHz,
     filterSlope: state.filterSlope,
@@ -1544,14 +1545,28 @@ window.FilterMode = Object.freeze({
   getManualBandState: () => ({ left: [...state.bandGainLeft], right: [...state.bandGainRight], perChannelBands: state.perChannelBands, linked: [...state.bandChannelLinked] }),
   getAudioEngine: () => audioEngine
 });
+const renderFilterPower = () => {
+  if (!filterPowerButton) return;
+  filterPowerButton.setAttribute('aria-pressed', String(state.filterEnabled));
+  filterPowerButton.setAttribute('aria-label', state.filterEnabled ? 'FILTER ausschalten' : 'FILTER einschalten');
+};
+const setFilterEnabled = enabled => {
+  state.filterEnabled = Boolean(enabled);
+  audioEngine?.setFilterEnabled(state.filterEnabled);
+  renderFilterPower();
+  updatePerChannelBands();
+  return state.filterEnabled;
+};
+renderFilterPower();
+filterPowerButton?.addEventListener('click', event => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.detail === 0) return;
+  setFilterEnabled(!state.filterEnabled);
+});
 const selectMode = mode => {
   if (!modePanels.some(panel => panel.dataset.modePanel === mode)) return;
   state.selectedWorkspaceMode = mode;
-  if (mode === 'filterbank' || mode === 'filter') {
-    state.spectralMode = mode;
-    audioEngine?.setSpectralMode(mode);
-    updatePerChannelBands();
-  }
   modeTabs.forEach(tab => {
     const selected = tab.dataset.mode === mode;
     tab.classList.toggle('active', selected);
@@ -1914,7 +1929,7 @@ const updatePerChannelBands = () => {
   bands.classList.toggle('is-per-channel', state.perChannelBands);
   perChannelButton?.classList.toggle('active', state.perChannelBands);
   perChannelButton?.setAttribute('aria-pressed', String(state.perChannelBands));
-  const spreadDisabled = state.spectralMode === 'filterbank' && state.perChannelBands;
+  const spreadDisabled = !state.filterEnabled && state.perChannelBands;
   if (spreadControl) spreadControl.disabled = spreadDisabled;
   spreadControlCard?.classList.toggle('is-disabled', spreadDisabled);
   audioEngine?.setPerChannelBands(state.perChannelBands);

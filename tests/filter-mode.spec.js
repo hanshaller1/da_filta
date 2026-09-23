@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('FILTER workspace controls the existing spectral core without changing manual filterbank state', async ({ page }) => {
+test('FILTER power controls the existing spectral core across workspaces without changing manual filterbank state', async ({ page }) => {
   await page.goto('/');
   const firstManual = page.locator('.center-fader .band-fader').first();
   await firstManual.fill('37');
@@ -26,6 +26,8 @@ test('FILTER workspace controls the existing spectral core without changing manu
 
   await page.locator('[data-mode="filter"]').click();
   await expect(page.locator('#mode-filter')).toBeVisible();
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filter', filterEnabled: false });
+  await page.locator('[data-module-power="filter"]').click();
   await page.locator('[data-filter-type="bandpass"]').click();
   await page.locator('[data-filter-frequency]').fill('575');
   await page.locator('[data-filter-frequency]').dispatchEvent('input');
@@ -36,18 +38,19 @@ test('FILTER workspace controls the existing spectral core without changing manu
   const filterState = await page.evaluate(() => ({
     ui: window.FilterMode.getState(),
     shape: window.FilterMode.getShape(),
-    engineMode: window.FilterMode.getAudioEngine().spectralMode,
+    engineEnabled: window.FilterMode.getAudioEngine().filterEnabled,
     sameNode: window.__filterModeWorklet === window.FilterMode.getAudioEngine().filterbank
   }));
   expect(filterState.ui.filterType).toBe('bandpass');
   expect(filterState.ui.filterSlope).toBe(73);
   expect(filterState.ui.filterBandwidth).toBe(26);
-  expect(filterState.engineMode).toBe('filter');
+  expect(filterState.ui.filterEnabled).toBe(true);
+  expect(filterState.engineEnabled).toBe(true);
   expect(filterState.sameNode).toBeTruthy();
   expect(filterState.shape).toHaveLength(10);
 
   await page.locator('[data-mode="lfo"]').click();
-  expect((await page.evaluate(() => window.FilterMode.getState())).spectralMode).toBe('filter');
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'lfo', filterEnabled: true });
   await page.locator('[data-mode="filterbank"]').click();
   const after = await page.evaluate(() => {
     const engine = window.FilterMode.getAudioEngine();
@@ -57,6 +60,7 @@ test('FILTER workspace controls the existing spectral core without changing manu
       feedbackRight: [...engine.feedbackBandRight],
       feedbackAll: [engine.feedbackAllLeft, engine.feedbackAllRight],
       resonance: engine.resonance,
+      filterEnabled: engine.filterEnabled,
       sameNode: window.__filterModeWorklet === engine.filterbank
     };
   });
@@ -65,6 +69,7 @@ test('FILTER workspace controls the existing spectral core without changing manu
   expect(after.feedbackRight).toEqual(before.feedbackRight);
   expect(after.feedbackAll).toEqual(before.feedbackAll);
   expect(after.resonance).toBe(before.resonance);
+  expect(after.filterEnabled).toBe(true);
   expect(after.sameNode).toBeTruthy();
 });
 
@@ -72,6 +77,7 @@ test('FILTER bandwidth relevance, graph updates, persistence and spread ignore s
   await page.goto('/');
   await page.locator('.per-channel-toggle').click();
   await page.locator('[data-mode="filter"]').click();
+  await page.locator('[data-module-power="filter"]').click();
   await expect(page.locator('[data-control="spread"]')).toBeEnabled();
   await expect(page.locator('[data-filter-bandwidth]')).toBeDisabled();
   const pathBefore = await page.locator('[data-filter-response-path]').getAttribute('d');
@@ -106,5 +112,104 @@ test('FILTER bandwidth relevance, graph updates, persistence and spread ignore s
   await expect(page.locator('[data-filter-frequency]')).toHaveValue('700');
   await page.locator('[data-mode="filterbank"]').click();
   await expect(page.locator('.per-channel-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(spread).toBeEnabled();
+  await page.locator('[data-module-power="filter"]').click();
   await expect(spread).toBeDisabled();
+});
+
+test('workspace selection and FILTER power remain independent pointer interactions', async ({ page }) => {
+  await page.goto('/');
+  const power = page.locator('[data-module-power="filter"]');
+
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: false });
+  await page.locator('[data-mode="filter"]').click();
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filter', filterEnabled: false });
+
+  await page.locator('[data-mode="filterbank"]').click();
+  await power.click();
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: true });
+  await expect(power).toHaveAttribute('aria-pressed', 'true');
+  await expect(power).toHaveAttribute('aria-label', 'FILTER ausschalten');
+
+  await page.locator('[data-mode="filter"]').click();
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filter', filterEnabled: true });
+  await power.click();
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filter', filterEnabled: false });
+
+  await page.locator('[data-mode="filterbank"]').click();
+  expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: false });
+  await expect(page.locator('.mode-power:disabled')).toHaveCount(5);
+  await expect(page.locator('[data-mode="filterbank"]').locator('xpath=..').locator('.mode-power-slot')).toHaveCount(1);
+  await expect(page.locator('[data-mode="presets"]').locator('xpath=..').locator('.mode-power-slot')).toHaveCount(1);
+});
+
+test('FILTER power swaps only the effective band basis and preserves both parameter systems', async ({ page }) => {
+  await page.goto('/');
+  const manualFader = page.locator('.center-fader .band-fader').first();
+  await manualFader.fill('37');
+  await manualFader.dispatchEvent('input');
+  await page.locator('[data-mode="filter"]').click();
+  await page.locator('[data-filter-type="bandpass"]').click();
+  await page.locator('[data-filter-frequency]').evaluate((slider, frequency) => {
+    slider.value = String(window.FilterShape.frequencyToSlider(frequency));
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+  }, 1200);
+  await page.locator('[data-filter-slope]').fill('73');
+  await page.locator('[data-filter-slope]').dispatchEvent('input');
+  await page.locator('[data-filter-bandwidth]').fill('28');
+  await page.locator('[data-filter-bandwidth]').dispatchEvent('input');
+  const configuredFilter = await page.evaluate(() => window.FilterMode.getState());
+
+  const offBasis = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    return { effective: engine.getEffectiveBandGains(0).leftControl, manual: engine.bandGainLeft[0] };
+  });
+  expect(offBasis.effective).toBe(offBasis.manual);
+
+  const power = page.locator('[data-module-power="filter"]');
+  await power.click();
+  const onBasis = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    return { effective: engine.getEffectiveBandGains(0).leftControl, filter: engine.filterModeBandControls[0] };
+  });
+  expect(onBasis.effective).toBe(onBasis.filter);
+
+  await page.locator('[data-mode="lfo"]').click();
+  await page.locator('[data-mode="filter"]').click();
+  await power.click();
+  const restored = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    return {
+      ui: window.FilterMode.getState(),
+      effective: engine.getEffectiveBandGains(0).leftControl,
+      manual: engine.bandGainLeft[0],
+      manualState: window.FilterMode.getManualBandState()
+    };
+  });
+  expect(restored.ui).toMatchObject({
+    filterEnabled: false,
+    filterType: configuredFilter.filterType,
+    filterFrequencyHz: configuredFilter.filterFrequencyHz,
+    filterSlope: configuredFilter.filterSlope,
+    filterBandwidth: configuredFilter.filterBandwidth
+  });
+  expect(restored.effective).toBe(restored.manual);
+  expect(restored.manualState.left[0]).toBeCloseTo(37, 10);
+});
+
+test('Space, Enter and NumpadEnter keep PANIC semantics and never toggle FILTER power', async ({ page }) => {
+  await page.goto('/');
+  const power = page.locator('[data-module-power="filter"]');
+  await power.click();
+  await power.focus();
+
+  for (const key of ['Space', 'Enter', 'NumpadEnter']) {
+    const resonance = page.locator('[data-control="resonance"]');
+    await resonance.fill('0.5');
+    await resonance.dispatchEvent('input');
+    await power.focus();
+    await page.keyboard.press(key);
+    expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: true });
+    await expect(resonance).toHaveValue('0');
+  }
 });

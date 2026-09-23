@@ -8,7 +8,6 @@
     bandGainDbToControl,
     getEffectiveBandGains,
     normalizeFilterState,
-    normalizeSpectralMode,
     normalizeSpreadCurve,
     normalizeSpreadMaxOffsetDb,
     clampSpread
@@ -96,7 +95,7 @@
       this.destination = null;
       this.outputElement = null;
       this.filterbank = null;
-      this.spectralMode = 'filterbank';
+      this.filterEnabled = false;
       this.filterType = 'lowpass';
       this.filterFrequencyHz = 777;
       this.filterSlope = 50;
@@ -285,10 +284,10 @@
       return normalized;
     }
 
-    setSpectralMode(value) {
-      this.spectralMode = normalizeSpectralMode(value);
+    setFilterEnabled(enabled) {
+      this.filterEnabled = Boolean(enabled);
       this.applyEffectiveBandGains();
-      return this.spectralMode;
+      return this.filterEnabled;
     }
 
     setBandBaseGain(channel, index, value) {
@@ -301,7 +300,7 @@
     }
 
     getEffectiveBandGains(index) {
-      const baseState = this.spectralMode === 'filter'
+      const baseState = this.filterEnabled
         ? {
             bandGainLeft: this.filterModeBandControls,
             bandGainRight: this.filterModeBandControls,
@@ -313,7 +312,7 @@
         : this;
       return getEffectiveBandGains(baseState, index, {
         maxBandBoostDb: this.maxBandBoostDb,
-        spread: this.spectralMode === 'filter' || !this.perChannelBands ? this.spread : 0,
+        spread: this.filterEnabled || !this.perChannelBands ? this.spread : 0,
         maxBandCutDb: this.maxBandCutDb
       });
     }
@@ -400,7 +399,7 @@
         spreadMode: this.spreadMode,
         spreadCurve: this.spreadCurve,
         spreadMaxOffsetDb: this.spreadMaxOffsetDb,
-        spectralMode: this.spectralMode,
+        filterEnabled: this.filterEnabled,
         filterType: this.filterType,
         filterFrequencyHz: this.filterFrequencyHz,
         filterSlope: this.filterSlope,
@@ -422,6 +421,7 @@
       this.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(left[index] ?? 0));
       this.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(right[index] ?? 0));
       this.setFilterState(snapshot);
+      this.setFilterEnabled(snapshot?.filterEnabled ?? this.filterEnabled);
       this.feedbackBandLeft = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandLeft?.[index]));
       this.feedbackBandRight = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandRight?.[index]));
       this.feedbackAllLeft = Boolean(snapshot?.feedbackAllLeft);
@@ -464,7 +464,6 @@
       this.setNegativeResonanceLocal(snapshot?.negativeResonanceLocal ?? this.negativeResonanceLocal);
       this.setNegativeResonanceMain(snapshot?.negativeResonanceMain ?? this.negativeResonanceMain);
       this.setNegativeResonancePhase(snapshot?.negativeResonancePhase ?? this.negativeResonancePhase);
-      this.setSpectralMode(snapshot?.spectralMode ?? this.spectralMode);
       if (this.filterbank) this.filterbank.applyState(this.getFilterbankState());
     }
 

@@ -336,14 +336,38 @@
         </section>
         <div class="mode-shell">
           <nav class="mode-tabs" aria-label="Arbeitsmodi" role="tablist">
-            <button class="mode-tab active" type="button" role="tab" id="mode-tab-filterbank" aria-selected="true" aria-controls="mode-filterbank" data-mode="filterbank"><span>FILTERBANK</span></button>
-            <button class="mode-tab" type="button" role="tab" id="mode-tab-filter" aria-selected="false" aria-controls="mode-filter" data-mode="filter"><span>FILTER</span></button>
-            <button class="mode-tab" type="button" role="tab" id="mode-tab-clock-mod" aria-selected="false" aria-controls="mode-clock-mod" data-mode="clock-mod"><span>CLOCK MOD</span></button>
-            <button class="mode-tab" type="button" role="tab" id="mode-tab-lfo" aria-selected="false" aria-controls="mode-lfo" data-mode="lfo"><span>LFO</span></button>
-            <button class="mode-tab" type="button" role="tab" id="mode-tab-envelope-follower" aria-selected="false" aria-controls="mode-envelope-follower" data-mode="envelope-follower"><span>ENVELOPE FOLLOWER</span></button>
-            <button class="mode-tab" type="button" role="tab" id="mode-tab-dynamic-eq" aria-selected="false" aria-controls="mode-dynamic-eq" data-mode="dynamic-eq"><span>DYNAMIC EQ</span></button>
-            <button class="mode-tab" type="button" role="tab" id="mode-tab-makros" aria-selected="false" aria-controls="mode-makros" data-mode="makros"><span>MAKROS</span></button>
-            <button class="mode-tab" type="button" role="tab" id="mode-tab-presets" aria-selected="false" aria-controls="mode-presets" data-mode="presets"><span>PRESETS / SNAPSHOTS</span></button>
+            <div class="mode-tab-row">
+              <span class="mode-power-slot" aria-hidden="true"></span>
+              <button class="mode-select active" type="button" role="tab" id="mode-tab-filterbank" aria-selected="true" aria-controls="mode-filterbank" data-mode="filterbank"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 15V9M7.7 15V5M12.3 15V8M17 15V3M1.5 15.5h17"/></svg><span>FILTERBANK</span></button>
+            </div>
+            <div class="mode-tab-row">
+              <button class="mode-power" type="button" data-module-power="filter" aria-label="FILTER einschalten" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
+              <button class="mode-select" type="button" role="tab" id="mode-tab-filter" aria-selected="false" aria-controls="mode-filter" data-mode="filter"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 14c3.2 0 3.2-8 6.4-8s3.2 8 6.4 8c1.3 0 2.2-1.2 3.2-3"/></svg><span>FILTER</span></button>
+            </div>
+            <div class="mode-tab-row">
+              <button class="mode-power" type="button" disabled aria-disabled="true" aria-label="CLOCK MOD Power nicht verfügbar" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
+              <button class="mode-select" type="button" role="tab" id="mode-tab-clock-mod" aria-selected="false" aria-controls="mode-clock-mod" data-mode="clock-mod"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg><span>CLOCK MOD</span></button>
+            </div>
+            <div class="mode-tab-row">
+              <button class="mode-power" type="button" disabled aria-disabled="true" aria-label="LFO Power nicht verfügbar" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
+              <button class="mode-select" type="button" role="tab" id="mode-tab-lfo" aria-selected="false" aria-controls="mode-lfo" data-mode="lfo"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M1 10c2.2-6 4.5-6 6.7 0s4.5 6 6.7 0S18 4 19 7"/></svg><span>LFO</span></button>
+            </div>
+            <div class="mode-tab-row">
+              <button class="mode-power" type="button" disabled aria-disabled="true" aria-label="ENVELOPE FOLLOWER Power nicht verfügbar" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
+              <button class="mode-select" type="button" role="tab" id="mode-tab-envelope-follower" aria-selected="false" aria-controls="mode-envelope-follower" data-mode="envelope-follower"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 15 6 5h5l3 5h4"/></svg><span>ENVELOPE FOLLOWER</span></button>
+            </div>
+            <div class="mode-tab-row">
+              <button class="mode-power" type="button" disabled aria-disabled="true" aria-label="DYNAMIC EQ Power nicht verfügbar" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
+              <button class="mode-select" type="button" role="tab" id="mode-tab-dynamic-eq" aria-selected="false" aria-controls="mode-dynamic-eq" data-mode="dynamic-eq"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 14c3 0 3-7 6-7s3 5 5 5 2-3 5-3"/><circle cx="8" cy="7" r="1.5"/></svg><span>DYNAMIC EQ</span></button>
+            </div>
+            <div class="mode-tab-row">
+              <button class="mode-power" type="button" disabled aria-disabled="true" aria-label="MAKROS Power nicht verfügbar" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
+              <button class="mode-select" type="button" role="tab" id="mode-tab-makros" aria-selected="false" aria-controls="mode-makros" data-mode="makros"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="14" cy="13" r="3"/><path d="m6 7 1.5-1.5M14 13l1.5-1.5"/></svg><span>MAKROS</span></button>
+            </div>
+            <div class="mode-tab-row">
+              <span class="mode-power-slot" aria-hidden="true"></span>
+              <button class="mode-select" type="button" role="tab" id="mode-tab-presets" aria-selected="false" aria-controls="mode-presets" data-mode="presets"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h12v14H4zM7 7h6M7 10h6M7 13h4"/></svg><span>PRESETS / SNAPSHOTS</span></button>
+            </div>
           </nav>
           <section class="mode-workspace" aria-label="Workspace">
             <section class="filterbank-mode-panel" id="mode-filterbank" role="tabpanel" aria-labelledby="mode-tab-filterbank" data-mode-panel="filterbank">
