@@ -159,7 +159,7 @@ test('desktop near the breakpoint keeps all ten bands and FILTER controls inside
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1280);
 });
 
-test('moved FB, MOD and FB ALL controls retain state and remain FILTERBANK-only', async ({ page }) => {
+test('moved FB and FB ALL retain state while reserved MOD remains disabled', async ({ page }) => {
   await page.goto('/');
   const feedback = page.locator('[data-feedback-band="3"]');
   const modulation = page.locator('[data-mod-band="3"]');
@@ -169,10 +169,10 @@ test('moved FB, MOD and FB ALL controls retain state and remain FILTERBANK-only'
   await expect(page.locator('.filterbank-controls-panel .fb-all-control > span')).toHaveCount(0);
   await expect(feedbackAll).toHaveText('FB ALL');
   await feedback.click();
-  await modulation.click();
+  await expect(modulation).toBeDisabled();
   await feedbackAll.click();
   await expect(feedback).toHaveAttribute('aria-pressed', 'true');
-  await expect(modulation).toHaveAttribute('aria-pressed', 'true');
+  await expect(modulation).toHaveAttribute('aria-pressed', 'false');
   await expect(feedbackAll).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => {
     const engine = window.FilterMode.getAudioEngine();
@@ -186,6 +186,6 @@ test('moved FB, MOD and FB ALL controls retain state and remain FILTERBANK-only'
 
   await page.locator('[data-mode="filterbank"]').click();
   await expect(feedback).toHaveAttribute('aria-pressed', 'true');
-  await expect(modulation).toHaveAttribute('aria-pressed', 'true');
+  await expect(modulation).toHaveAttribute('aria-pressed', 'false');
   await expect(feedbackAll).toHaveAttribute('aria-pressed', 'true');
 });

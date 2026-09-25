@@ -205,6 +205,39 @@ test('dynamic EQ graph and controls fit the existing desktop workspace', async (
   }
 });
 
+test('dynamic EQ plot starts at the graph edge and sliders share exact band centers at varied widths', async ({ page }) => {
+  for (const width of [1914, 1440, 1200]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    await page.locator('[data-mode="dynamic-eq"]').click();
+    const geometry = await page.evaluate(() => {
+      const rect = selector => document.querySelector(selector).getBoundingClientRect();
+      const centers = selector => [...document.querySelectorAll(selector)].map(element => {
+        const bounds = element.getBoundingClientRect();
+        return bounds.left + bounds.width / 2;
+      });
+      const graph = rect('.dynamic-eq-graph');
+      const plot = rect('.dynamic-eq-plot');
+      return {
+        graph: { left: graph.left, right: graph.right },
+        plot: { left: plot.left, right: plot.right },
+        bars: centers('.dynamic-eq-column'),
+        frequencies: centers('.dynamic-eq-frequency'),
+        sliders: centers('.dynamic-eq-sensitivity-item input')
+      };
+    });
+    expect(geometry.plot.left).toBeCloseTo(geometry.graph.left, 0);
+    expect(geometry.plot.right).toBeCloseTo(geometry.graph.right, 0);
+    expect(geometry.bars).toHaveLength(10);
+    expect(geometry.frequencies).toHaveLength(10);
+    expect(geometry.sliders).toHaveLength(10);
+    for (let index = 0; index < 10; index += 1) {
+      expect(geometry.frequencies[index]).toBeCloseTo(geometry.bars[index], 0);
+      expect(geometry.sliders[index]).toBeCloseTo(geometry.bars[index], 0);
+    }
+  }
+});
+
 test('dynamic EQ reuses FILTER sliders and its six controls form one 2 by 3 grid', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-mode="dynamic-eq"]').click();

@@ -12,9 +12,9 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
   await expect(devLabPanel).toBeVisible();
   await expect(page.locator('.analyzer-header .dev-lab-controls')).toHaveCount(0);
   await expect(page.locator('.dev-lab-panel [data-input-preamp-stage], .dev-lab-panel [data-reference-level], .dev-lab-panel [data-band-boost-db], .dev-lab-panel [data-band-cut-db], .dev-lab-panel [data-wet-model], .dev-lab-panel [data-feedback-topology], .dev-lab-panel [data-feedback-tap], .dev-lab-panel [data-common-bus-saturation-mode], .dev-lab-panel [data-common-bus-drive], .dev-lab-panel [data-common-bus-ceiling], .dev-lab-panel [data-feedback-all-engine], .dev-lab-panel [data-feedback-all-source], .dev-lab-panel [data-post-gain-feedback-weight], .dev-lab-panel [data-feedback-all-level], .dev-lab-panel [data-feedback-all-amount], .dev-lab-panel [data-feedback-all-resonance-curve], .dev-lab-panel [data-feedback-all-saturation-return], .dev-lab-panel [data-positive-resonance-engine], .dev-lab-panel [data-positive-resonance-output], .dev-lab-panel [data-positive-resonance-latency], .dev-lab-panel [data-positive-resonance-curve], .dev-lab-panel [data-positive-resonance-audition], .dev-lab-panel [data-positive-resonance-drive], .dev-lab-panel [data-positive-resonance-damping-floor]')).toHaveCount(24);
-  await expect(page.locator('[data-feedback-all-engine]')).toHaveValue('legacy');
+  await expect(page.locator('[data-feedback-all-engine]')).toHaveValue('common-bus');
   await expect(page.locator('[data-feedback-all-source]')).toHaveValue('post-gain-sum');
-  await expect(page.locator('[data-feedback-all-level]')).toHaveValue('raw');
+  await expect(page.locator('[data-feedback-all-level]')).toHaveValue('sqrt10');
   await expect(page.locator('[data-feedback-all-amount]')).toHaveValue('100');
   await expect(page.locator('[data-feedback-all-resonance-curve]')).toHaveValue('current');
   await expect(page.locator('[data-feedback-all-saturation-return]')).toHaveValue('current');
@@ -29,6 +29,7 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
   expect(panelLayout.overflowY).toBe('auto');
   expect(panelLayout.fitsWithoutScroll).toBeFalsy();
   await page.locator('[data-feedback-topology]').selectOption('common-bus');
+  await page.locator('[data-common-bus-saturation-mode]').selectOption('constant-ceiling');
   await page.locator('[data-common-bus-drive]').selectOption('8');
   await page.locator('[data-feedback-all-level]').selectOption('fortieth');
   await devLabToggle.click();
@@ -38,7 +39,7 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
   await expect(page.locator('[data-common-bus-drive]')).toHaveValue('8');
   await expect(page.locator('[data-feedback-all-level]')).toHaveValue('fortieth');
   expect(await page.locator('[data-feedback-all-engine] option').allTextContents()).toEqual(['LEGACY', 'COMMON BUS']);
-  expect(await page.locator('[data-feedback-all-source] option').allTextContents()).toEqual(['PRE GAIN SUM', 'POST GAIN SUM']);
+  expect(await page.locator('[data-feedback-all-source] option').allTextContents()).toEqual(['PRE GAIN SUM', 'STATIC POST-GAIN SUM']);
   await expect(page.locator('[data-post-gain-feedback-weight]')).toHaveValue('current');
   expect(await page.locator('[data-post-gain-feedback-weight] option').allTextContents()).toEqual(['CURRENT', 'SOFT KNEE']);
   expect(await page.locator('[data-feedback-all-level] option').allTextContents()).toEqual([

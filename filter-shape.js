@@ -12,6 +12,8 @@
     { id: 'formant', displayName: 'FORMANT / VOWEL', shortName: 'VOWEL', category: 'FORMANT', primary: 'vowel', secondary: ['shift', 'formantWidth', 'amount', 'disabled'], marker: 'formants', descriptor: '3-FORMANT VOWEL SHAPE' }
   ].map(definition => Object.freeze({ ...definition, secondary: Object.freeze(definition.secondary) })));
   const FILTER_TYPES = Object.freeze(FILTER_TYPE_DEFINITIONS.map(definition => definition.id));
+  const FORMANT_SHIFT_MIN_SEMITONES = -36;
+  const FORMANT_SHIFT_MAX_SEMITONES = 24;
   const FILTER_CONTROL_DEFINITIONS = Object.freeze({
     frequency: { label: 'FREQUENCY', field: 'filterFrequencyHz', min: 0, max: 1000, step: 1, format: 'frequency' },
     bellFrequency: { label: 'FREQUENCY', field: 'filterBellFrequencyHz', min: 0, max: 1000, step: 1, format: 'frequency' },
@@ -33,7 +35,7 @@
     lowShelfGain: { label: 'GAIN', field: 'filterLowShelfGainDb', min: 'cut', max: 'boost', step: 0.1, format: 'db' },
     highShelfGain: { label: 'GAIN', field: 'filterHighShelfGainDb', min: 'cut', max: 'boost', step: 0.1, format: 'db' },
     tilt: { label: 'TILT', field: 'filterTiltDb', min: 'cut', max: 'boost', step: 0.1, format: 'db' },
-    shift: { label: 'SHIFT', field: 'filterFormantShiftSemitones', min: -12, max: 12, step: 0.1, format: 'semitones' },
+    shift: { label: 'SHIFT', field: 'filterFormantShiftSemitones', min: FORMANT_SHIFT_MIN_SEMITONES, max: FORMANT_SHIFT_MAX_SEMITONES, step: 0.1, format: 'semitones' },
     formantWidth: { label: 'WIDTH', field: 'filterFormantWidth', min: 0, max: 100, step: 1, format: 'percent' },
     amount: { label: 'AMOUNT', field: 'filterFormantAmount', min: 0, max: 100, step: 1, format: 'percent' },
     bass: { label: 'BASS', field: 'filterBaxandallBassDb', min: 'cut', max: 'boost', step: 0.1, format: 'db' },
@@ -58,6 +60,9 @@
   const normalizeFilterType = value => FILTER_TYPES.includes(value) ? value : 'lowpass';
   const normalizeFilterFrequencyHz = value => clamp(value, FREQUENCY_MIN_HZ, FREQUENCY_MAX_HZ, 777);
   const normalizeFilterPercent = (value, fallback = 50) => clamp(value, 0, 100, fallback);
+  const normalizeFormantShiftSemitones = value => clamp(
+    value, FORMANT_SHIFT_MIN_SEMITONES, FORMANT_SHIFT_MAX_SEMITONES, 0
+  );
   const safeLimit = (value, fallback = 12) => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback;
   const normalizeFilterDb = (value, boost = 12, cut = 12) => clamp(value, -safeLimit(cut), safeLimit(boost), 0);
   const octave = frequency => Math.log2(Math.max(1, Number(frequency) || FREQUENCY_MIN_HZ));
@@ -66,7 +71,7 @@
     const first = Math.floor(position);
     const next = Math.min(4, first + 1);
     const t = position - first;
-    const shift = Math.pow(2, clamp(shiftSemitones, -12, 12, 0) / 12);
+    const shift = Math.pow(2, normalizeFormantShiftSemitones(shiftSemitones) / 12);
     return FORMANT_FREQUENCIES[first].map((frequency, index) => Math.pow(frequency, 1 - t) * Math.pow(FORMANT_FREQUENCIES[next][index], t) * shift);
   };
   const frequencyToSlider = value => Math.round(
@@ -219,6 +224,9 @@
     FILTER_TYPE_DEFINITIONS,
     FILTER_CONTROL_DEFINITIONS,
     FORMANT_VOWELS,
+    FORMANT_SHIFT_MIN_SEMITONES,
+    FORMANT_SHIFT_MAX_SEMITONES,
+    normalizeFormantShiftSemitones,
     formantCenters,
     FREQUENCY_MIN_HZ,
     FREQUENCY_MAX_HZ,

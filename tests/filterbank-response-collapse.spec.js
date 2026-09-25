@@ -89,7 +89,7 @@ test('FILTERBANK RESPONSE collapses visually without resetting control state', a
   await faders.nth(0).fill('40');
   await faders.nth(4).fill('-30');
   await feedback.nth(2).click();
-  await modulation.nth(6).click();
+  await expect(modulation.nth(6)).toBeDisabled();
 
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');

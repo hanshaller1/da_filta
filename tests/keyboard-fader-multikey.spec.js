@@ -2,7 +2,7 @@ const { test, expect } = require('playwright/test');
 
 test('held band-fader shortcuts move every pressed key independently and stop safely', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
-  const faders = page.locator('.band-fader');
+  const faders = page.locator('.band-fader:not([data-channel])');
   const values = () => faders.evaluateAll(sliders => sliders.map(slider => Number(slider.value)));
   const reset = async () => {
     for (let index = 0; index < 10; index += 1) await faders.nth(index).fill('0');
@@ -70,5 +70,6 @@ test('held band-fader shortcuts move every pressed key independently and stop sa
   await page.keyboard.press('Digit1');
   await expect(feedback).toHaveClass(/active/);
   await page.keyboard.press('Shift+Digit1');
-  await expect(modulation).toHaveClass(/active/);
+  await expect(modulation).toBeDisabled();
+  await expect(modulation).not.toHaveClass(/active/);
 });

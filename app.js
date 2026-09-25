@@ -93,7 +93,7 @@ if (mastheadDevLab && mastheadThemeEditor && devLabToggle) mastheadDevLab.insert
 const devLabControls = document.querySelector('.dev-lab-panel .dev-lab-controls');
 const devLabGroups = new Map();
 const devLabGroupsOpenByDefault = new Set(['local-feedback', 'main']);
-[['input', 'INPUT'], ['keyboard', 'KEYBOARD'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['negative-resonance', 'NEGATIVE RESONANCE'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
+[['input', 'INPUT'], ['output', 'OUTPUT'], ['keyboard', 'KEYBOARD'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['negative-resonance', 'NEGATIVE RESONANCE'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
   const group = document.createElement('section');
   group.className = 'dev-lab-group';
   group.dataset.devLabGroup = value;
@@ -790,7 +790,8 @@ const addDevLabSelector = (label, attribute, options) => {
     'data-feedback-all-resonance-curve': 'main',
     'data-feedback-all-saturation-return': 'main',
     'data-negative-resonance-mode': 'negative-resonance', 'data-negative-resonance-curve': 'negative-resonance',
-    'data-negative-resonance-local': 'negative-resonance', 'data-negative-resonance-main': 'negative-resonance'
+    'data-negative-resonance-local': 'negative-resonance', 'data-negative-resonance-main': 'negative-resonance',
+    'data-output-protection-enabled': 'output'
   }[attribute] ?? 'resonator');
   if (!container) return null;
   const control = document.createElement('label');
@@ -871,15 +872,28 @@ const keySpeedInput = addKeyboardPreferenceControl({
   value: () => keyboardPreferences.keySpeedHz,
   onChange: value => { keyboardPreferences.keySpeedHz = value; persistKeyboardPreferences(); }
 });
+const outputProtectionSelect = addDevLabSelector('SOFT PROTECTION', 'data-output-protection-enabled', [['on', 'ON'], ['off', 'OFF']]);
+const outputThresholdInput = addDevLabNumberControl({
+  label: 'THRESHOLD', attribute: 'data-output-protection-threshold', min: 0.5, max: 0.95, step: 0.01, suffix: 'FS',
+  tooltip: 'Linearer Full-Scale-Pegel, ab dem die finale Soft Protection eingreift. Standard: 0,80 FS.',
+  value: () => audioEngine?.outputProtectionThreshold ?? 0.8,
+  onChange: value => audioEngine?.setOutputProtectionThreshold(value), group: 'output'
+});
+const outputSoftnessInput = addDevLabNumberControl({
+  label: 'SOFTNESS', attribute: 'data-output-protection-softness', min: 0, max: 100, step: 1, suffix: '%',
+  tooltip: '100 % = weichste Kennlinie; 0 % erreicht die feste 0,99-FS-Grenze früher. Der Übergang beginnt glatt am Threshold.',
+  value: () => audioEngine?.outputProtectionSoftness ?? 100,
+  onChange: value => audioEngine?.setOutputProtectionSoftness(value), group: 'output'
+});
 const referenceLevelSelect = addDevLabSelector('DEV REFERENCE', 'data-reference-level', [['1', '100 %'], ['0.75', '75 %'], ['0.5', '50 %'], ['0.25', '25 %'], ['0', '0 % / BANDS ONLY']]);
 const resonanceEngineSelect = addDevLabSelector('DEV RES ENGINE', 'data-positive-resonance-engine', [['tpt', 'TPT'], ['phase2', 'PHASE 2']]);
 const bandBoostSelect = addDevLabSelector('DEV BAND BOOST', 'data-band-boost-db', [['12', '+12 dB'], ['18', '+18 dB'], ['24', '+24 dB']]);
 const bandCutSelect = addDevLabSelector('DEV BAND CUT', 'data-band-cut-db', [['12', '-12 dB'], ['24', '-24 dB'], ['36', '-36 dB'], ['48', '-48 dB'], ['60', '-60 dB']]);
-const spreadCurveSelect = addDevLabSelector('SPREAD CURVE', 'data-spread-curve', [['linear', 'LINEAR'], ['quadratic', 'QUADRATIC'], ['smoothstep', 'SMOOTHSTEP']]);
+const spreadCurveSelect = addDevLabSelector('SPREAD CURVE · INACTIVE', 'data-spread-curve', [['linear', 'LINEAR'], ['quadratic', 'QUADRATIC'], ['smoothstep', 'SMOOTHSTEP']]);
 const spreadMaxOffsetSelect = addDevLabSelector('DEV SPREAD MAX OFFSET', 'data-spread-max-offset-db', [['3', '3 dB'], ['6', '6 dB'], ['9', '9 dB'], ['12', '12 dB']]);
 if (spreadCurveSelect) spreadCurveSelect.value = 'linear';
 if (spreadMaxOffsetSelect) spreadMaxOffsetSelect.value = '6';
-const feedbackTopologySelect = addDevLabSelector('DEV FB TOPOLOGY', 'data-feedback-topology', [['isolated-tpt', 'ISOLATED TPT'], ['common-bus', 'COMMON BUS'], ['local-loop-exp', 'LOCAL LOOP EXP']]);
+const feedbackTopologySelect = addDevLabSelector('DEV FB TOPOLOGY', 'data-feedback-topology', [['isolated-tpt', 'ISOLATED TPT'], ['common-bus', 'COMMON BUS · DA_FILTA-ORIGINAL'], ['local-loop-exp', 'LOCAL LOOP EXP']]);
 const feedbackCoreSelect = addDevLabSelector('FEEDBACK CORE', 'data-feedback-core', [['current', 'CURRENT'], ['zdf', 'ZDF UNIFIED'], ['zdf-per-band', 'ZDF PER-BAND']]);
 const localLoopTuningSelect = addDevLabSelector('DEV LOCAL LOOP TUNING', 'data-local-loop-tuning', [['current', 'CURRENT'], ['compensated', 'COMPENSATED']]);
 const feedbackTapSelect = addDevLabSelector('DEV FB TAP', 'data-feedback-tap', [['pre-gain', 'PRE GAIN'], ['post-gain', 'POST GAIN']]);
@@ -888,7 +902,7 @@ const commonBusSatSelect = addDevLabSelector('DEV FB SAT', 'data-common-bus-satu
 const commonBusDriveSelect = addDevLabSelector('DEV FB DRIVE', 'data-common-bus-drive', [['0.5', '0.5'], ['1', '1'], ['2', '2'], ['4', '4'], ['8', '8'], ['16', '16']]);
 const commonBusCeilingSelect = addDevLabSelector('DEV FB CEILING', 'data-common-bus-ceiling', [['0.25', '0.25'], ['0.5', '0.50'], ['1', '1.00'], ['2', '2.00'], ['4', '4.00']]);
 const feedbackAllEngineSelect = addDevLabSelector('DEV FB ALL ENGINE', 'data-feedback-all-engine', [['legacy', 'LEGACY'], ['common-bus', 'COMMON BUS']]);
-const feedbackAllSourceSelect = addDevLabSelector('DEV FB ALL SOURCE', 'data-feedback-all-source', [['pre-gain-sum', 'PRE GAIN SUM'], ['post-gain-sum', 'POST GAIN SUM']]);
+const feedbackAllSourceSelect = addDevLabSelector('DEV FB ALL SOURCE', 'data-feedback-all-source', [['pre-gain-sum', 'PRE GAIN SUM'], ['post-gain-sum', 'STATIC POST-GAIN SUM']]);
 if (feedbackAllSourceSelect) feedbackAllSourceSelect.value = 'post-gain-sum';
 const postGainFeedbackWeightSelect = addDevLabSelector('DEV POST GAIN FB WEIGHT', 'data-post-gain-feedback-weight', [['current', 'CURRENT'], ['soft-knee', 'SOFT KNEE']]);
 const feedbackAllLevelSelect = addDevLabSelector('DEV FB ALL LEVEL', 'data-feedback-all-level', [
@@ -987,6 +1001,24 @@ const DEV_LAB_HELP = {
     values: [['0 %', 'Exakt linearer Ausgang; Input Gain bleibt aktiv.'], ['50 %', 'Hälftige Mischung aus linearer Eingangsspur und voller Stage-Kennlinie.'], ['100 %', 'Voller Charakter der gewählten Stage.']],
     default: '50 %', note: 'Input Gain = Ansteuerung, Character = Charakteranteil. Der Regler fügt keinen linearen Gain hinzu; bei LINEAR ist er klanglich wirkungslos.'
   },
+  'data-output-protection-enabled': {
+    title: 'SOFT PROTECTION', what: 'Schaltet die finale Soft Protection hinter dem Master ein oder aus.',
+    scope: 'Feste Position vor dem Audioausgang, außerhalb aller Feedback-Loops. Der direkte BYPASS-Pfad bleibt unverändert.',
+    values: [['ON', 'Peaks oberhalb des Threshold werden weich gegen 0,99 FS begrenzt.'], ['OFF', 'Der bearbeitete Ausgang bleibt unbegrenzt; Pegel über 1,0 FS sind möglich.']],
+    default: 'ON', note: 'Umschalten wird geglättet; keine Routing-Auswahl.'
+  },
+  'data-output-protection-threshold': {
+    title: 'THRESHOLD', what: 'Beginn der weichen Ausgangsbegrenzung als linearer Full-Scale-Pegel.',
+    scope: 'Nur bei SOFT PROTECTION ON aktiv. Werte unter dem Threshold bleiben unverändert.',
+    values: [['0,50 FS', 'Früher Eingriff.'], ['0,80 FS', 'Standard, etwa -1,94 dBFS.'], ['0,95 FS', 'Später Eingriff.']],
+    default: '0,80 FS', note: 'Bereich 0,50 bis 0,95 FS; die Ausgangsgrenze bleibt 0,99 FS.'
+  },
+  'data-output-protection-softness': {
+    title: 'SOFTNESS', what: 'Bestimmt die Stärke der weichen Biegung oberhalb des Threshold.',
+    scope: 'Nur bei SOFT PROTECTION ON aktiv; ändert weder Feedback noch Master-Gain.',
+    values: [['0 %', 'Schnellerer Übergang zur 0,99-FS-Grenze.'], ['100 %', 'Weichster Verlauf.']],
+    default: '100 %', note: 'Die Kennlinie beginnt bei beiden Enden glatt am Threshold.'
+  },
   'data-reference-level': {
     title: 'DEV REFERENCE', what: 'Steuert den Anteil des Unity-Reference-Pfads im Wet-Signal.',
     scope: 'Nur im Wet Model REFERENCE + DELTA; Band-Gains werden nicht direkt verändert. Im FILTERBANK SUM-Wet-Modell wirkungslos.',
@@ -1006,7 +1038,7 @@ const DEV_LAB_HELP = {
     default: '-12 dB', note: 'Experimenteller Kalibrierwert; kein bestätigter Erica-Hardwarewert.'
   },
   'data-spread-curve': {
-    title: 'SPREAD CURVE', what: 'Kompatibilitätswert für ältere DEV/LAB-Snapshots.',
+    title: 'SPREAD CURVE · INACTIVE', what: 'Gespeicherter Kompatibilitätswert ohne Audiofunktion.',
     scope: 'Der globale SPREAD-Regler liefert jetzt bereits den konkreten dB-Offset. Deshalb verformt diese Auswahl den angezeigten Wert aktuell nicht.',
     values: [['LINEAR', 'Keine zusätzliche Transformation.'], ['QUADRATIC', 'Gespeichert, derzeit ohne zusätzliche Transformation.'], ['SMOOTHSTEP', 'Gespeichert, derzeit ohne zusätzliche Transformation.']],
     default: 'LINEAR', note: 'Bewusst nicht entfernt, damit bestehende DEV/LAB-Snapshots kompatibel bleiben.'
@@ -1026,8 +1058,8 @@ const DEV_LAB_HELP = {
   'data-feedback-topology': {
     title: 'DEV FB TOPOLOGY', what: 'Wählt die Topologie des positiven individuellen Feedbacks.',
     scope: 'ISOLATED TPT verwendet den älteren Resonator-/Residualpfad. COMMON BUS führt aktive Band-Taps als gemeinsamen Return an alle Base-Filter zurück. LOCAL LOOP EXP führt jeden aktiven Bandpass über einen eigenen gesättigten One-Sample-Return nur an sein eigenes Band zurück.',
-    values: [['ISOLATED TPT', 'Ältere separate Resonator-/TPT-Architektur.'], ['COMMON BUS', 'Aktive lokale Taps werden gemeinsam zurückgeführt und können dadurch alle Base-Bänder erneut anregen.'], ['LOCAL LOOP EXP', 'Jedes aktive Band besitzt einen getrennten lokalen äußeren Loop; MAIN/FB ALL kann zusätzlich weiterlaufen.']],
-    default: 'ISOLATED TPT', note: 'Experimenteller Reverse-Engineering-Hörvergleich. Keine Schaltung wird als bewiesen behauptet.'
+    values: [['ISOLATED TPT', 'Ältere separate Resonator-/TPT-Architektur.'], ['COMMON BUS · DA_FILTA-ORIGINAL', 'Die eingeschalteten FB-Bandtasten wählen Bus-Abgriffe. Der gemeinsame Return speist alle zehn Base-Bänder desselben Kanals.'], ['LOCAL LOOP EXP', 'Jedes aktive Band besitzt einen getrennten lokalen äußeren Loop; MAIN/FB ALL kann zusätzlich weiterlaufen.']],
+    default: 'COMMON BUS · DA_FILTA-ORIGINAL', note: 'FB ALL ist ein separater MAIN-Bus mit eigenem Gate, kein Master der zehn FB-Bandtasten.'
   },
   'data-feedback-core': {
     title: 'FEEDBACK CORE', what: 'Wählt den experimentellen Feedback-Core, ohne die normale Filterbank-Konfiguration zu ersetzen.',
@@ -1067,20 +1099,20 @@ const DEV_LAB_HELP = {
   },
   'data-feedback-all-engine': {
     title: 'DEV FB ALL ENGINE', what: 'Wählt den MAIN-/FB-ALL-Feedbackpfad.',
-    scope: 'LEGACY verwendet den bisherigen Legacy-FB-ALL-Pfad. COMMON BUS bildet einen eigenen MAIN-Return aus der Summe der Base-Band-Ausgänge.',
+    scope: 'LEGACY verwendet den bisherigen Legacy-FB-ALL-Pfad. COMMON BUS bildet einen eigenen MAIN-Return aus der Summe der Base-Band-Ausgänge. FB ALL schaltet nicht die einzelnen FB-Bandtasten.',
     values: [['LEGACY', 'Bisheriger Legacy-FB-ALL-Pfad.'], ['COMMON BUS', 'Eigener MAIN-Common-Bus-Return; lokaler Common Return und MAIN-Return werden getrennt gebildet und gesättigt, dann gemeinsam an den Filterbank-Eingang geführt.']],
     default: 'LEGACY', note: 'Experimenteller Architekturvergleich; keine bestätigte Erica-Schaltung.'
   },
   'data-feedback-all-source': {
     title: 'DEV FB ALL SOURCE', what: 'Wählt die Quelle der MAIN-/FB-ALL-Summe.',
     scope: 'Nur COMMON-BUS FB ALL / MAIN; die Auswahl erfolgt nach Bildung der jeweiligen MAIN-Summe und vor Level, Resonance-Gain und Saturation.',
-    values: [['PRE GAIN SUM', 'Summe der Base-Band-Ausgänge vor Band-Gain.'], ['POST GAIN SUM', 'Summe der mit (1 + deltaGain) gewichteten Band-Ausgänge; Boost/Cut beeinflusst dadurch zusätzlich die MAIN-Schleife.']],
-    default: 'POST GAIN SUM', note: 'Bei LEGACY wirkungslos; experimenteller MAIN-Tap-Vergleich.'
+    values: [['PRE GAIN SUM', 'Summe der Base-Band-Ausgänge vor Band-Gain.'], ['STATIC POST-GAIN SUM', 'Summe der mit statischem Band-Gain gewichteten Ausgänge; Dynamic-EQ-Gain wird hier nicht verwendet.']],
+    default: 'STATIC POST-GAIN SUM', note: 'Bei LEGACY wirkungslos; experimenteller MAIN-Tap-Vergleich.'
   },
   'data-post-gain-feedback-weight': {
     title: 'DEV POST GAIN FB WEIGHT', what: 'Formt ausschliesslich die Band-Gewichtung der MAIN-/FB-ALL-POST-GAIN-Summe.',
-    scope: 'Nur COMMON BUS + FB ALL ENGINE = COMMON BUS + POST GAIN SUM. Hoerbarer Band-Gain, FILTERBANK SUM und der lokale POST-GAIN-Tap bleiben unveraendert; die Gewichtung liegt vor FB ALL LEVEL, Resonance und Saturation.',
-    values: [['CURRENT', 'Verwendet den hoerbaren linearen Band-Gain unveraendert.'], ['SOFT KNEE', 'Bis +12 dB identisch; +18 dB werden zu +15 dB und +24 dB zu +18 dB fuer den MAIN-Tap gewichtet.']],
+    scope: 'Nur COMMON-BUS-MAIN mit STATIC POST-GAIN SUM. Die Gewichtung nutzt statischen Band-Gain, nicht Dynamic-EQ-Gain; hörbarer Band-Gain und lokaler Tap bleiben unverändert.',
+    values: [['CURRENT', 'Verwendet den statischen linearen Band-Gain unverändert.'], ['SOFT KNEE', 'Bis +12 dB identisch; +18 dB werden zu +15 dB und +24 dB zu +18 dB für den MAIN-Tap gewichtet.']],
     default: 'CURRENT', note: 'Statische, zeitunabhaengige Feedback-Gewichtung; keine Kompression des hoerbaren Signals.'
   },
   'data-feedback-all-level': {
@@ -1159,6 +1191,7 @@ const DEV_LAB_HELP = {
 
 const DEV_LAB_GROUP_HELP = {
   input: ['data-input-preamp-stage', 'data-input-character-amount'],
+  output: ['data-output-protection-enabled', 'data-output-protection-threshold', 'data-output-protection-softness'],
   keyboard: ['data-key-step-percent', 'data-key-speed-hz'],
   filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-spread-curve', 'data-spread-max-offset-db', 'data-wet-model'],
   'local-feedback': ['data-feedback-topology', 'data-feedback-core', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
@@ -1853,7 +1886,7 @@ modeTabs.forEach((tab, index) => {
 });
 bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><i class="classic-channel-marker classic-channel-marker-left" data-classic-marker="${index}-left" aria-hidden="true"></i><i class="classic-channel-marker classic-channel-marker-right" data-classic-marker="${index}-right" aria-hidden="true"></i><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
 const filterbankBandControls = document.querySelector('.filterbank-band-controls');
-if (filterbankBandControls) filterbankBandControls.innerHTML = BAND_DEFINITIONS.map((band, index) => `<div class="filterbank-band-control" data-filterbank-band-control="${index}" aria-label="${band.label} Filterbank Controls"><button class="band-action" type="button" data-feedback-band="${index}" aria-pressed="false">FB</button><button class="band-action" type="button" data-mod-band="${index}" aria-pressed="false">MOD</button></div>`).join('');
+if (filterbankBandControls) filterbankBandControls.innerHTML = BAND_DEFINITIONS.map((band, index) => `<div class="filterbank-band-control" data-filterbank-band-control="${index}" aria-label="${band.label} Filterbank Controls"><button class="band-action" type="button" data-feedback-band="${index}" aria-pressed="false" title="COMMON BUS: Dieses Band speist den gemeinsamen Feedback-Bus; sein Return regt alle zehn Bänder dieses Kanals an.">FB</button><button class="band-action" type="button" data-mod-band="${index}" aria-label="MOD Band ${index + 1} reserviert, ohne Audiofunktion" title="MOD ist für spätere Modulation reserviert und hat derzeit keine Audiofunktion." disabled aria-disabled="true" aria-pressed="false">MOD</button></div>`).join('');
 document.querySelectorAll('.band-card').forEach((card, index) => {
   card.querySelector('.fader-wrap')?.classList.add('center-fader');
   const channelFader = channel => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;
@@ -2219,7 +2252,6 @@ document.querySelectorAll('[data-control]').forEach(slider => {
   update();
 });
 document.querySelectorAll('[data-feedback-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.feedbackBand); const nextValue=!state.feedbackBandLeft[index]; setBandFeedback('left', index, nextValue); button.classList.toggle('active',nextValue); button.setAttribute('aria-pressed',String(nextValue)); }));
-document.querySelectorAll('[data-mod-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.modBand); state.modulated[index]=!state.modulated[index]; button.classList.toggle('active',state.modulated[index]); button.setAttribute('aria-pressed',String(state.modulated[index])); }));
 const fbAllButton = document.querySelector('.fb-all-toggle');
 const channelModeToggle = document.querySelector('[data-channel-toggle]');
 const bandResetButton = document.querySelector('[data-band-reset]');
@@ -2239,6 +2271,7 @@ const updatePerChannelBands = () => {
 channelModeToggle?.addEventListener('click', () => {
   state.perChannelBands = !state.perChannelBands;
   updatePerChannelBands();
+  updateDevControlRelevance();
 });
 const resetBandControls = () => {
   renderGlobalControlValue('spread', 0);
@@ -2258,6 +2291,7 @@ const resetBandControls = () => {
 bandResetButton?.addEventListener('click', resetBandControls);
 const fbAllControl = fbAllButton?.closest('.fb-all-control');
 if (fbAllControl) document.querySelector('.filterbank-fb-all-group')?.append(fbAllControl);
+fbAllButton.title = 'Separater MAIN-Feedback-Bus mit eigenem Schalter; unabhängig von den einzelnen FB-Bandtasten.';
 fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent='FB ALL'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
 
 const FB_CODES = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0'];
@@ -2549,12 +2583,62 @@ const setPositiveResonanceCurve = value => {
 };
 setPositiveResonanceCurve(positiveResonanceCurveSelect?.value ?? 'current');
 positiveResonanceCurveSelect?.addEventListener('change', event => setPositiveResonanceCurve(event.target.value));
+const devControlOriginalTitles = new WeakMap();
+const setDevControlRelevance = (control, active, reason) => {
+  if (!control) return;
+  if (!devControlOriginalTitles.has(control)) devControlOriginalTitles.set(control, control.title);
+  control.disabled = !active;
+  control.setAttribute('aria-disabled', String(!active));
+  control.title = active ? devControlOriginalTitles.get(control) : reason;
+  const label = control.closest('.dev-lab-control');
+  label?.classList.toggle('is-irrelevant', !active);
+  if (label) label.title = active ? '' : reason;
+};
+const updateDevControlRelevance = () => {
+  const topology = audioEngine.feedbackTopology;
+  const core = audioEngine.feedbackCore;
+  const mainBus = topology !== 'isolated-tpt' && (core !== 'current' || audioEngine.feedbackAllEngine === 'common-bus');
+  const staticMainTap = mainBus && audioEngine.feedbackAllSource === 'post-gain-sum';
+  const isolatedTpt = topology === 'isolated-tpt' && core !== 'zdf-per-band';
+  const positiveResonator = isolatedTpt && audioEngine.positiveResonanceEngine === 'tpt';
+  const mainCurrentSaturation = mainBus && audioEngine.feedbackAllEngine === 'common-bus'
+    && audioEngine.commonBusSaturationMode === 'current' && topology === 'common-bus';
+  setDevControlRelevance(outputThresholdInput, audioEngine.outputProtectionEnabled, 'Nur bei SOFT PROTECTION ON aktiv.');
+  setDevControlRelevance(outputSoftnessInput, audioEngine.outputProtectionEnabled, 'Nur bei SOFT PROTECTION ON aktiv.');
+  setDevControlRelevance(referenceLevelSelect, audioEngine.wetModel === 'reference-delta', 'Nur mit REFERENCE + DELTA aktiv.');
+  setDevControlRelevance(spreadCurveSelect, false, 'Inaktiv: gespeicherter Kompatibilitätswert ohne Audiofunktion.');
+  setDevControlRelevance(spreadMaxOffsetSelect, !state.perChannelBands, 'Nur im CLASSIC-Spread-Modus aktiv.');
+  setDevControlRelevance(feedbackCoreSelect, topology !== 'isolated-tpt', 'ZDF ist nur mit COMMON BUS oder LOCAL LOOP EXP aktiv.');
+  setDevControlRelevance(localLoopTuningSelect, topology === 'local-loop-exp' && core === 'current' && audioEngine.positiveResonanceEngine === 'tpt', 'Nur mit LOCAL LOOP EXP + CURRENT + TPT aktiv.');
+  setDevControlRelevance(feedbackTapSelect, topology === 'common-bus' || (topology === 'local-loop-exp' && core === 'zdf-per-band'), 'Nur für COMMON BUS oder LOCAL LOOP EXP + ZDF PER-BAND aktiv.');
+  setDevControlRelevance(commonBusSatSelect, topology === 'common-bus' || mainBus, 'Nur mit COMMON-BUS-Return aktiv.');
+  const constantCeiling = commonBusSatSelect && !commonBusSatSelect.disabled && audioEngine.commonBusSaturationMode === 'constant-ceiling';
+  setDevControlRelevance(commonBusDriveSelect, constantCeiling, 'Nur mit COMMON-BUS-Return + CONSTANT CEILING aktiv.');
+  setDevControlRelevance(commonBusCeilingSelect, constantCeiling, 'Nur mit COMMON-BUS-Return + CONSTANT CEILING aktiv.');
+  setDevControlRelevance(feedbackAllEngineSelect, topology !== 'isolated-tpt' && core === 'current', 'Nur im CURRENT-Core mit COMMON BUS oder LOCAL LOOP EXP aktiv.');
+  setDevControlRelevance(feedbackAllSourceSelect, mainBus, 'Nur mit COMMON-BUS-MAIN aktiv.');
+  setDevControlRelevance(postGainFeedbackWeightSelect, staticMainTap, 'Nur mit COMMON-BUS-MAIN + STATIC POST-GAIN SUM aktiv.');
+  setDevControlRelevance(feedbackAllLevelSelect, mainBus, 'Nur mit COMMON-BUS-MAIN aktiv.');
+  setDevControlRelevance(feedbackAllAmountInput, !(topology === 'isolated-tpt' && core !== 'current'), 'In dieser Feedback-Topologie ohne MAIN-Return.');
+  setDevControlRelevance(feedbackAllResonanceCurveSelect, mainBus && topology === 'common-bus', 'Nur für positive COMMON-BUS-MAIN-Resonance aktiv.');
+  setDevControlRelevance(feedbackAllSaturationReturnSelect, mainCurrentSaturation, 'Nur mit COMMON-BUS-MAIN + CURRENT-Saturation aktiv.');
+  const negative = audioEngine.resonance < 0;
+  for (const control of [negativeResonanceModeSelect, negativeResonanceCurveSelect, negativeResonanceAmountInput, negativeResonanceLocalSelect, negativeResonanceMainSelect]) {
+    setDevControlRelevance(control, negative, 'Nur bei negativer Resonance aktiv.');
+  }
+  setDevControlRelevance(negativeResonancePhaseInput, negative && audioEngine.negativeResonanceMode === 'phase', 'Nur bei negativer Resonance im PHASE-Modus aktiv.');
+  setDevControlRelevance(resonanceEngineSelect, isolatedTpt, 'Nur im ISOLATED TPT-Pfad aktiv.');
+  for (const control of [positiveResonanceAuditionSelect, positiveResonanceDriveSelect, positiveResonanceDampingFloorSelect, positiveResonanceOutputSelect, positiveResonanceLatencySelect, positiveResonanceCurveSelect]) {
+    setDevControlRelevance(control, positiveResonator, 'Nur im positiven ISOLATED TPT-Resonatorpfad aktiv.');
+  }
+};
 const bindDevLabSelect = (select, apply, fallback) => {
   if (!select) return;
   let previous = select.value ?? fallback;
   apply(previous);
-  select.addEventListener('change', event => { const next = event.target.value; apply(next); devLabTelemetry.logStateChange(select.previousElementSibling?.textContent || select.closest('label')?.querySelector('span')?.textContent || 'DEV PARAMETER', previous, next); previous = next; });
+  select.addEventListener('change', event => { const next = event.target.value; apply(next); updateDevControlRelevance(); devLabTelemetry.logStateChange(select.previousElementSibling?.textContent || select.closest('label')?.querySelector('span')?.textContent || 'DEV PARAMETER', previous, next); previous = next; });
 };
+bindDevLabSelect(outputProtectionSelect, value => audioEngine.setOutputProtectionEnabled(value === 'on'), 'on');
 bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
 bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
@@ -2574,17 +2658,11 @@ bindDevLabSelect(spreadMaxOffsetSelect, value => {
   } else renderBandSliderValues();
 }, '6');
 const updateLocalLoopTuningRelevance = () => {
-  const zdf = feedbackCoreSelect?.value === 'zdf' || feedbackCoreSelect?.value === 'zdf-per-band';
-  if (localLoopTuningSelect) {
-    localLoopTuningSelect.disabled = zdf;
-    localLoopTuningSelect.title = zdf ? 'COMPENSATED gilt nur im CURRENT-Core.' : '';
-  }
-  if (feedbackCoreSelect) feedbackCoreSelect.title = zdf && feedbackTopologySelect?.value === 'isolated-tpt'
-    ? 'ZDF wirkt nur bei COMMON BUS oder LOCAL LOOP EXP; ISOLATED TPT bleibt unverändert.' : '';
+  updateDevControlRelevance();
   if (fbAllButton) {
     fbAllButton.disabled = false;
     fbAllButton.classList.remove('is-phase-one-inactive');
-    fbAllButton.title = '';
+    fbAllButton.title = 'Separater MAIN-Feedback-Bus mit eigenem Schalter; unabhängig von den einzelnen FB-Bandtasten.';
     fbAllButton.textContent = 'FB ALL';
     fbAllButton.setAttribute('aria-pressed', String(state.feedbackAllLeft));
   }
@@ -2607,6 +2685,7 @@ const updateInputCharacterRelevance = () => {
   const control = inputCharacterAmountSlider?.closest('.dev-lab-character-control');
   const irrelevant = inputPreampStageSelect?.value === 'linear';
   control?.classList.toggle('is-irrelevant', irrelevant);
+  if (inputCharacterAmountSlider) inputCharacterAmountSlider.disabled = irrelevant;
   inputCharacterAmountSlider?.setAttribute('aria-disabled', String(irrelevant));
 };
 bindDevLabSelect(inputPreampStageSelect, value => {
@@ -2634,7 +2713,7 @@ const syncAudioParameters = () => {
 document.querySelector('[data-control="inputGain"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="dryWet"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="volume"]').addEventListener('input', syncAudioParameters);
-document.querySelector('[data-control="resonance"]').addEventListener('input', () => audioEngine.setResonance(state.resonance));
+document.querySelector('[data-control="resonance"]').addEventListener('input', () => { audioEngine.setResonance(state.resonance); updateDevControlRelevance(); });
 document.querySelector('[data-control="spread"]').addEventListener('input', () => {
   audioEngine.setSpread(state.spread);
   materializeSpreadDb(state.spread);
@@ -2644,6 +2723,10 @@ document.querySelector('[data-control="spread"]').addEventListener('input', () =
   slider?.addEventListener('input', () => { const next = state[name]; devLabTelemetry.logStateChange(name.toUpperCase(), Number(previous).toFixed(name === 'resonance' ? 2 : 1), Number(next).toFixed(name === 'resonance' ? 2 : 1)); previous = next; });
 });
 syncAudioParameters();
+document.addEventListener('change', event => {
+  if (event.target.closest('.dev-lab-control')) updateDevControlRelevance();
+});
+updateDevControlRelevance();
 const SWEETSPOT_STORAGE_KEY = 'da-filta-sweetspots-v1';
 const sweetspotDefaultName = slot => `Sweetspot ${slot}`;
 const createEmptySweetspots = () => Object.fromEntries(SWEETSPOT_SLOTS.map(slot => [slot, { name: sweetspotDefaultName(slot), state: null }]));
@@ -2712,6 +2795,7 @@ const syncUiFromAudioState = snapshot => {
   }
   updatePerChannelBands();
   const selectValues = [
+    [outputProtectionSelect, snapshot.outputProtectionEnabled === undefined ? undefined : snapshot.outputProtectionEnabled ? 'on' : 'off'],
     [bandBoostSelect, snapshot.maxBandBoostDb], [bandCutSelect, snapshot.maxBandCutDb],
     [spreadCurveSelect, snapshot.spreadCurve], [spreadMaxOffsetSelect, snapshot.spreadMaxOffsetDb],
     [referenceLevelSelect, snapshot.referenceLevel], [resonanceEngineSelect, snapshot.positiveResonanceEngine],
@@ -2738,6 +2822,8 @@ const syncUiFromAudioState = snapshot => {
   };
   selectValues.forEach(([select, value]) => setSelectValue(select, value));
   if (feedbackAllAmountInput && snapshot.feedbackAllAmount !== undefined) feedbackAllAmountInput.value = String(snapshot.feedbackAllAmount);
+  if (outputThresholdInput && snapshot.outputProtectionThreshold !== undefined) outputThresholdInput.value = String(snapshot.outputProtectionThreshold);
+  if (outputSoftnessInput && snapshot.outputProtectionSoftness !== undefined) outputSoftnessInput.value = String(snapshot.outputProtectionSoftness);
   if (negativeResonanceAmountInput && snapshot.negativeResonanceAmount !== undefined) negativeResonanceAmountInput.value = String(snapshot.negativeResonanceAmount);
   if (negativeResonancePhaseInput && snapshot.negativeResonancePhase !== undefined) negativeResonancePhaseInput.value = String(snapshot.negativeResonancePhase);
   setSelectValue(inputPreampStageSelect, snapshot.inputPreampStage);
@@ -2750,6 +2836,7 @@ const syncUiFromAudioState = snapshot => {
   updateInputCharacterRelevance();
   updateLocalLoopTuningRelevance();
   updateNegativeResonanceRelevance();
+  updateDevControlRelevance();
   renderBandSliderValues();
   renderFilterPower();
   renderFilterMode();
@@ -2760,6 +2847,9 @@ const syncUiFromAudioState = snapshot => {
 const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
   ['inputPreampStage', value => audioEngine.setInputPreampStage(value)],
   ['inputCharacterAmount', value => setInputCharacterAmount(value)],
+  ['outputProtectionEnabled', value => audioEngine.setOutputProtectionEnabled(value)],
+  ['outputProtectionThreshold', value => audioEngine.setOutputProtectionThreshold(value)],
+  ['outputProtectionSoftness', value => audioEngine.setOutputProtectionSoftness(value)],
   ['referenceLevel', value => audioEngine.setReferenceLevel(value)],
   ['maxBandBoostDb', value => audioEngine.setBandBoostDb(value)],
   ['maxBandCutDb', value => audioEngine.setBandCutDb(value)],

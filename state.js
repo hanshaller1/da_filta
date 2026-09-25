@@ -104,7 +104,7 @@
     filterHighShelfGainDb: window.FilterShape.normalizeFilterDb(source?.filterHighShelfGainDb, 24, 60),
     filterTiltDb: window.FilterShape.normalizeFilterDb(source?.filterTiltDb, 24, 60),
     filterFormantVowel: Math.min(4, Math.max(0, Number(source?.filterFormantVowel) || 0)),
-    filterFormantShiftSemitones: Math.min(12, Math.max(-12, Number(source?.filterFormantShiftSemitones) || 0)),
+    filterFormantShiftSemitones: window.FilterShape.normalizeFormantShiftSemitones(source?.filterFormantShiftSemitones),
     filterFormantWidth: window.FilterShape.normalizeFilterPercent(source?.filterFormantWidth),
     filterFormantAmount: window.FilterShape.normalizeFilterPercent(source?.filterFormantAmount, 70),
     filterBaxandallBassDb: window.FilterShape.normalizeFilterDb(source?.filterBaxandallBassDb, 24, 60),

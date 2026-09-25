@@ -180,23 +180,46 @@ test('extended EQ shapes follow logarithmic bell, shelf, tilt and tone behavior'
   expect(report.toneZero).toEqual(Array(10).fill(0));
 });
 
-test('formants morph continuously in log frequency, shift by octaves and stay bounded', async ({ page }) => {
+test('formant SHIFT spans -36 to +24 semitones and moves the shared vowel structure continuously', async ({ page }) => {
   await page.goto('/');
   const report = await page.evaluate(() => {
     const centers = window.FilterShape.formantCenters;
     const create = values => window.FilterShape.createFilterShape({ type: 'formant', bandDefinitions: window.ResonantState.BAND_DEFINITIONS, maxBandBoostDb: 12, maxBandCutDb: 36, formantAmount: 70, formantWidth: 50, ...values });
+    const shifts = [-36, -24, -12, -6, 0, 6, 12, 24];
+    const shiftedCenters = shifts.map(shift => centers(0, shift));
+    const shiftedShapes = shifts.map(shift => create({ formantVowel: 0, formantShiftSemitones: shift }));
+    const centroid = shape => {
+      const weighted = shape.reduce((sum, gain, index) => sum + window.ResonantState.BAND_DEFINITIONS[index].frequency * Math.max(0, gain), 0);
+      const weight = shape.reduce((sum, gain) => sum + Math.max(0, gain), 0);
+      return weighted / weight;
+    };
     return {
       vowels: [0, 1, 2, 3, 4].map(formantVowel => create({ formantVowel })),
-      a: centers(0), half: centers(.5), e: centers(1), octaveUp: centers(0, 12), octaveDown: centers(0, -12),
+      a: centers(0), half: centers(.5), e: centers(1),
+      shiftedCenters, shiftedShapes, centroids: shiftedShapes.map(centroid),
       morphs: [0, .25, .5, .75, 1].map(formantVowel => create({ formantVowel })),
-      extreme: create({ formantVowel: 4, formantShiftSemitones: 12, formantWidth: 100, formantAmount: 100 })
+      definitions: window.FilterShape.FILTER_CONTROL_DEFINITIONS.shift,
+      normalized: [-48, -36, -24, 0, 12, 24, 36, NaN, Infinity].map(value => window.FilterShape.normalizeFormantShiftSemitones(value)),
+      extreme: create({ formantVowel: 4, formantShiftSemitones: 24, formantWidth: 100, formantAmount: 100 })
     };
   });
   expect(report.a).toEqual([800, 1150, 2900]);
   expect(report.e).toEqual([400, 1700, 2600]);
   report.half.forEach((value, index) => expect(value).toBeCloseTo(Math.sqrt(report.a[index] * report.e[index]), 8));
-  report.octaveUp.forEach((value, index) => expect(value).toBeCloseTo(report.a[index] * 2, 8));
-  report.octaveDown.forEach((value, index) => expect(value).toBeCloseTo(report.a[index] / 2, 8));
+  const shifts = [-36, -24, -12, -6, 0, 6, 12, 24];
+  for (const [shiftIndex, shift] of shifts.entries()) {
+    report.shiftedCenters[shiftIndex].forEach((value, index) => {
+      expect(value).toBeCloseTo(report.a[index] * 2 ** (shift / 12), 8);
+      expect(Number.isFinite(value) && value > 0).toBeTruthy();
+    });
+    expect(report.shiftedShapes[shiftIndex].every(Number.isFinite)).toBeTruthy();
+    expect(Math.min(...report.shiftedShapes[shiftIndex])).toBeGreaterThanOrEqual(-36);
+    expect(Math.max(...report.shiftedShapes[shiftIndex])).toBeLessThanOrEqual(12);
+  }
+  expect(report.centroids[0]).toBeLessThan(report.centroids[4]);
+  expect(report.centroids[7]).toBeGreaterThan(report.centroids[4]);
+  expect(report.definitions).toMatchObject({ min: -36, max: 24, step: 0.1 });
+  expect(report.normalized).toEqual([-36, -36, -24, 0, 12, 24, 24, 0, 0]);
   report.vowels.forEach(shape => {
     expect(shape).toHaveLength(10);
     expect(shape.every(Number.isFinite)).toBeTruthy();
@@ -206,4 +229,54 @@ test('formants morph continuously in log frequency, shift by octaves and stay bo
     report.morphs[index].forEach((value, band) => expect(Math.abs(value - report.morphs[index - 1][band])).toBeLessThan(5));
   }
   expect(report.extreme.every(value => Number.isFinite(value) && value >= -36 && value <= 12)).toBeTruthy();
+});
+
+test('formant SHIFT extremes render finite OfflineAudioContext output at common sample rates', async ({ page }) => {
+  await page.goto('/');
+  const report = await page.evaluate(async () => {
+    const results = [];
+    for (const sampleRate of [44100, 48000, 96000]) {
+      for (const shift of [-36, 0, 24]) {
+        const shape = window.FilterShape.createFilterShape({
+          type: 'formant', formantVowel: 2.4, formantShiftSemitones: shift,
+          formantWidth: 50, formantAmount: 85,
+          bandDefinitions: window.ResonantState.BAND_DEFINITIONS,
+          maxBandBoostDb: 12, maxBandCutDb: 36
+        });
+        const controls = shape.map(value => window.ResonantState.bandGainDbToControl(value, 12, 36));
+        const context = new OfflineAudioContext(2, Math.round(sampleRate * 0.08), sampleRate);
+        const buffer = context.createBuffer(2, context.length, sampleRate);
+        for (let i = 0; i < context.length; i += 1) {
+          const value = 0.12 * Math.sin(2 * Math.PI * 777 * i / sampleRate);
+          buffer.getChannelData(0)[i] = value;
+          buffer.getChannelData(1)[i] = -value * 0.7;
+        }
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        const bank = await window.Filterbank.create(context, {
+          bandGainLeft: controls, bandGainRight: controls
+        });
+        source.connect(bank.input);
+        bank.output.connect(context.destination);
+        source.start();
+        const output = await context.startRendering();
+        let peak = 0;
+        let finite = true;
+        for (let channel = 0; channel < 2; channel += 1) {
+          for (const value of output.getChannelData(channel)) {
+            finite = finite && Number.isFinite(value);
+            peak = Math.max(peak, Math.abs(value));
+          }
+        }
+        results.push({ sampleRate, shift, finite, peak });
+        bank.dispose();
+      }
+    }
+    return results;
+  });
+  expect(report).toHaveLength(9);
+  for (const result of report) {
+    expect(result.finite, `${result.sampleRate} Hz / ${result.shift} st`).toBe(true);
+    expect(result.peak, `${result.sampleRate} Hz / ${result.shift} st`).toBeGreaterThan(0);
+  }
 });

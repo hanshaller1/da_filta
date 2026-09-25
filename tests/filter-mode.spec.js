@@ -686,6 +686,57 @@ test('extended filter state round-trips and legacy snapshots receive safe defaul
   for (const field of await page.evaluate(() => window.ResonantState.FILTER_EXTRA_FIELDS)) expect(reloaded[field]).toBe(report.saved[field]);
 });
 
+test('FORMANT SHIFT exposes the extended range and keeps UI, response and snapshots aligned', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="filter"]').click();
+  await selectFilterType(page, 'formant');
+  const shift = page.locator('[data-filter-control="shift"]');
+  const shiftOutput = page.locator('.filter-parameter-control:has([data-filter-control="shift"]) output');
+  await expect(shift).toHaveAttribute('min', '-36');
+  await expect(shift).toHaveAttribute('max', '24');
+  await expect(shift).toHaveValue('0');
+  await expect(shiftOutput).toHaveText('0 st');
+
+  const samples = [];
+  for (const value of ['-36', '0', '6', '12', '24']) {
+    await shift.fill(value);
+    await expect(shiftOutput).toHaveText(`${Number(value) > 0 ? '+' : ''}${value} st`);
+    samples.push(await page.evaluate(() => ({
+      shift: window.FilterMode.getState().filterFormantShiftSemitones,
+      shape: window.FilterMode.getShape(),
+      markers: [...document.querySelectorAll('[data-filter-formant-markers] line')]
+        .map(line => ({ x: Number(line.getAttribute('x1')), title: line.querySelector('title')?.textContent }))
+    })));
+  }
+  expect(samples.map(sample => sample.shift)).toEqual([-36, 0, 6, 12, 24]);
+  for (const sample of samples) {
+    expect(sample.shape.every(Number.isFinite)).toBe(true);
+    expect(sample.markers).toHaveLength(3);
+    expect(sample.markers.every(marker => Number.isFinite(marker.x) && marker.x >= 50 && marker.x <= 950)).toBe(true);
+  }
+  expect(samples[0].shape).not.toEqual(samples[1].shape);
+  expect(samples[4].shape).not.toEqual(samples[1].shape);
+  expect(samples[4].markers[2].title).toContain('11600 Hz');
+
+  const snapshot = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    engine.setFilterState({ filterType: 'formant', filterFormantShiftSemitones: -36 });
+    const low = engine.getState();
+    engine.setFilterState({ filterFormantShiftSemitones: 6 });
+    engine.applyState(low);
+    const restoredLow = engine.getState().filterFormantShiftSemitones;
+    engine.setFilterState({ filterFormantShiftSemitones: 24 });
+    const high = engine.getState();
+    engine.setFilterState({ filterFormantShiftSemitones: 0 });
+    engine.applyState(high);
+    return { low: low.filterFormantShiftSemitones, restoredLow,
+      high: high.filterFormantShiftSemitones,
+      clampedLow: window.ResonantState.normalizeFilterState({ filterFormantShiftSemitones: -90 }).filterFormantShiftSemitones,
+      clampedHigh: window.ResonantState.normalizeFilterState({ filterFormantShiftSemitones: 90 }).filterFormantShiftSemitones };
+  });
+  expect(snapshot).toEqual({ low: -36, restoredLow: -36, high: 24, clampedLow: -36, clampedHigh: 24 });
+});
+
 test('all extended types update the response and respect FILTER power independently', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-mode="filter"]').click();

@@ -23,6 +23,7 @@
   const INPUT_PREAMP_STAGES = Object.freeze(['linear', 'silk', 'tape', 'tube', 'console', 'crunch', 'destroy']);
   const FEEDBACK_ALL_LEVELS = Object.freeze(['raw', 'sqrt2', 'half', 'sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth']);
   const inputPreampModuleLoads = new WeakMap();
+  const outputProtectionModuleLoads = new WeakMap();
   const loadInputPreampModule = async audioContext => {
     if (!audioContext?.audioWorklet?.addModule) throw new Error('AudioWorklet wird von diesem Browser oder AudioContext nicht unterstÃ¼tzt.');
     const existingLoad = inputPreampModuleLoads.get(audioContext);
@@ -33,6 +34,16 @@
       throw new Error(`Input-Preamp-AudioWorklet konnte nicht geladen werden: ${error?.message || error}`);
     });
     inputPreampModuleLoads.set(audioContext, load);
+    return load;
+  };
+  const loadOutputProtectionModule = async audioContext => {
+    const existingLoad = outputProtectionModuleLoads.get(audioContext);
+    if (existingLoad) return existingLoad;
+    const load = audioContext.audioWorklet.addModule(new URL('output-protection-processor.js', window.location.href).href).catch(error => {
+      outputProtectionModuleLoads.delete(audioContext);
+      throw new Error(`Output-Protection-AudioWorklet konnte nicht geladen werden: ${error?.message || error}`);
+    });
+    outputProtectionModuleLoads.set(audioContext, load);
     return load;
   };
 
@@ -74,6 +85,9 @@
       this.feedbackAllSaturationReturn = 'current';
       this.dryWet = 50;
       this.volumeDb = -6;
+      this.outputProtectionEnabled = true;
+      this.outputProtectionThreshold = 0.8;
+      this.outputProtectionSoftness = 100;
       this.context = null;
       this.stream = null;
       this.source = null;
@@ -96,6 +110,7 @@
       this.spectrumAnalyserRight = null;
       this.mixBus = null;
       this.volumeGainNode = null;
+      this.outputProtectionNode = null;
       this.destination = null;
       this.outputElement = null;
       this.filterbank = null;
@@ -175,6 +190,26 @@
     setVolumeDb(value) {
       this.volumeDb = Math.max(-60, Math.min(0, Number(value)));
       this.setSmoothedParam(this.volumeGainNode?.gain, this.bypass ? 0 : dbToGain(this.volumeDb));
+    }
+
+    setOutputProtectionEnabled(value) {
+      this.outputProtectionEnabled = Boolean(value);
+      this.outputProtectionNode?.port.postMessage({ type: 'set-enabled', value: this.outputProtectionEnabled });
+      return this.outputProtectionEnabled;
+    }
+
+    setOutputProtectionThreshold(value) {
+      const numeric = Number(value);
+      this.outputProtectionThreshold = Number.isFinite(numeric) ? Math.min(0.95, Math.max(0.5, numeric)) : 0.8;
+      this.outputProtectionNode?.port.postMessage({ type: 'set-threshold', value: this.outputProtectionThreshold });
+      return this.outputProtectionThreshold;
+    }
+
+    setOutputProtectionSoftness(value) {
+      const numeric = Number(value);
+      this.outputProtectionSoftness = Number.isFinite(numeric) ? Math.min(100, Math.max(0, numeric)) : 100;
+      this.outputProtectionNode?.port.postMessage({ type: 'set-softness', value: this.outputProtectionSoftness / 100 });
+      return this.outputProtectionSoftness;
     }
 
     setBypass(enabled, smoothingTime = 0.015) {
@@ -493,7 +528,10 @@
         inputPreampStage: this.inputPreampStage,
         inputCharacterAmount: this.inputCharacterAmount,
         dryWet: this.dryWet,
-        volumeDb: this.volumeDb
+        volumeDb: this.volumeDb,
+        outputProtectionEnabled: this.outputProtectionEnabled,
+        outputProtectionThreshold: this.outputProtectionThreshold,
+        outputProtectionSoftness: this.outputProtectionSoftness
       };
     }
 
@@ -525,6 +563,9 @@
       if (snapshot?.inputCharacterAmount !== undefined) this.setInputCharacterAmount(finiteOr(snapshot.inputCharacterAmount, this.inputCharacterAmount));
       if (snapshot?.dryWet !== undefined) this.setDryWet(finiteOr(snapshot.dryWet, this.dryWet));
       if (snapshot?.volumeDb !== undefined) this.setVolumeDb(finiteOr(snapshot.volumeDb, this.volumeDb));
+      if (snapshot?.outputProtectionEnabled !== undefined) this.setOutputProtectionEnabled(snapshot.outputProtectionEnabled);
+      if (snapshot?.outputProtectionThreshold !== undefined) this.setOutputProtectionThreshold(snapshot.outputProtectionThreshold);
+      if (snapshot?.outputProtectionSoftness !== undefined) this.setOutputProtectionSoftness(snapshot.outputProtectionSoftness);
       this.setResonance(snapshot?.resonance);
       this.setPositiveResonanceDrive(snapshot?.positiveResonanceDrive ?? this.positiveResonanceDrive);
       this.setPositiveResonanceDampingFloor(snapshot?.positiveResonanceDampingFloor ?? this.positiveResonanceDampingFloor);
@@ -719,6 +760,7 @@
         this.sourceBus = this.context.createGain();
         this.inputGainNode = this.context.createGain();
         await loadInputPreampModule(this.context);
+        await loadOutputProtectionModule(this.context);
         this.inputPreampNode = new AudioWorkletNode(this.context, INPUT_PREAMP_PROCESSOR_NAME, {
           numberOfInputs: 1,
           numberOfOutputs: 1,
@@ -744,6 +786,19 @@
         }
         this.mixBus = this.context.createGain();
         this.volumeGainNode = this.context.createGain();
+        this.outputProtectionNode = new AudioWorkletNode(this.context, 'da-filta-output-protection', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [2],
+          channelCount: 2,
+          channelCountMode: 'explicit',
+          channelInterpretation: 'discrete',
+          processorOptions: {
+            enabled: this.outputProtectionEnabled,
+            threshold: this.outputProtectionThreshold,
+            softness: this.outputProtectionSoftness / 100
+          }
+        });
         this.destination = this.context.createMediaStreamDestination();
         this.filterbank = await Filterbank.create(this.context, this.getFilterbankState());
 
@@ -763,7 +818,8 @@
         }
         this.wetGainNode.connect(this.mixBus);
         this.mixBus.connect(this.volumeGainNode);
-        this.volumeGainNode.connect(this.destination);
+        this.volumeGainNode.connect(this.outputProtectionNode);
+        this.outputProtectionNode.connect(this.destination);
         // Bypass deliberately starts at sourceBus, before input gain, preamp,
         // filterbank, dry/wet and master volume, and feeds the output directly.
         this.sourceBus.connect(this.bypassGainNode);
@@ -794,7 +850,7 @@
     async cleanup() {
       this.stopInputNodes({ immediate: true });
       if (this.filterbank) { this.filterbank.dispose(); this.filterbank = null; }
-      [this.sourceBus, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.bypassGainNode, this.inputSpectrumSplitterNode, this.inputSpectrumAnalyserLeft, this.inputSpectrumAnalyserRight, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode].forEach(node => this.disconnectNode(node));
+      [this.sourceBus, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.bypassGainNode, this.inputSpectrumSplitterNode, this.inputSpectrumAnalyserLeft, this.inputSpectrumAnalyserRight, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode, this.outputProtectionNode].forEach(node => this.disconnectNode(node));
       this.source = null;
       this.sourceBus = null;
       this.activeInputGate = null;
@@ -812,6 +868,7 @@
       this.spectrumAnalyserRight = null;
       this.mixBus = null;
       this.volumeGainNode = null;
+      this.outputProtectionNode = null;
       if (this.outputElement) { this.outputElement.pause(); this.outputElement.srcObject = null; this.outputElement.remove(); this.outputElement = null; }
       if (this.context) { await this.context.close(); this.context = null; }
       this.destination = null;
