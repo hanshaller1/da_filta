@@ -165,6 +165,9 @@ test('moved FB, MOD and FB ALL controls retain state and remain FILTERBANK-only'
   const modulation = page.locator('[data-mod-band="3"]');
   const feedbackAll = page.locator('.filterbank-controls-panel .fb-all-toggle');
 
+  await expect(page.locator('.filterbank-controls-panel .fb-all-control')).toHaveCount(1);
+  await expect(page.locator('.filterbank-controls-panel .fb-all-control > span')).toHaveCount(0);
+  await expect(feedbackAll).toHaveText('FB ALL');
   await feedback.click();
   await modulation.click();
   await feedbackAll.click();

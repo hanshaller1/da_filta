@@ -1,6 +1,5 @@
 const { test, expect } = require('playwright/test');
 const selectFilterType = async (page, type) => {
-  await page.locator('[data-filter-type-trigger]').click();
   await page.locator(`[data-filter-type="${type}"]`).click();
 };
 
@@ -577,7 +576,7 @@ test('FILTER response frequency marker and zero grid share the graph coordinate 
 
   const controlStyles = await page.evaluate(() => {
     const frequency = getComputedStyle(document.querySelector('.filter-frequency-control'));
-    const typeButton = document.querySelector('.filter-type-trigger').getBoundingClientRect();
+    const typeButton = document.querySelector('[data-filter-type]').getBoundingClientRect();
     return {
       borderRightWidth: frequency.borderRightWidth,
       borderBottomWidth: frequency.borderBottomWidth,
@@ -586,7 +585,7 @@ test('FILTER response frequency marker and zero grid share the graph coordinate 
   });
   expect(controlStyles.borderRightWidth).toBe('0px');
   expect(Number.parseFloat(controlStyles.borderBottomWidth)).toBeGreaterThan(0);
-  expect(controlStyles.typeButtonHeight).toBeCloseTo(32, 1);
+  expect(controlStyles.typeButtonHeight).toBeCloseTo(22, 1);
 });
 
 test('legacy FILTER snapshots default missing resonance and depth safely', async ({ page }) => {
@@ -604,35 +603,20 @@ test('legacy FILTER snapshots default missing resonance and depth safely', async
   expect(restored.filterDepth).toBe(100);
 });
 
-test('FILTER type selector groups ten types and keeps keyboard selection separate from PANIC', async ({ page }) => {
+test('FILTER type buttons group ten types and keep selection separate from PANIC', async ({ page }) => {
   await page.setViewportSize({ width: 1914, height: 907 });
   await page.goto('/');
   await page.locator('[data-mode="filter"]').click();
-  const trigger = page.locator('[data-filter-type-trigger]');
-  await trigger.click();
-  await expect(page.locator('[data-filter-type-popover]')).toBeVisible();
+  await expect(page.locator('.filter-type-groups')).toBeVisible();
   await expect(page.locator('[data-filter-type]')).toHaveCount(10);
-  await expect(page.locator('.filter-type-group > strong')).toHaveText(['CLASSIC', 'EQ / TONE', 'FORMANT']);
+  await expect(page.locator('.filter-type-group > strong')).toHaveText(['CLASSIC', 'EQ / TONE / FORMANT']);
   await page.locator('[data-filter-type="bell"]').click();
-  await expect(trigger).toContainText('PEAK / BELL');
+  await expect(page.locator('[data-filter-type="bell"]')).toHaveClass(/active/);
   await expect(page.locator('[data-filter-control="gain"]')).toBeEnabled();
   await expect(page.locator('[data-filter-control="bellWidth"]')).toBeEnabled();
-  await expect(page.locator('[data-filter-type-popover]')).toBeHidden();
-
-  await trigger.focus();
-  await page.keyboard.press('Enter');
-  await expect(page.locator('[data-filter-type-popover]')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('[data-filter-type-popover]')).toBeHidden();
-  await trigger.focus();
-  await page.keyboard.press('Space');
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('Enter');
-  await expect(trigger).toContainText('LOW SHELF');
+  expect(await page.evaluate(() => window.FilterMode.getState().filterType)).toBe('bell');
+  await page.locator('[data-filter-type="lowshelf"]').click();
   expect(await page.evaluate(() => window.FilterMode.getState().filterType)).toBe('lowshelf');
-  await trigger.click();
-  await page.locator('.filter-response').click();
-  await expect(page.locator('[data-filter-type-popover]')).toBeHidden();
   await expect(page.locator('[data-control="resonance"]')).toHaveValue('0');
 });
 

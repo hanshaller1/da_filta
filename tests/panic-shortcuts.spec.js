@@ -85,7 +85,7 @@ test('PANIC resets feedback safely while audio stays on and German-layout shortc
     await expect(dryWet).toHaveValue('0');
     await expect(resonance).toHaveValue('0');
     await expect(page.locator('[data-feedback-band].active')).toHaveCount(0);
-    await expect(page.locator('.fb-all-toggle')).toHaveText('OFF');
+  await expect(page.locator('.fb-all-toggle')).toHaveText('FB ALL');
     await expect(page.locator('.fb-all-toggle')).not.toHaveClass(/active/);
     await expect(page.locator('[data-input-preamp-stage]')).toHaveValue('tube');
   };

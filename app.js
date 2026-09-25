@@ -1473,15 +1473,17 @@ const filterbankPowerButton = document.querySelector('[data-module-power="filter
 const filterPowerButton = document.querySelector('[data-module-power="filter"]');
 const filterTypeDefinitions = window.FilterShape.FILTER_TYPE_DEFINITIONS;
 const filterControlDefinitions = window.FilterShape.FILTER_CONTROL_DEFINITIONS;
-const filterTypeTrigger = document.querySelector('[data-filter-type-trigger]');
-const filterTypeValue = document.querySelector('[data-filter-type-value]');
-const filterTypePopover = document.querySelector('[data-filter-type-popover]');
+const filterTypeGroups = document.querySelector('[data-filter-type-groups]');
 const filterResponseDescriptor = document.querySelector('[data-filter-response-descriptor]');
 const filterFormantMarkers = document.querySelector('[data-filter-formant-markers]');
 const filterPrimaryControl = document.querySelector('[data-filter-primary-control]');
 const filterSecondaryControls = [...document.querySelectorAll('.filter-secondary-controls .filter-parameter-control')];
 const filterControlSlots = [filterPrimaryControl, ...filterSecondaryControls];
-if (filterTypePopover) filterTypePopover.innerHTML = ['CLASSIC', 'EQ / TONE', 'FORMANT'].map(category => `<div class="filter-type-group"><strong>${category}</strong><div class="filter-type-options">${filterTypeDefinitions.filter(definition => definition.category === category).map(definition => `<button type="button" data-filter-type="${definition.id}" role="option" aria-selected="false">${definition.displayName}</button>`).join('')}</div></div>`).join('');
+const filterTypeGroupsDefinition = [
+  { label: 'CLASSIC', ids: ['lowpass', 'highpass', 'bandpass', 'notch'] },
+  { label: 'EQ / TONE / FORMANT', ids: ['bell', 'lowshelf', 'highshelf', 'tilt', 'baxandall', 'formant'] }
+];
+if (filterTypeGroups) filterTypeGroups.innerHTML = filterTypeGroupsDefinition.map(group => `<div class="filter-type-group"><strong>${group.label}</strong><div class="filter-type-options">${group.ids.map(id => filterTypeDefinitions.find(definition => definition.id === id)).filter(Boolean).map(definition => `<button type="button" data-filter-type="${definition.id}" role="option" aria-selected="false" aria-pressed="false">${definition.displayName}</button>`).join('')}</div></div>`).join('');
 const filterTypeButtons = [...document.querySelectorAll('[data-filter-type]')];
 const filterResponsePath = document.querySelector('[data-filter-response-path]');
 const filterResponseMarkers = document.querySelector('[data-filter-response-markers]');
@@ -1594,12 +1596,12 @@ const renderFilterMode = () => {
     filterFrequencyMarkerLabel.classList.toggle('is-start', frequencyPosition < 0.08);
     filterFrequencyMarkerLabel.classList.toggle('is-end', frequencyPosition > 0.92);
   }
-  if (filterTypeValue) filterTypeValue.textContent = typeDefinition.displayName;
   if (filterResponseDescriptor) filterResponseDescriptor.textContent = typeDefinition.descriptor;
   filterTypeButtons.forEach(button => {
     const active = button.dataset.filterType === state.filterType;
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', String(active));
+    button.setAttribute('aria-pressed', String(active));
   });
   [typeDefinition.primary, ...typeDefinition.secondary].forEach((key, index) => renderFilterControl(filterControlSlots[index], key, boostDb, cutDb));
 };
@@ -1608,41 +1610,9 @@ const updateFilterState = values => {
   audioEngine?.setFilterState(state);
   renderFilterMode();
 };
-const setFilterTypePopoverOpen = (open, focusOption = false) => {
-  if (!filterTypePopover || !filterTypeTrigger) return;
-  filterTypePopover.hidden = !open;
-  filterTypeTrigger.setAttribute('aria-expanded', String(open));
-  if (open && focusOption) (filterTypeButtons.find(button => button.dataset.filterType === state.filterType) || filterTypeButtons[0])?.focus();
-};
-filterTypeTrigger?.addEventListener('click', () => setFilterTypePopoverOpen(filterTypePopover.hidden));
-filterTypeTrigger?.addEventListener('keydown', event => {
-  if (['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(event.key)) {
-    event.preventDefault(); event.stopPropagation(); setFilterTypePopoverOpen(true, true);
-  }
-  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setFilterTypePopoverOpen(false); }
-});
-filterTypePopover?.addEventListener('keydown', event => {
-  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-    event.preventDefault(); event.stopPropagation();
-    const index = filterTypeButtons.indexOf(document.activeElement);
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? filterTypeButtons.length - 1
-      : (index + (event.key === 'ArrowDown' ? 1 : -1) + filterTypeButtons.length) % filterTypeButtons.length;
-    filterTypeButtons[next]?.focus();
-  }
-  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setFilterTypePopoverOpen(false); filterTypeTrigger.focus(); }
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault(); event.stopPropagation();
-    if (document.activeElement?.dataset.filterType) {
-      updateFilterState({ filterType: document.activeElement.dataset.filterType });
-      setFilterTypePopoverOpen(false); filterTypeTrigger.focus();
-    }
-  }
-});
 filterTypeButtons.forEach(button => button.addEventListener('click', () => {
   updateFilterState({ filterType: button.dataset.filterType });
-  setFilterTypePopoverOpen(false); filterTypeTrigger?.focus();
 }));
-document.addEventListener('click', event => { if (!event.target.closest('.filter-type-control')) setFilterTypePopoverOpen(false); });
 filterControlSlots.forEach(slot => slot.querySelector('input')?.addEventListener('input', event => {
   const definition = filterControlDefinitions[event.target.dataset.filterControl];
   if (!definition?.field) return;
@@ -2136,7 +2106,7 @@ const resetBandControls = () => {
 bandResetButton?.addEventListener('click', resetBandControls);
 const fbAllControl = fbAllButton?.closest('.fb-all-control');
 if (fbAllControl) document.querySelector('.filterbank-fb-all-group')?.append(fbAllControl);
-fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent=nextValue?'ON':'OFF'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
+fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent='FB ALL'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
 
 const FB_CODES = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0'];
 const FADER_UP_CODES = ['KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI','KeyO','KeyP'];
@@ -2461,7 +2431,7 @@ const updateLocalLoopTuningRelevance = () => {
     fbAllButton.disabled = false;
     fbAllButton.classList.remove('is-phase-one-inactive');
     fbAllButton.title = '';
-    fbAllButton.textContent = state.feedbackAllLeft ? 'ON' : 'OFF';
+    fbAllButton.textContent = 'FB ALL';
     fbAllButton.setAttribute('aria-pressed', String(state.feedbackAllLeft));
   }
 };
@@ -2581,7 +2551,7 @@ const syncUiFromAudioState = snapshot => {
   });
   if (fbAllButton) {
     fbAllButton.classList.toggle('active', state.feedbackAllLeft);
-    fbAllButton.textContent = state.feedbackAllLeft ? 'ON' : 'OFF';
+    fbAllButton.textContent = 'FB ALL';
     fbAllButton.setAttribute('aria-pressed', String(state.feedbackAllLeft));
   }
   updatePerChannelBands();
@@ -2721,7 +2691,7 @@ panic = () => {
     button.setAttribute('aria-pressed', 'false');
   });
   fbAllButton.classList.remove('active');
-  fbAllButton.textContent = 'OFF';
+  fbAllButton.textContent = 'FB ALL';
   fbAllButton.setAttribute('aria-pressed', 'false');
 };
 const refreshAudioDevices = async () => {
