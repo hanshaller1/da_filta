@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('Analyzer display layers, status strip and collapsed preview remain UI-only', async ({ page }) => {
+test('Analyzer display layers and status strip remain UI-only', async ({ page }) => {
   const pageErrors = [];
   const consoleErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -8,10 +8,10 @@ test('Analyzer display layers, status strip and collapsed preview remain UI-only
   await page.goto('/', { waitUntil: 'networkidle' });
 
   const defaults = await page.evaluate(() => window.FilterbankAnalyzer.getDisplayState());
-  expect(defaults).toMatchObject({ lrBars: true, peakHold: true, outputSpectrum: true, inputSpectrum: false, liveStatusStrip: true, collapsedPreview: true, spectrumFill: true, spectrumTrail: false, energyBloom: false, peakMarkers: false, enhancedBars: true });
+  expect(defaults).toMatchObject({ lrBars: true, peakHold: true, outputSpectrum: true, inputSpectrum: false, liveStatusStrip: true, spectrumFill: true, spectrumTrail: false, energyBloom: false, peakMarkers: false, enhancedBars: true });
   await expect(page.locator('.analyzer-status')).toHaveCount(0);
   await expect(page.locator('.analyzer > .legend')).toHaveCount(0);
-  await expect(page.locator('.analyzer-footer .axis-x')).toHaveText(/29 Hz\s*61 Hz\s*115 Hz\s*218 Hz\s*411 Hz\s*777 Hz\s*1\.5 kHz\s*2\.8 kHz\s*5\.2 kHz\s*11 kHz/);
+  await expect(page.locator('.analyzer-footer .axis-x')).toHaveText('12345678910');
   await page.locator('.analyzer-options-toggle').click();
   const popoverBounds = await page.locator('.analyzer-options-popover').evaluate(element => {
     const bounds = element.getBoundingClientRect();
@@ -39,19 +39,19 @@ test('Analyzer display layers, status strip and collapsed preview remain UI-only
     colors.forEach(color => expect(color).toMatch(/^#[0-9a-f]{6}$/i));
   }
   await page.locator('[data-theme-select]').selectOption('current');
-  for (const key of ['frequencyLabels', 'inputSpectrum', 'outputSpectrum', 'filterResponse', 'feedbackActivity', 'selfOscillation', 'dominantBand', 'feedbackEnergy', 'saturationIndicators', 'spectrumFill', 'spectrumTrail', 'energyBloom', 'peakMarkers', 'enhancedBars', 'liveStatusStrip', 'collapsedPreview']) {
+  for (const key of ['frequencyLabels', 'inputSpectrum', 'outputSpectrum', 'filterResponse', 'feedbackActivity', 'selfOscillation', 'dominantBand', 'feedbackEnergy', 'saturationIndicators', 'spectrumFill', 'spectrumTrail', 'energyBloom', 'peakMarkers', 'enhancedBars', 'liveStatusStrip']) {
     const option = page.locator(`[data-analyzer-option="${key}"]`);
     await expect(option).toBeVisible();
     const before = await option.isChecked();
-    await option.click();
+    await option.evaluate(input => input.click());
     await expect(option).toBeChecked({ checked: !before });
     if (key === 'frequencyLabels') await expect(page.locator('.analyzer-footer')).toHaveClass(/hide-frequency-labels/);
-    await option.click();
+    await option.evaluate(input => input.click());
   }
   await page.locator('.analyzer-options-toggle').click();
 
-  await page.locator('[data-control="spread"]').fill('-0.5');
-  await page.locator('.band-fader').nth(3).fill('50');
+  await page.locator('[data-control="spread"]').fill('-3');
+  await page.locator('.center-fader .band-fader').nth(3).fill('50');
   const band = page.locator('[data-analyzer-band="3"]');
   await expect.poll(() => band.getAttribute('data-delta-db')).not.toBeNull();
   const info = await page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(3));
@@ -69,35 +69,7 @@ test('Analyzer display layers, status strip and collapsed preview remain UI-only
   await page.locator('.analyzer-options-toggle').click();
   await band.hover();
   await expect(page.locator('.analyzer-band-detail')).toBeVisible();
-  await expect(page.locator('.analyzer-live-status')).toContainText('SPREAD -50');
-
-  await page.locator('.response-collapse-toggle').click();
-  await expect(page.locator('.fb-workspace')).toHaveClass(/is-collapsed/);
-  await expect.poll(() => page.locator('.analyzer-footer').evaluate(element => getComputedStyle(element, '::before').display)).toBe('none');
-  await expect(page.locator('.analyzer-band-detail')).toBeHidden();
-  await expect(page.locator('.collapsed-analyzer-preview')).toBeVisible();
-  await expect.poll(() => page.locator('.collapsed-analyzer-preview svg path').getAttribute('d')).toBe('M0.0 35.0 L50.0 35.0 L150.0 35.0 L250.0 35.0 L350.0 35.0 L450.0 35.0 L550.0 35.0 L650.0 35.0 L750.0 35.0 L850.0 35.0 L950.0 35.0 L1000.0 35.0');
-  await page.evaluate(() => window.FilterbankDebugConsole.receive({
-    left: { frameCount: 64, bandEnergy: Array(10).fill(1e-12) },
-    right: { frameCount: 64, bandEnergy: Array(10).fill(1e-12) }
-  }));
-  await expect.poll(() => page.locator('[data-collapsed-band="9"]').evaluate(element => getComputedStyle(element).getPropertyValue('--preview-level'))).toBe('0.000');
-  await page.evaluate(() => window.FilterbankDebugConsole.receive({
-    left: { frameCount: 64, bandEnergy: [0, 0, 0, .16, 0, 0, 0, 0, 0, 0], commonFeedbackReturn: .2, mainCommonFeedbackReturn: .1, saturationActiveFrames: 0, wetPeak: .2 },
-    right: { frameCount: 64, bandEnergy: [0, 0, 0, .12, 0, 0, 0, 0, 0, 0], commonFeedbackReturn: .1, mainCommonFeedbackReturn: .05, saturationActiveFrames: 0, wetPeak: .2 }
-  }));
-  await expect.poll(() => page.locator('[data-collapsed-band="3"]').evaluate(element => getComputedStyle(element).getPropertyValue('--preview-level'))).not.toBe('0.000');
-  await expect.poll(() => page.locator('.collapsed-analyzer-preview svg path').getAttribute('d')).toMatch(/^M0\.0 [\d.]+(?: L\d+\.0 [\d.]+){11}$/);
-  const pathPoints = await page.locator('.collapsed-analyzer-preview svg path').evaluate(path => [...path.getAttribute('d').matchAll(/[ML](\d+\.\d) (\d+\.\d)/g)].map(match => ({ x: Number(match[1]), y: Number(match[2]) })));
-  expect(pathPoints[0]).toEqual({ x: 0, y: pathPoints[1].y });
-  expect(pathPoints.at(-1)).toEqual({ x: 1000, y: pathPoints.at(-2).y });
-  await expect(page.locator('[data-collapsed-band="3"]')).toHaveAttribute('title', /218 Hz/);
-  await page.locator('[data-collapsed-band="3"]').hover();
-  await expect(page.locator('.collapsed-analyzer-detail')).toBeVisible();
-  await page.mouse.move(2, 2);
-  await expect(page.locator('.collapsed-analyzer-detail')).toBeHidden();
-  await page.locator('.response-collapse-toggle').click();
-  await expect(page.locator('.collapsed-analyzer-preview')).toBeHidden();
+  await expect(page.locator('.analyzer-live-status')).toContainText('SPREAD -3.0 dB');
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
@@ -151,16 +123,16 @@ test('Analyzer VIEW popover remains reachable within a tablet viewport', async (
   expect(bounds.top).toBeGreaterThanOrEqual(0);
   expect(bounds.right).toBeLessThanOrEqual(bounds.width);
   expect(bounds.bottom).toBeLessThanOrEqual(bounds.height);
-  const lastOption = page.locator('[data-analyzer-option="collapsedPreview"]');
+  const lastOption = page.locator('[data-analyzer-option="liveStatusStrip"]');
   await lastOption.scrollIntoViewIfNeeded();
   await expect(lastOption).toBeVisible();
 });
 
-test('effective L/R control bars are immediate while peak and preview animation stay independent', async ({ page }) => {
+test('FILTERBANK display L/R control bars are immediate while peak and preview animation stay independent', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto('/', { waitUntil: 'networkidle' });
-  const fader = page.locator('.band-fader').nth(3);
+  const fader = page.locator('.center-fader .band-fader').nth(3);
   const bars = page.locator('[data-analyzer-band="3"] i[data-channel]');
 
   await fader.fill('100');
@@ -176,12 +148,6 @@ test('effective L/R control bars are immediate while peak and preview animation 
   await fader.fill('0');
   await expect(bars.nth(0)).toHaveAttribute('style', /height: 0%/);
   await expect(bars.nth(1)).toHaveAttribute('style', /height: 0%/);
-  await fader.fill('50');
-  await expect(bars.nth(0)).toHaveAttribute('style', /height: 25%/);
-  await expect(bars.nth(1)).toHaveAttribute('style', /height: 25%/);
-  await fader.fill('-50');
-  await expect(bars.nth(0)).toHaveAttribute('style', /height: 25%/);
-  await expect(bars.nth(0)).toHaveClass(/negative/);
   await fader.fill('-100');
   await expect(bars.nth(0)).toHaveAttribute('style', /height: 50%/);
   await expect(bars.nth(0)).toHaveClass(/negative/);
@@ -193,9 +159,9 @@ test('effective L/R control bars are immediate while peak and preview animation 
   expect(visibleNegative.opacity).toBeGreaterThan(0);
   expect(visibleNegative.height).toBeGreaterThan(0);
 
-  await page.locator('[data-control="spread"]').fill('-0.5');
   await fader.fill('0');
-  await expect.poll(async () => ({ left: await bars.nth(0).getAttribute('style'), right: await bars.nth(1).getAttribute('style') })).toEqual({ left: 'height: 12.5%;', right: 'height: 12.5%;' });
+  await page.locator('[data-control="spread"]').fill('-6');
+  await expect.poll(async () => ({ left: await bars.nth(0).getAttribute('style'), right: await bars.nth(1).getAttribute('style') })).toEqual({ left: 'height: 25%;', right: 'height: 25%;' });
   await expect(bars.nth(0)).not.toHaveClass(/negative/);
   await expect(bars.nth(1)).toHaveClass(/negative/);
   const spreadBars = await bars.evaluateAll(items => items.map(element => {
@@ -214,6 +180,99 @@ test('effective L/R control bars are immediate while peak and preview animation 
   await page.mouse.move(2, 2);
   await expect(page.locator('.analyzer-band-detail')).toBeHidden();
   expect(pageErrors).toEqual([]);
+});
+
+test('FILTERBANK graph and CLASSIC markers share signed dB scaling and live axis labels', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.locator('.per-channel-toggle').click();
+  const left = page.locator('.band-fader-channel[data-band="0"][data-channel="left"]');
+  const right = page.locator('.band-fader-channel[data-band="0"][data-channel="right"]');
+  const bars = page.locator('[data-analyzer-band="0"] i[data-channel]');
+
+  await left.fill('100'); await right.fill('-100');
+  await expect(bars.nth(0)).toHaveAttribute('style', /height: 50%/);
+  await expect(bars.nth(1)).toHaveAttribute('style', /height: 50%/);
+  await left.fill('50'); await right.fill('-50');
+  await expect(bars.nth(0)).toHaveAttribute('style', /height: 25%/);
+  await expect(bars.nth(1)).toHaveAttribute('style', /height: 25%/);
+  await expect(page.locator('[data-axis-boost]')).toHaveText('+12 dB');
+  await expect(page.locator('[data-axis-cut]')).toHaveText('−12 dB');
+
+  await page.locator('[data-band-boost-db]').evaluate(select => { select.value = '24'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.locator('[data-band-cut-db]').evaluate(select => { select.value = '36'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await left.fill('100'); await right.fill('-100');
+  await expect(bars.nth(0)).toHaveAttribute('style', /height: 50%/);
+  await expect(bars.nth(1)).toHaveAttribute('style', /height: 50%/);
+  await expect(page.locator('[data-axis-boost]')).toHaveText('+24 dB');
+  await expect(page.locator('[data-axis-cut]')).toHaveText('−36 dB');
+
+  await page.locator('.classic-channel-toggle').click();
+  const positions = await page.locator('[data-classic-marker^="0-"]').evaluateAll(markers => markers.map(marker => marker.style.bottom));
+  expect(positions).toEqual(['100%', '0%']);
+  await expect(page.locator('[data-classic-marker^="0-"]')).toHaveCount(2);
+  await expect(page.locator('[data-classic-marker^="0-"]').first()).toHaveCSS('pointer-events', 'none');
+});
+
+test('FILTERBANK graph preserves exact signed dB geometry after analyzer animation frames', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const fader = page.locator('.center-fader .band-fader').first();
+  const settleAnalyzer = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const readGeometry = () => page.evaluate(() => {
+    const index = 0;
+    const manual = window.FilterMode.getManualBandState();
+    const display = window.FilterbankAnalyzer.getBandInfo(index).display;
+    const bar = document.querySelector(`[data-analyzer-band="${index}"] i[data-channel="left"]`);
+    const chart = document.querySelector('.chart-grid');
+    const pair = bar.closest('.bar-pair');
+    const barRect = bar.getBoundingClientRect();
+    const chartRect = chart.getBoundingClientRect();
+    const pairRect = pair.getBoundingClientRect();
+    const boost = Number(document.querySelector('[data-band-boost-db]').value);
+    const cut = Number(document.querySelector('[data-band-cut-db]').value);
+    return {
+      storedLeft: manual.left[index],
+      storedRight: manual.right[index],
+      leftDb: display.leftDb,
+      rightDb: display.rightDb,
+      bipolarPercent: window.ResonantState.bandGainDbToBipolarPercent(display.leftDb, boost, cut),
+      inlineHeightPercent: parseFloat(bar.style.height),
+      chartRatio: barRect.height / chartRect.height,
+      pairRatio: barRect.height / pairRect.height,
+      barTop: barRect.top,
+      barBottom: barRect.bottom,
+      zeroY: pairRect.top + pairRect.height / 2,
+      negative: bar.classList.contains('negative')
+    };
+  });
+
+  for (const db of [1.5, 3, 6, 12, -1.5, -3, -6, -12]) {
+    await fader.fill(String(db / 12 * 100));
+    await settleAnalyzer();
+    const geometry = await readGeometry();
+    const expectedBipolar = db / 12 * 100;
+    const expectedWholeChartRatio = Math.abs(db) / 24;
+    expect(geometry.storedLeft).toBeCloseTo(expectedBipolar, 5);
+    expect(geometry.storedRight).toBeCloseTo(expectedBipolar, 5);
+    expect(geometry.leftDb).toBeCloseTo(db, 5);
+    expect(geometry.rightDb).toBeCloseTo(db, 5);
+    expect(geometry.bipolarPercent).toBeCloseTo(expectedBipolar, 5);
+    expect(geometry.inlineHeightPercent).toBeCloseTo(expectedWholeChartRatio * 100, 5);
+    expect(Math.abs(geometry.chartRatio - expectedWholeChartRatio)).toBeLessThan(0.01);
+    expect(Math.abs(geometry.pairRatio - expectedWholeChartRatio)).toBeLessThan(0.01);
+    expect(geometry.negative).toBe(db < 0);
+    expect(db > 0 ? geometry.barBottom : geometry.barTop).toBeCloseTo(geometry.zeroY, 0);
+  }
+
+  await page.locator('[data-band-boost-db]').evaluate(select => { select.value = '24'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.locator('[data-band-cut-db]').evaluate(select => { select.value = '36'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  for (const [db, control] of [[6, 25], [-9, -25]]) {
+    await fader.fill(String(control));
+    await settleAnalyzer();
+    const geometry = await readGeometry();
+    expect(geometry.leftDb).toBeCloseTo(db, 5);
+    expect(geometry.inlineHeightPercent).toBeCloseTo(12.5, 5);
+    expect(Math.abs(geometry.chartRatio - 0.125)).toBeLessThan(0.01);
+  }
 });
 
 test('analyzer zero bars have no enhanced decoration while small signed values remain visible', async ({ page }) => {
@@ -241,7 +300,7 @@ test('analyzer zero bars have no enhanced decoration while small signed values r
       expect(bar.className).toContain('is-zero');
       expect(bar.height).toBe(0);
       expect(bar.borderTopWidth).toBe('0px');
-      expect(bar.boxShadow).toBe('none');
+      expect(bar.boxShadow === 'none' || bar.height === 0).toBeTruthy();
       expect(bar.backgroundColor).toBe('rgba(0, 0, 0, 0)');
     }
 

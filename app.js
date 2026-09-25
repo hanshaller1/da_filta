@@ -7,6 +7,7 @@ const {
   GLOBAL_CONTROL_DEFINITIONS,
   controlToBandGainDb,
   bandGainDbToControl,
+  bandGainDbToBipolarPercent,
   createInitialState,
   getEffectiveBandGains,
   setBandBaseGain: setStateBandBaseGain
@@ -14,6 +15,12 @@ const {
 const state = createInitialState();
 let audioEngine = null;
 let panic = () => {};
+// FILTERBANK editor visuals intentionally describe the manual FILTERBANK
+// controls, not the final DSP basis selected by another powered module.
+const getFilterbankDisplayBandGains = index => getEffectiveBandGains(state, index, {
+  maxBandBoostDb: getBandBoostDb(),
+  maxBandCutDb: getBandCutDb()
+});
 // Purely presentational: these switches are deliberately not part of the
 // application/DSP state or DEV-LABS snapshots.
 const ANALYZER_DISPLAY_DEFAULTS = Object.freeze({
@@ -35,7 +42,6 @@ const ANALYZER_DISPLAY_DEFAULTS = Object.freeze({
   peakGlow: true,
   smoothDecay: true,
   liveStatusStrip: true,
-  collapsedPreview: true,
   spectrumFill: true,
   spectrumTrail: false,
   energyBloom: false,
@@ -84,19 +90,24 @@ const mastheadThemeEditor = document.querySelector('.theme-editor');
 if (mastheadDevLab && mastheadThemeEditor && devLabToggle) mastheadDevLab.insertBefore(mastheadThemeEditor, devLabToggle);
 const devLabControls = document.querySelector('.dev-lab-panel .dev-lab-controls');
 const devLabGroups = new Map();
+const devLabGroupsOpenByDefault = new Set(['local-feedback', 'main']);
 [['input', 'INPUT'], ['keyboard', 'KEYBOARD'], ['filterbank', 'FILTERBANK'], ['local-feedback', 'LOCAL FEEDBACK'], ['main', 'FB ALL / MAIN'], ['negative-resonance', 'NEGATIVE RESONANCE'], ['resonator', 'LEGACY / RESONATOR LAB']].forEach(([value, label]) => {
   const group = document.createElement('section');
   group.className = 'dev-lab-group';
   group.dataset.devLabGroup = value;
-  group.innerHTML = `<div class="dev-lab-group-header"><h2>${label}</h2><button class="dev-lab-info-button" type="button" data-dev-lab-help="${value}" aria-label="Hilfe zu ${label}" aria-expanded="false" aria-controls="dev-lab-tooltip">i</button></div>`;
+  const bodyId = `dev-lab-group-${value}-body`;
+  const expanded = devLabGroupsOpenByDefault.has(value);
+  group.classList.toggle('is-collapsed', !expanded);
+  group.innerHTML = `<div class="dev-lab-group-header"><h2>${label}</h2><span class="dev-lab-group-header-actions"><button class="dev-lab-collapse-toggle" type="button" aria-expanded="${expanded}" aria-controls="${bodyId}" aria-label="${label} ${expanded ? 'einklappen' : 'ausklappen'}">${expanded ? '\u25BE' : '\u25B8'}</button><button class="dev-lab-info-button" type="button" data-dev-lab-help="${value}" aria-label="Hilfe zu ${label}" aria-expanded="false" aria-controls="dev-lab-tooltip">i</button></span></div><div class="dev-lab-group-body" id="${bodyId}"${expanded ? '' : ' hidden'}></div>`;
   devLabControls?.append(group);
-  devLabGroups.set(value, group);
+  devLabGroups.set(value, group.querySelector('.dev-lab-group-body'));
 });
 const SWEETSPOT_SLOTS = ['A', 'B', 'C', 'D'];
 const sweetspotGroup = document.createElement('section');
 sweetspotGroup.className = 'dev-lab-group sweetspot-group';
 sweetspotGroup.dataset.devLabGroup = 'sweetspots';
-sweetspotGroup.innerHTML = '<div class="dev-lab-group-header"><h2>SWEETSPOTS</h2></div><div class="sweetspot-list"></div>';
+sweetspotGroup.classList.add('is-collapsed');
+sweetspotGroup.innerHTML = '<div class="dev-lab-group-header"><h2>SWEETSPOTS</h2><span class="dev-lab-group-header-actions"><button class="dev-lab-collapse-toggle" type="button" aria-expanded="false" aria-controls="dev-lab-group-sweetspots-body" aria-label="SWEETSPOTS ausklappen">&#9656;</button></span></div><div class="dev-lab-group-body" id="dev-lab-group-sweetspots-body" hidden><div class="sweetspot-list"></div></div>';
 const sweetspotList = sweetspotGroup.querySelector('.sweetspot-list');
 const sweetspotRows = new Map();
 SWEETSPOT_SLOTS.forEach(slot => {
@@ -107,6 +118,20 @@ SWEETSPOT_SLOTS.forEach(slot => {
   sweetspotRows.set(slot, row);
 });
 devLabControls?.append(sweetspotGroup);
+devLabControls?.querySelectorAll('.dev-lab-collapse-toggle').forEach(button => {
+  button.addEventListener('click', () => {
+    const group = button.closest('.dev-lab-group');
+    const body = document.getElementById(button.getAttribute('aria-controls'));
+    if (!group || !body) return;
+    const expanded = button.getAttribute('aria-expanded') !== 'true';
+    body.hidden = !expanded;
+    group.classList.toggle('is-collapsed', !expanded);
+    button.setAttribute('aria-expanded', String(expanded));
+    const label = group.querySelector('h2')?.textContent || 'Gruppe';
+    button.setAttribute('aria-label', `${label} ${expanded ? 'einklappen' : 'ausklappen'}`);
+    button.textContent = expanded ? '\u25BE' : '\u25B8';
+  });
+});
 const groupForDevControl = control => {
   const attribute = control.querySelector('select')?.getAttributeNames().find(name => name.startsWith('data-')) ?? '';
   if (attribute === 'data-input-preamp-stage') return 'input';
@@ -137,7 +162,6 @@ const analyzerLegend = document.querySelector('.analyzer > .legend');
 analyzerLegend?.remove();
 const analyzer = document.querySelector('.analyzer');
 let analyzerFooter = null;
-let collapsedPreview = null;
 let clearAnalyzerHover = () => {};
 let hideAnalyzerDetails = () => {};
 const analyzerAxisX = document.querySelector('.chart-grid .axis-x');
@@ -153,26 +177,6 @@ if (analyzer && analyzerAxisX) {
   analyzer.append(analyzerFooter);
 }
 const filterbankWorkspace = document.querySelector('.fb-workspace');
-const responseCollapseButton = document.createElement('button');
-responseCollapseButton.type = 'button';
-responseCollapseButton.className = 'response-collapse-toggle';
-const setFilterbankResponseCollapsed = collapsed => {
-  filterbankWorkspace?.classList.toggle('is-collapsed', collapsed);
-  responseCollapseButton.setAttribute('aria-expanded', String(!collapsed));
-  responseCollapseButton.setAttribute('aria-label', collapsed ? 'Filterbank response ausklappen' : 'Filterbank response einklappen');
-  if (collapsedPreview) {
-    collapsedPreview.hidden = !collapsed || !analyzerDisplay.collapsedPreview;
-    hideAnalyzerDetails();
-    if (collapsed) scheduleAnalyzerRender();
-  }
-  responseCollapseButton.textContent = collapsed ? '▾' : '▴';
-};
-if (analyzerHeaderControls && filterbankWorkspace) {
-  setFilterbankResponseCollapsed(false);
-  analyzerHeaderControls.append(responseCollapseButton);
-  responseCollapseButton.addEventListener('click', () => setFilterbankResponseCollapsed(!filterbankWorkspace.classList.contains('is-collapsed')));
-}
-
 // This panel is deliberately a UI-only consumer of the existing worklet
 // diagnostics. It never sends a message back into the audio graph.
 const responseModeControl = document.createElement('div');
@@ -195,7 +199,7 @@ const ANALYZER_OPTION_GROUPS = [
   ['FEEDBACK', [['feedbackActivity', 'Feedback Activity'], ['selfOscillation', 'Self Oscillation', 'Markiert Bänder mit über Zeit stabiler, hoher Feedback-Energie.'], ['dominantBand', 'Dominant Band', 'Hebt den aktuellen Telemetrie-Kandidaten mit der höchsten Bandenergie hervor.'], ['feedbackEnergy', 'Feedback Energy']]],
   ['LEVELS', [['saturationIndicators', 'Saturation / Clip Indicators']]],
   ['STYLE', [['spectrumFill', 'Spectrum Fill', 'Füllt das Output-Spektrum dezent bis zur unteren Kante.'], ['spectrumTrail', 'Spectrum Trail', 'Zeigt einen kurzen, rein visuellen Nachlauf des Output-Spektrums.'], ['energyBloom', 'Energy Bloom', 'Hebt besonders energiereiche Frequenzbereiche dezent hervor.'], ['peakMarkers', 'Peak Markers', 'Zeigt kurzlebige Marker an ausgeprägten lokalen Spectrum-Peaks.'], ['enhancedBars', 'Enhanced Bars', 'Verfeinert die L/R-Control-Balken mit Verlauf und Top-Kante.']]],
-  ['VISUAL', [['peakGlow', 'Peak Glow'], ['smoothDecay', 'Smooth Decay'], ['liveStatusStrip', 'Live Status Strip'], ['collapsedPreview', 'Collapsed Preview']]]
+  ['VISUAL', [['peakGlow', 'Peak Glow'], ['smoothDecay', 'Smooth Decay'], ['liveStatusStrip', 'Live Status Strip']]]
 ];
 const analyzerOptions = document.createElement('div');
 analyzerOptions.className = 'analyzer-options';
@@ -296,7 +300,7 @@ const spectrumRenderer = (() => {
   let lastTrailCaptureAt = 0;
   const frequencyToX = (frequency, width) => Math.log(Math.max(minFrequency, Math.min(maxFrequency, frequency)) / minFrequency) / logFrequencyRange * width;
   const decibelsToY = (decibels, height) => (maxDecibels - Math.max(minDecibels, Math.min(maxDecibels, decibels))) / (maxDecibels - minDecibels) * height;
-  const shouldRender = () => visible && !filterbankWorkspace?.classList.contains('is-collapsed');
+  const shouldRender = () => visible;
   const updateButtons = () => {
     const barsFront = foreground === 'bars';
     spectrumBarsButton.classList.toggle('active', barsFront);
@@ -421,7 +425,6 @@ const spectrumRenderer = (() => {
     outputTrail = outputTrail.slice(0, 3);
     lastTrailCaptureAt = now;
   };
-  const effectiveGain = index => audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, { maxBandBoostDb: getBandBoostDb(), maxBandCutDb: getBandCutDb() });
   const drawFilterResponse = (channel, color) => {
     context.globalAlpha = .52;
     context.strokeStyle = color;
@@ -432,7 +435,7 @@ const spectrumRenderer = (() => {
       const frequency = minFrequency * Math.exp((x / cssWidth) * logFrequencyRange);
       let linearGain = 1;
       BAND_DEFINITIONS.forEach((band, index) => {
-        const gainDb = effectiveGain(index)[channel === 'left' ? 'leftDb' : 'rightDb'];
+        const gainDb = getFilterbankDisplayBandGains(index)[channel === 'left' ? 'leftDb' : 'rightDb'];
         const ratio = frequency / band.frequency;
         // The linear, no-feedback BPF magnitude is intentionally an
         // approximation: it communicates the configured bank, not a solver prediction.
@@ -516,7 +519,6 @@ const spectrumRenderer = (() => {
 window.FilterbankSpectrum = { frequencyToX, decibelsToY };
   return { setVisible, refresh, setForeground, getLayers: () => [...lastLayers] };
 })();
-responseCollapseButton.addEventListener('click', () => requestAnimationFrame(() => spectrumRenderer.refresh()));
 const responseLab = document.createElement('section');
 responseLab.className = 'response-dev-lab';
 responseLab.hidden = true;
@@ -593,14 +595,14 @@ const devLabTelemetry = (() => {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
   };
   const renderLog = () => {
-    if (responseMode !== 'dev-lab' || filterbankWorkspace?.classList.contains('is-collapsed') || debugConsole.hidden) return;
+    if (responseMode !== 'dev-lab' || debugConsole.hidden) return;
     const pinned = debugLog.scrollHeight - debugLog.scrollTop - debugLog.clientHeight < 4;
     debugLog.replaceChildren(...events.map(event => { const row = document.createElement('div'); row.className = `response-debug-event ${event.warning ? 'is-warning' : ''}`; row.innerHTML = `<time>${event.time}</time><span>${event.text}</span>`; return row; }));
     if (pinned) debugLog.scrollTop = debugLog.scrollHeight;
     debugMax.textContent = `SESSION MAX  LOCAL ${number(sessionMax.local)}  MAIN ${number(sessionMax.main)}  SAT IN ${number(sessionMax.saturator)}  SAT ACT ${(sessionMax.satActivity * 100).toFixed(0)} %  BAND ${BAND_DEFINITIONS[sessionMax.bandIndex]?.frequency ?? '—'} Hz  DOM ${(sessionMax.dominantMs / 1000).toFixed(1)} s  RESETS ${sessionMax.resets}`;
   };
   const appendLogRow = event => {
-    if (responseMode !== 'dev-lab' || filterbankWorkspace?.classList.contains('is-collapsed') || debugConsole.hidden) return;
+    if (responseMode !== 'dev-lab' || debugConsole.hidden) return;
     const pinned = debugLog.scrollHeight - debugLog.scrollTop - debugLog.clientHeight < 4;
     const row = document.createElement('div'); row.className = `response-debug-event ${event.warning ? 'is-warning' : ''}`; row.innerHTML = `<time>${event.time}</time><span>${event.text}</span>`;
     debugLog.append(row);
@@ -652,7 +654,7 @@ const devLabTelemetry = (() => {
     keys.forEach((key, keyIndex) => { context.strokeStyle = keyIndex ? getComputedStyle(document.documentElement).getPropertyValue('--secondary-text') : getComputedStyle(document.documentElement).getPropertyValue('--cyan'); context.lineWidth = 1.5; context.beginPath(); history.forEach((item, index) => { const x = history.length < 2 ? 0 : index * width / (maxHistory - 1); const y = height / 2 - finite(item[key]) / max * (height * .44); if (index === 0) context.moveTo(x, y); else context.lineTo(x, y); }); context.stroke(); });
   };
   const render = () => {
-    if (responseMode !== 'dev-lab' || filterbankWorkspace?.classList.contains('is-collapsed')) return;
+    if (responseMode !== 'dev-lab') return;
     if (!latest) { summary.textContent = 'NO AUDIO — keine Telemetrie verfügbar'; bands.replaceChildren(); detail.textContent = ''; return; }
     const { left, right } = latest; const dominant = dominantBand(latest); const energyMetrics = getAnalyzerBandEnergyMetrics(latest); const frequencies = BAND_DEFINITIONS.map(band => band.frequency);
     const items = [
@@ -746,7 +748,6 @@ const devLabTelemetry = (() => {
     const report = [`FILTERBANK DEBUG REPORT`, ...events.map(event => `${event.time}  ${event.text}`), '', `SESSION MAX`, `LOCAL ${number(sessionMax.local)} MAIN ${number(sessionMax.main)} SAT IN ${number(sessionMax.saturator)} SAT ACT ${(sessionMax.satActivity * 100).toFixed(0)} % BAND ${BAND_DEFINITIONS[sessionMax.bandIndex]?.frequency ?? '—'} Hz DOM ${(sessionMax.dominantMs / 1000).toFixed(1)} s RESETS ${sessionMax.resets}`].join('\n');
     try { await navigator.clipboard.writeText(report); copyState.textContent = 'COPIED'; setTimeout(() => { copyState.textContent = ''; }, 1200); } catch { copyState.textContent = 'COPY FAILED'; }
   });
-  responseCollapseButton.addEventListener('click', () => requestAnimationFrame(render));
   setMode('normal');
   return { receive, reset, render, startSession, getLatest: () => latest, getDominant: () => ({ index: dominant.index, stableMs: dominant.index === null ? 0 : performance.now() - dominant.startedAt }), getMetrics: () => latest ? telemetryMetrics(latest) : null, logEvent: log, eventCount: () => events.length, logStateChange: (label, before, after) => { if (before !== after) log(`${label} ${before} → ${after}`, { key: label, throttle: 350 }); }, logPanic: () => log('PANIC'), setAudioOff: () => { log('AUDIO STOP'); if (!frozen) { latest = null; audioLabel.textContent = 'NO AUDIO'; render(); } } };
 })();
@@ -996,14 +997,14 @@ const DEV_LAB_HELP = {
     default: '-12 dB', note: 'Experimenteller Kalibrierwert; kein bestätigter Erica-Hardwarewert.'
   },
   'data-spread-curve': {
-    title: 'SPREAD CURVE', what: 'Wählt die Kennlinie des CLASSIC-SPREAD-Offsets.',
-    scope: 'Nur FB MODE + CLASSIC: Ein gemeinsamer dB-Offset wird symmetrisch auf alle linken und rechten Band-Gains aufgeteilt. FB_CH_SELECT bleibt unverändert.',
-    values: [['LINEAR', 'Offset folgt direkt dem SPREAD-Wert.'], ['QUADRATIC', 'Geringe Wirkung um die Mitte, stärkerer Anstieg zum Maximum.'], ['SMOOTHSTEP', 'Weicher Verlauf an Mitte und Maximum.']],
-    default: 'LINEAR', note: 'DEV/LAB-Vergleich, keine finale Erica-Kennlinie.'
+    title: 'SPREAD CURVE', what: 'Kompatibilitätswert für ältere DEV/LAB-Snapshots.',
+    scope: 'Der globale SPREAD-Regler liefert jetzt bereits den konkreten dB-Offset. Deshalb verformt diese Auswahl den angezeigten Wert aktuell nicht.',
+    values: [['LINEAR', 'Keine zusätzliche Transformation.'], ['QUADRATIC', 'Gespeichert, derzeit ohne zusätzliche Transformation.'], ['SMOOTHSTEP', 'Gespeichert, derzeit ohne zusätzliche Transformation.']],
+    default: 'LINEAR', note: 'Bewusst nicht entfernt, damit bestehende DEV/LAB-Snapshots kompatibel bleiben.'
   },
   'data-spread-max-offset-db': {
     title: 'DEV SPREAD MAX OFFSET', what: 'Legt den maximalen CLASSIC-SPREAD-Offset pro Kanal fest.',
-    scope: 'Nur FB MODE + CLASSIC. Der Offset wird für jeden Kanal separat am aktuellen Band-Gain-Limit geclampet; Basisfaderwerte bleiben unverändert.',
+    scope: 'Legt unmittelbar Min/Max des globalen SPREAD-Reglers fest. Eine notwendige Bereichsklemmung materialisiert neue L/R-Bandwerte.',
     values: [['3 dB', 'Maximal ±3 dB pro Kanal.'], ['6 dB', 'Maximal ±6 dB pro Kanal.'], ['9 dB', 'Maximal ±9 dB pro Kanal.'], ['12 dB', 'Maximal ±12 dB pro Kanal.']],
     default: '6 dB', note: 'Neutraler Test-Startwert, keine Produktionsentscheidung.'
   },
@@ -1466,14 +1467,248 @@ document.addEventListener('pointerdown', event => { if (themeEditor && !themeEdi
 document.addEventListener('keydown', event => { if (event.key === 'Escape') setThemeEditorOpen(false); });
 window.DaFiltaThemeEditor = { applyCustomTheme, clearCustomTheme, getState: () => editorTheme && ({ ...editorTheme }) };
 const bands = document.querySelector('.bands');
-bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><div class="band-actions"><button class="band-action" type="button" data-feedback-band="${index}">FB</button><button class="band-action" type="button" data-mod-band="${index}">MOD</button></div><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
-bands.insertAdjacentHTML('afterbegin', '<div class="filterbank-panel-header"><strong>FILTERBANK</strong><span class="filterbank-panel-actions"><span class="filterbank-action-group filterbank-fb-all-group"></span><span class="filterbank-action-group filterbank-per-channel-group"><span class="filterbank-spread-label">SPREAD</span><button class="per-channel-toggle" type="button" aria-pressed="false">P/CH</button></span></span></div>');
+const modeTabs = [...document.querySelectorAll('[data-mode]')];
+const modePanels = [...document.querySelectorAll('[data-mode-panel]')];
+const filterbankPowerButton = document.querySelector('[data-module-power="filterbank"]');
+const filterPowerButton = document.querySelector('[data-module-power="filter"]');
+const filterTypeDefinitions = window.FilterShape.FILTER_TYPE_DEFINITIONS;
+const filterControlDefinitions = window.FilterShape.FILTER_CONTROL_DEFINITIONS;
+const filterTypeGroups = document.querySelector('[data-filter-type-groups]');
+const filterResponseDescriptor = document.querySelector('[data-filter-response-descriptor]');
+const filterFormantMarkers = document.querySelector('[data-filter-formant-markers]');
+const filterPrimaryControl = document.querySelector('[data-filter-primary-control]');
+const filterSecondaryControls = [...document.querySelectorAll('.filter-secondary-controls .filter-parameter-control')];
+const filterControlSlots = [filterPrimaryControl, ...filterSecondaryControls];
+const filterTypeGroupsDefinition = [
+  { label: 'CLASSIC', ids: ['lowpass', 'highpass', 'bandpass', 'notch'] },
+  { label: 'EQ / TONE / FORMANT', ids: ['bell', 'lowshelf', 'highshelf', 'tilt', 'baxandall', 'formant'] }
+];
+if (filterTypeGroups) filterTypeGroups.innerHTML = filterTypeGroupsDefinition.map(group => `<div class="filter-type-group"><strong>${group.label}</strong><div class="filter-type-options">${group.ids.map(id => filterTypeDefinitions.find(definition => definition.id === id)).filter(Boolean).map(definition => `<button type="button" data-filter-type="${definition.id}" role="option" aria-selected="false" aria-pressed="false">${definition.displayName}</button>`).join('')}</div></div>`).join('');
+const filterTypeButtons = [...document.querySelectorAll('[data-filter-type]')];
+const filterResponsePath = document.querySelector('[data-filter-response-path]');
+const filterResponseMarkers = document.querySelector('[data-filter-response-markers]');
+const filterResponseCeiling = document.querySelector('[data-filter-response-ceiling]');
+const filterResponseZeroLabel = document.querySelector('[data-filter-response-zero-label]');
+const filterResponseZeroLine = document.querySelector('[data-filter-response-zero-line]');
+const filterResponseFloor = document.querySelector('[data-filter-response-floor]');
+const filterResponseGrid = document.querySelector('[data-filter-response-grid]');
+const filterFrequencyMarker = document.querySelector('[data-filter-frequency-marker]');
+const filterFrequencyMarkerLabel = document.querySelector('[data-filter-frequency-marker-label]');
+const formatFilterFrequency = value => {
+  const frequency = window.FilterShape.normalizeFilterFrequencyHz(value);
+  if (frequency < 1000) return `${Math.round(frequency)} Hz`;
+  return `${(frequency / 1000).toFixed(1).replace(/\.0$/, '')} kHz`;
+};
+const getFilterModeShape = () => audioEngine?.filterModeBandGainsDb ?? window.FilterShape.createFilterShape({
+  ...window.FilterShape.shapeParametersFromState(state),
+  bandDefinitions: BAND_DEFINITIONS,
+  maxBandBoostDb: Number(bandBoostSelect?.value ?? 12),
+  maxBandCutDb: Number(bandCutSelect?.value ?? 12)
+});
+const filterResponsePathData = points => {
+  if (!points.length) return '';
+  if (points.length === 1) return `M${points[0].x} ${points[0].y}`;
+  let path = `M${points[0].x} ${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const midpointX = (current.x + next.x) / 2;
+    path += ` C${midpointX} ${current.y.toFixed(2)} ${midpointX} ${next.y.toFixed(2)} ${next.x} ${next.y}`;
+  }
+  return path;
+};
+const formatFilterControl = (definition, value) => {
+  if (definition.format === 'frequency') return formatFilterFrequency(value);
+  if (definition.format === 'db') return `${value > 0 ? '+' : ''}${Number(value).toFixed(1)} dB`;
+  if (definition.format === 'semitones') return `${value > 0 ? '+' : ''}${Number(value).toFixed(1).replace(/\.0$/, '')} st`;
+  if (definition.format === 'vowel') {
+    const position = Math.min(4, Math.max(0, Number(value)));
+    const first = Math.floor(position);
+    const fraction = position - first;
+    return fraction < .005 || first === 4 ? window.FilterShape.FORMANT_VOWELS[first]
+      : `${window.FilterShape.FORMANT_VOWELS[first]} → ${window.FilterShape.FORMANT_VOWELS[first + 1]} ${Math.round(fraction * 100)} %`;
+  }
+  return `${Math.round(value)} %`;
+};
+const renderFilterControl = (slot, key, boostDb, cutDb) => {
+  const definition = filterControlDefinitions[key];
+  const input = slot.querySelector('input');
+  const label = slot.querySelector('span');
+  const output = slot.querySelector('output');
+  const disabled = Boolean(definition.disabled || key === 'disabled');
+  label.textContent = definition.label;
+  input.min = String(definition.min === 'cut' ? -cutDb : definition.min);
+  input.max = String(definition.max === 'boost' ? boostDb : definition.max);
+  input.step = String(definition.step);
+  input.getAttributeNames().filter(name => name.startsWith('data-filter-') && name !== 'data-filter-control').forEach(name => input.removeAttribute(name));
+  if (key !== 'disabled') input.setAttribute(`data-filter-${key === 'width' || key === 'widthDisabled' ? 'bandwidth' : key}`, '');
+  input.dataset.filterControl = key;
+  input.setAttribute('aria-label', `Filter ${definition.label.toLowerCase()}`);
+  input.disabled = disabled;
+  slot.classList.toggle('is-disabled', disabled);
+  const value = definition.field ? state[definition.field] : 0;
+  const displayValue = definition.format === 'db' ? Math.min(Number(input.max), Math.max(Number(input.min), value)) : value;
+  input.value = definition.format === 'frequency' ? String(window.FilterShape.frequencyToSlider(displayValue)) : String(displayValue);
+  output.textContent = definition.field ? formatFilterControl(definition, displayValue) : '—';
+  if (definition.format === 'vowel') input.setAttribute('list', 'filter-vowel-ticks'); else input.removeAttribute('list');
+};
+const renderFilterMode = () => {
+  const boostDb = Math.max(1, Number(audioEngine?.maxBandBoostDb ?? bandBoostSelect?.value ?? 12));
+  const cutDb = Math.max(1, Number(audioEngine?.maxBandCutDb ?? bandCutSelect?.value ?? 12));
+  const gains = getFilterModeShape();
+  const graphTop = 12;
+  const graphBottom = 220;
+  const graphLeft = 50;
+  const graphRight = 950;
+  const graphViewBoxHeight = 240;
+  const graphRange = boostDb + cutDb;
+  const zeroY = graphTop + boostDb / graphRange * (graphBottom - graphTop);
+  const gainToY = gain => graphTop + (boostDb - Math.max(-cutDb, Math.min(boostDb, gain))) / graphRange * (graphBottom - graphTop);
+  const points = gains.map((gain, index) => ({ x: 50 + index * 100, y: gainToY(gain) }));
+  const frequencyMinHz = BAND_DEFINITIONS[0].frequency;
+  const frequencyMaxHz = BAND_DEFINITIONS[BAND_DEFINITIONS.length - 1].frequency;
+  const typeDefinition = filterTypeDefinitions.find(definition => definition.id === state.filterType) || filterTypeDefinitions[0];
+  const markerControl = filterControlDefinitions[typeDefinition.marker];
+  const markerFrequency = markerControl?.field ? state[markerControl.field] : state.filterBaxandallCenterHz;
+  const frequencyPosition = Math.log(markerFrequency / frequencyMinHz) / Math.log(frequencyMaxHz / frequencyMinHz);
+  const frequencyX = graphLeft + frequencyPosition * (graphRight - graphLeft);
+  const regularGridYs = Array.from({ length: 5 }, (_, index) => graphTop + index / 4 * (graphBottom - graphTop));
+  if (filterResponseGrid) filterResponseGrid.innerHTML = `${regularGridYs.map(y => `<line class="filter-response-grid-line" x1="0" y1="${y.toFixed(2)}" x2="1000" y2="${y.toFixed(2)}"></line>`).join('')}<line class="filter-response-grid-line filter-response-zero-grid-line" data-filter-response-zero-grid-line x1="0" y1="${zeroY.toFixed(2)}" x2="1000" y2="${zeroY.toFixed(2)}"></line>`;
+  filterFrequencyMarker?.setAttribute('x1', frequencyX.toFixed(2));
+  filterFrequencyMarker?.setAttribute('x2', frequencyX.toFixed(2));
+  if (filterFrequencyMarker) filterFrequencyMarker.hidden = typeDefinition.marker === 'formants';
+  if (filterFormantMarkers) filterFormantMarkers.innerHTML = typeDefinition.marker === 'formants'
+    ? window.FilterShape.formantCenters(state.filterFormantVowel, state.filterFormantShiftSemitones).map((frequency, index) => {
+      const x = graphLeft + Math.log(Math.max(frequencyMinHz, Math.min(frequencyMaxHz, frequency)) / frequencyMinHz) / Math.log(frequencyMaxHz / frequencyMinHz) * (graphRight - graphLeft);
+      return `<line x1="${x.toFixed(2)}" y1="${graphTop}" x2="${x.toFixed(2)}" y2="${graphBottom}"><title>F${index + 1}: ${Math.round(frequency)} Hz</title></line>`;
+    }).join('') : '';
+  filterResponsePath?.setAttribute('d', filterResponsePathData(points));
+  if (filterResponseMarkers) filterResponseMarkers.innerHTML = points.map((point, index) => `<line x1="${point.x}" y1="${zeroY.toFixed(2)}" x2="${point.x}" y2="${point.y.toFixed(2)}"></line><circle cx="${point.x}" cy="${point.y.toFixed(2)}" r="3"><title>${BAND_DEFINITIONS[index].label}: ${gains[index].toFixed(1)} dB</title></circle>`).join('');
+  filterResponseZeroLine?.setAttribute('y1', zeroY.toFixed(2));
+  filterResponseZeroLine?.setAttribute('y2', zeroY.toFixed(2));
+  if (filterResponseCeiling) { filterResponseCeiling.textContent = `+${boostDb} dB`; filterResponseCeiling.style.top = `${graphTop / graphViewBoxHeight * 100}%`; }
+  if (filterResponseZeroLabel) filterResponseZeroLabel.style.top = `${zeroY / graphViewBoxHeight * 100}%`;
+  if (filterResponseFloor) { filterResponseFloor.textContent = `−${cutDb} dB`; filterResponseFloor.style.top = `${graphBottom / graphViewBoxHeight * 100}%`; }
+  if (filterFrequencyMarkerLabel) {
+    filterFrequencyMarkerLabel.hidden = typeDefinition.marker === 'formants';
+    filterFrequencyMarkerLabel.textContent = formatFilterFrequency(markerFrequency);
+    filterFrequencyMarkerLabel.style.left = `${frequencyX / 10}%`;
+    filterFrequencyMarkerLabel.classList.toggle('is-start', frequencyPosition < 0.08);
+    filterFrequencyMarkerLabel.classList.toggle('is-end', frequencyPosition > 0.92);
+  }
+  if (filterResponseDescriptor) filterResponseDescriptor.textContent = typeDefinition.descriptor;
+  filterTypeButtons.forEach(button => {
+    const active = button.dataset.filterType === state.filterType;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+    button.setAttribute('aria-pressed', String(active));
+  });
+  [typeDefinition.primary, ...typeDefinition.secondary].forEach((key, index) => renderFilterControl(filterControlSlots[index], key, boostDb, cutDb));
+};
+const updateFilterState = values => {
+  Object.assign(state, window.ResonantState.normalizeFilterState({ ...state, ...values }));
+  audioEngine?.setFilterState(state);
+  renderFilterMode();
+};
+filterTypeButtons.forEach(button => button.addEventListener('click', () => {
+  updateFilterState({ filterType: button.dataset.filterType });
+}));
+filterControlSlots.forEach(slot => slot.querySelector('input')?.addEventListener('input', event => {
+  const definition = filterControlDefinitions[event.target.dataset.filterControl];
+  if (!definition?.field) return;
+  const value = definition.format === 'frequency' ? window.FilterShape.sliderToFrequency(event.target.value) : Number(event.target.value);
+  updateFilterState({ [definition.field]: value });
+}));
+renderFilterMode();
+window.FilterMode = Object.freeze({
+  getState: () => ({
+    selectedWorkspaceMode: state.selectedWorkspaceMode,
+    filterbankEnabled: state.filterbankEnabled,
+    filterEnabled: state.filterEnabled,
+    filterType: state.filterType,
+    filterFrequencyHz: state.filterFrequencyHz,
+    filterSlope: state.filterSlope,
+    filterBandwidth: state.filterBandwidth,
+    filterResonance: state.filterResonance,
+    filterDepth: state.filterDepth,
+    ...Object.fromEntries(window.ResonantState.FILTER_EXTRA_FIELDS.map(field => [field, state[field]]))
+  }),
+  getShape: () => [...getFilterModeShape()],
+  getManualBandState: () => ({ left: [...state.bandGainLeft], right: [...state.bandGainRight], perChannelBands: state.perChannelBands, linked: [...state.bandChannelLinked] }),
+  getAudioEngine: () => audioEngine
+});
+const renderFilterPower = () => {
+  if (filterbankPowerButton) {
+    filterbankPowerButton.setAttribute('aria-pressed', String(state.filterbankEnabled));
+    filterbankPowerButton.setAttribute('aria-label', state.filterbankEnabled ? 'FILTERBANK ausschalten' : 'FILTERBANK einschalten');
+  }
+  if (filterPowerButton) {
+    filterPowerButton.setAttribute('aria-pressed', String(state.filterEnabled));
+    filterPowerButton.setAttribute('aria-label', state.filterEnabled ? 'FILTER ausschalten' : 'FILTER einschalten');
+  }
+};
+const setFilterbankEnabled = enabled => {
+  state.filterbankEnabled = Boolean(enabled);
+  audioEngine?.setFilterbankEnabled(state.filterbankEnabled);
+  renderFilterPower();
+  return state.filterbankEnabled;
+};
+const setFilterEnabled = enabled => {
+  state.filterEnabled = Boolean(enabled);
+  audioEngine?.setFilterEnabled(state.filterEnabled);
+  renderFilterPower();
+  updatePerChannelBands();
+  return state.filterEnabled;
+};
+renderFilterPower();
+filterbankPowerButton?.addEventListener('click', event => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.detail === 0) return;
+  setFilterbankEnabled(!state.filterbankEnabled);
+});
+filterPowerButton?.addEventListener('click', event => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.detail === 0) return;
+  setFilterEnabled(!state.filterEnabled);
+});
+const selectMode = mode => {
+  if (!modePanels.some(panel => panel.dataset.modePanel === mode)) return;
+  state.selectedWorkspaceMode = mode;
+  modeTabs.forEach(tab => {
+    const selected = tab.dataset.mode === mode;
+    tab.classList.toggle('active', selected);
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  });
+  modePanels.forEach(panel => { panel.hidden = panel.dataset.modePanel !== mode; });
+  if (mode === 'filter') renderFilterMode();
+};
+modeTabs.forEach((tab, index) => {
+  tab.tabIndex = tab.classList.contains('active') ? 0 : -1;
+  tab.addEventListener('click', () => selectMode(tab.dataset.mode));
+  tab.addEventListener('keydown', event => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? modeTabs.length - 1
+        : (index + (event.key === 'ArrowDown' ? 1 : -1) + modeTabs.length) % modeTabs.length;
+    modeTabs[nextIndex].focus();
+    selectMode(modeTabs[nextIndex].dataset.mode);
+  });
+});
+bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><i class="classic-channel-marker classic-channel-marker-left" data-classic-marker="${index}-left" aria-hidden="true"></i><i class="classic-channel-marker classic-channel-marker-right" data-classic-marker="${index}-right" aria-hidden="true"></i><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
+const filterbankBandControls = document.querySelector('.filterbank-band-controls');
+if (filterbankBandControls) filterbankBandControls.innerHTML = BAND_DEFINITIONS.map((band, index) => `<div class="filterbank-band-control" data-filterbank-band-control="${index}" aria-label="${band.label} Filterbank Controls"><button class="band-action" type="button" data-feedback-band="${index}" aria-pressed="false">FB</button><button class="band-action" type="button" data-mod-band="${index}" aria-pressed="false">MOD</button></div>`).join('');
 document.querySelectorAll('.band-card').forEach((card, index) => {
   card.querySelector('.fader-wrap')?.classList.add('center-fader');
-  const channelFader = (channel, label) => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">${label} 0.0 dB</output></div>`;
-  card.insertAdjacentHTML('beforeend', `<div class="channel-faders">${channelFader('left', 'L')}<button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg></button>${channelFader('right', 'R')}</div>`);
+  const channelFader = channel => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;
+  card.insertAdjacentHTML('beforeend', `<div class="channel-faders">${channelFader('left')}<button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg></button>${channelFader('right')}</div>`);
 });
-const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume') return `${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
+const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume'||name==='spread') return `${name === 'spread' && Number(value) > 0 ? '+' : ''}${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
 
 const bars = document.querySelector('.bars');
 bars.innerHTML = Array.from({ length: BAND_COUNT }, (_, i) => `<div class="bar-pair" data-analyzer-band="${i}" tabindex="0" aria-label="Band ${i + 1}, ${BAND_DEFINITIONS[i].label}"><i data-channel="left"></i><i data-channel="right"></i><b class="analyzer-peak analyzer-peak-left"></b><b class="analyzer-peak analyzer-peak-right"></b><small class="analyzer-band-delta"></small><em class="analyzer-feedback-marker" aria-hidden="true">FB</em><em class="analyzer-osc-marker" aria-hidden="true">OSC</em></div>`).join('');
@@ -1492,23 +1727,13 @@ analyzerSaturationBadge.className = 'analyzer-saturation-indicator';
 analyzerSaturationBadge.hidden = true;
 analyzerSaturationBadge.textContent = 'SAT';
 responseChart?.append(analyzerSaturationBadge);
-const collapsedAnalyzerDetail = document.createElement('div');
-collapsedAnalyzerDetail.className = 'collapsed-analyzer-detail';
-collapsedAnalyzerDetail.hidden = true;
-collapsedPreview = document.createElement('div');
-collapsedPreview.className = 'collapsed-analyzer-preview';
-collapsedPreview.hidden = true;
-collapsedPreview.innerHTML = '<svg viewBox="0 0 1000 42" preserveAspectRatio="none" aria-hidden="true"><path></path></svg>' + Array.from({ length: BAND_COUNT }, (_, index) => `<button type="button" data-collapsed-band="${index}" aria-label="Band ${index + 1}, ${BAND_DEFINITIONS[index].label}"><i></i><span>${index + 1}</span></button>`).join('');
-analyzerFooter?.append(collapsedPreview, collapsedAnalyzerDetail);
 const analyzerMotion = Array.from({ length: BAND_COUNT }, () => ({ left: 0, right: 0, peakLeft: 0, peakRight: 0, peakLeftAt: 0, peakRightAt: 0 }));
 const analyzerOscillation = Array.from({ length: BAND_COUNT }, () => ({ since: 0, active: false }));
-const collapsedPreviewLevels = Array(BAND_COUNT).fill(0);
 let analyzerAnimationFrame = 0;
 let analyzerLastFrame = performance.now();
 let analyzerDetailMode = 'hidden';
 let hoveredAnalyzerBand = null;
 const toDb = value => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)} dB`;
-const getAnalyzerEffective = index => audioEngine?.getEffectiveBandGains(index) ?? getEffectiveBandGains(state, index, { maxBandBoostDb: getBandBoostDb(), maxBandCutDb: getBandCutDb(), spread: state.perChannelBands ? 0 : state.spread });
 const getAnalyzerTelemetry = () => devLabTelemetry.getLatest?.() || null;
 const getEnergyPair = (packet, index) => {
   const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band';
@@ -1517,51 +1742,47 @@ const getEnergyPair = (packet, index) => {
   return (Number(left?.[index]) || 0) + (Number(right?.[index]) || 0);
 };
 const analyzerBandInfo = index => {
-  const effective = getAnalyzerEffective(index);
+  const display = getFilterbankDisplayBandGains(index);
   const packet = getAnalyzerTelemetry();
   const feedback = Boolean(state.feedbackBandLeft[index] || state.feedbackBandRight[index]);
-  return { index, effective, delta: effective.leftDb - effective.rightDb, feedback, dominant: devLabTelemetry.getDominant?.().index === index, oscillating: analyzerOscillation[index].active, energy: getEnergyPair(packet, index) };
+  return { index, display, delta: display.leftDb - display.rightDb, feedback, dominant: devLabTelemetry.getDominant?.().index === index, oscillating: analyzerOscillation[index].active, energy: getEnergyPair(packet, index) };
 };
 const detailText = index => {
   const info = analyzerBandInfo(index);
-  return [`BAND ${index + 1} · ${BAND_DEFINITIONS[index].label}`, `L ${toDb(info.effective.leftDb)}`, `R ${toDb(info.effective.rightDb)}`, ...(analyzerDisplay.spreadDelta || Math.abs(info.delta) > .005 ? [`Δ ${toDb(info.delta)}`] : []), info.feedback ? 'FB ON' : 'FB OFF', ...(state.feedbackAllLeft || state.feedbackAllRight ? ['MAIN'] : []), ...(info.dominant ? ['DOM'] : []), ...(info.oscillating ? ['OSC'] : [])];
+  return [`BAND ${index + 1} · ${BAND_DEFINITIONS[index].label}`, `L ${toDb(info.display.leftDb)}`, `R ${toDb(info.display.rightDb)}`, ...(analyzerDisplay.spreadDelta || Math.abs(info.delta) > .005 ? [`Δ ${toDb(info.delta)}`] : []), info.feedback ? 'FB ON' : 'FB OFF', ...(state.feedbackAllLeft || state.feedbackAllRight ? ['MAIN'] : []), ...(info.dominant ? ['DOM'] : []), ...(info.oscillating ? ['OSC'] : [])];
 };
 const hideDetailElement = detail => { detail.hidden = true; };
 hideAnalyzerDetails = () => {
   hoveredAnalyzerBand = null;
   analyzerDetailMode = 'hidden';
   hideDetailElement(analyzerDetail);
-  hideDetailElement(collapsedAnalyzerDetail);
   bars.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
-  collapsedPreview?.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
 };
 clearAnalyzerHover = () => {
   hoveredAnalyzerBand = null;
   bars.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
-  collapsedPreview?.querySelectorAll('.is-hovered').forEach(element => element.classList.remove('is-hovered'));
-  hideDetailElement(collapsedAnalyzerDetail);
   if (analyzerDetailMode === 'hover') {
     analyzerDetailMode = 'hidden';
     hideDetailElement(analyzerDetail);
   }
 };
-const renderAnalyzerDetail = (index, anchor, collapsed = false) => {
-  const detail = collapsed ? collapsedAnalyzerDetail : analyzerDetail;
-  const container = collapsed ? analyzerFooter : responseChart;
+const renderAnalyzerDetail = (index, anchor) => {
+  const detail = analyzerDetail;
+  const container = responseChart;
   detail.replaceChildren(...detailText(index).map((line, lineIndex) => { const row = document.createElement(lineIndex === 0 ? 'strong' : 'span'); row.textContent = line; return row; }));
   detail.hidden = false;
   const containerRect = container.getBoundingClientRect();
   const rect = anchor?.getBoundingClientRect?.() || containerRect;
   detail.style.left = `${Math.max(4, Math.min(containerRect.width - 116, rect.left - containerRect.left + rect.width / 2 - 58))}px`;
-  detail.style.top = collapsed ? '2px' : `${Math.max(4, Math.min(containerRect.height - 82, rect.top - containerRect.top + 8))}px`;
+  detail.style.top = `${Math.max(4, Math.min(containerRect.height - 82, rect.top - containerRect.top + 8))}px`;
 };
-const showAnalyzerHover = (index, anchor, collapsed = false) => {
+const showAnalyzerHover = (index, anchor) => {
   if (!analyzerDisplay.hoverValues) return;
   hideAnalyzerDetails();
   hoveredAnalyzerBand = index;
   analyzerDetailMode = 'hover';
   anchor?.classList.add('is-hovered');
-  renderAnalyzerDetail(index, anchor, collapsed);
+  renderAnalyzerDetail(index, anchor);
 };
 const refreshStatusStrip = () => {
   if (!liveStatusStrip) return;
@@ -1575,7 +1796,7 @@ const refreshStatusStrip = () => {
     Number(engine.commonBusDrive) > 1 ? `DRIVE ${engine.commonBusDrive}` : null,
     engine.feedbackTopology ? `FB ${String(engine.feedbackTopology).replaceAll('-', ' ').toUpperCase()}` : null,
     engine.feedbackCore ? String(engine.feedbackCore).toUpperCase() : null,
-    `SPREAD ${state.spread >= 0 ? '+' : ''}${Math.round(state.spread * 100)}`,
+    `SPREAD ${state.spread >= 0 ? '+' : ''}${Number(state.spread).toFixed(1)} dB`,
     `OUT ${Number(state.volume).toFixed(1)} dB`,
     engine.feedbackTap ? (engine.feedbackTap === 'post-gain' ? 'POST' : 'PRE') : null,
     mainActive ? 'MAIN' : null,
@@ -1612,31 +1833,6 @@ const renderTelemetryIndicators = () => {
   const saturated = Math.max(Number(left?.saturationActiveFrames) || 0, Number(right?.saturationActiveFrames) || 0) / frames > .01 || Math.max(Math.abs(Number(left?.wetPeak) || 0), Math.abs(Number(right?.wetPeak) || 0)) >= .995;
   analyzerSaturationBadge.hidden = !analyzerDisplay.saturationIndicators || !saturated;
 };
-const renderCollapsedPreview = index => {
-  const button = collapsedPreview.querySelector(`[data-collapsed-band="${index}"]`);
-  if (!button) return;
-  const motion = analyzerMotion[index];
-  const packet = getAnalyzerTelemetry();
-  const energyMetrics = getAnalyzerBandEnergyMetrics(packet);
-  const peakEnergy = Math.max(...energyMetrics.energies);
-  const audioLevel = !energyMetrics.isSilent && peakEnergy > 0 ? Math.min(1, Math.sqrt(energyMetrics.energies[index] / peakEnergy)) : 0;
-  const targetLevel = packet && !energyMetrics.isSilent ? Math.min(1, Math.max(Math.abs(motion.left), Math.abs(motion.right)) / 260 + audioLevel * .82) : 0;
-  const previousLevel = collapsedPreviewLevels[index];
-  const level = targetLevel >= previousLevel ? targetLevel : previousLevel + (targetLevel - previousLevel) * .13;
-  collapsedPreviewLevels[index] = level;
-  button.style.setProperty('--preview-level', level.toFixed(3));
-  const info = analyzerBandInfo(index);
-  button.classList.toggle('is-active', info.feedback || info.dominant || info.oscillating);
-  button.title = detailText(index).join('\n');
-};
-const renderCollapsedPreviewLine = () => {
-  const path = collapsedPreview.querySelector('svg path');
-  if (!path) return;
-  const points = collapsedPreviewLevels.map((level, index) => ({ x: (index + .5) * 100, y: 35 - level * 28 }));
-  const edgePoints = [{ x: 0, y: points[0].y }, ...points, { x: 1000, y: points.at(-1).y }];
-  const d = edgePoints.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
-  path.setAttribute('d', d);
-};
 const animateAnalyzer = now => {
   analyzerAnimationFrame = 0;
   const elapsed = Math.min(100, Math.max(1, now - analyzerLastFrame));
@@ -1645,7 +1841,7 @@ const animateAnalyzer = now => {
   updateOscillation();
   for (let index = 0; index < BAND_COUNT; index += 1) {
     const info = analyzerBandInfo(index); const motion = analyzerMotion[index];
-    [['left', info.effective.leftControl, 'peakLeft', 'peakLeftAt'], ['right', info.effective.rightControl, 'peakRight', 'peakRightAt']].forEach(([channel, target, peakKey, peakAtKey]) => {
+    [['left', info.display.leftControl, 'peakLeft', 'peakLeftAt'], ['right', info.display.rightControl, 'peakRight', 'peakRightAt']].forEach(([channel, target, peakKey, peakAtKey]) => {
       const previous = motion[channel];
       const current = !analyzerDisplay.smoothDecay || Math.abs(target) >= Math.abs(previous) ? target : previous + (target - previous) * (1 - Math.exp(-elapsed / 150));
       motion[channel] = current;
@@ -1656,28 +1852,26 @@ const animateAnalyzer = now => {
     });
     const pair = bars.querySelector(`[data-analyzer-band="${index}"]`);
     if (pair) {
-      pair.dataset.leftDb = info.effective.leftDb.toFixed(3); pair.dataset.rightDb = info.effective.rightDb.toFixed(3); pair.dataset.deltaDb = info.delta.toFixed(3);
+      pair.dataset.leftDb = info.display.leftDb.toFixed(3); pair.dataset.rightDb = info.display.rightDb.toFixed(3); pair.dataset.deltaDb = info.delta.toFixed(3);
       pair.classList.toggle('has-feedback', analyzerDisplay.feedbackActivity && info.feedback);
       pair.classList.toggle('is-dominant', analyzerDisplay.dominantBand && info.dominant);
       pair.classList.toggle('is-oscillating', analyzerDisplay.selfOscillation && info.oscillating);
       pair.classList.toggle('has-glow', analyzerDisplay.peakGlow && Math.max(Math.abs(motion.left), Math.abs(motion.right)) > 4);
       pair.classList.toggle('hide-lr-bars', !analyzerDisplay.lrBars);
       const [leftBar, rightBar] = pair.querySelectorAll('i[data-channel]');
-      // These bars are the current effective control values, not an audio
-      // meter. They intentionally bypass visual decay and change on this frame.
-      renderAnalyzerBar(leftBar, info.effective.leftControl);
-      renderAnalyzerBar(rightBar, info.effective.rightControl);
+      // These bars are manual FILTERBANK controls, not an audio meter or the
+      // final effective DSP shape. They update immediately without decay.
+      renderAnalyzerBar(leftBar, info.display.leftDb);
+      renderAnalyzerBar(rightBar, info.display.rightDb);
       pair.querySelector('.analyzer-band-delta').textContent = `Δ ${toDb(info.delta)}`;
       pair.querySelector('.analyzer-peak-left').style.setProperty('--peak-level', (Math.sign(motion.left || 1) * motion.peakLeft / 2).toFixed(2));
       pair.querySelector('.analyzer-peak-right').style.setProperty('--peak-level', (Math.sign(motion.right || 1) * motion.peakRight / 2).toFixed(2));
     }
     analyzerAxisX?.children[index]?.classList.toggle('is-dominant', analyzerDisplay.dominantBand && info.dominant);
-    if (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview) renderCollapsedPreview(index);
   }
-  if (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview) renderCollapsedPreviewLine();
   refreshStatusStrip();
   renderTelemetryIndicators();
-  if (needsFrame || (filterbankWorkspace?.classList.contains('is-collapsed') && analyzerDisplay.collapsedPreview)) analyzerAnimationFrame = requestAnimationFrame(animateAnalyzer);
+  if (needsFrame) analyzerAnimationFrame = requestAnimationFrame(animateAnalyzer);
 };
 const scheduleAnalyzerRender = () => { if (!analyzerAnimationFrame) analyzerAnimationFrame = requestAnimationFrame(animateAnalyzer); };
 const setAnalyzerDisplayOption = (key, enabled) => {
@@ -1690,7 +1884,6 @@ const setAnalyzerDisplayOption = (key, enabled) => {
   if (key === 'frequencyLabels') analyzerFooter?.classList.toggle('hide-frequency-labels', !analyzerDisplay[key]);
   if (key === 'bandRegions') responseChart?.classList.toggle('hide-band-regions', !analyzerDisplay[key]);
   if (key === 'grid') responseChart?.classList.toggle('hide-grid', !analyzerDisplay[key]);
-  if (key === 'collapsedPreview') collapsedPreview.hidden = !analyzerDisplay[key] || !filterbankWorkspace?.classList.contains('is-collapsed');
   spectrumRenderer.refresh(); scheduleAnalyzerRender();
 };
 window.FilterbankAnalyzer = { getDisplayState: () => ({ ...analyzerDisplay }), getDetailState: () => ({ mode: analyzerDetailMode, hoveredBand: hoveredAnalyzerBand }), setDisplayOption: setAnalyzerDisplayOption, getBandInfo: index => analyzerBandInfo(index), refresh: scheduleAnalyzerRender, getSpectrumLayers: () => spectrumRenderer.getLayers() };
@@ -1698,30 +1891,49 @@ const ANALYZER_ZERO_EPSILON = 1e-9;
 const renderAnalyzerBar = (bar, value) => {
   const numericValue = Number(value);
   const isZero = Math.abs(numericValue) < ANALYZER_ZERO_EPSILON;
-  const height = numericValue > BAND_GAIN_NEUTRAL
-    ? (numericValue / BAND_GAIN_MAX) * 50
-    : numericValue < BAND_GAIN_NEUTRAL
-      ? (Math.abs(numericValue) / Math.abs(BAND_GAIN_MIN)) * 50
-      : 0;
+  const height = Math.abs(bandGainDbToBipolarPercent(numericValue, getBandBoostDb(), getBandCutDb())) / 2;
   bar.classList.toggle('negative', numericValue < BAND_GAIN_NEUTRAL);
   bar.classList.toggle('is-zero', isZero);
   bar.style.height = `${height}%`;
 };
 const updateAnalyzerBand = index => {
   const [leftBar, rightBar] = document.querySelectorAll(`[data-analyzer-band="${index}"] i`);
-  const effective = getAnalyzerEffective(index);
-  renderAnalyzerBar(leftBar, effective.leftControl);
-  renderAnalyzerBar(rightBar, effective.rightControl);
+  const display = getFilterbankDisplayBandGains(index);
+  renderAnalyzerBar(leftBar, display.leftDb);
+  renderAnalyzerBar(rightBar, display.rightDb);
   scheduleAnalyzerRender();
 };
 const getBandBoostDb = () => Number(bandBoostSelect?.value ?? 12);
 const getBandCutDb = () => Number(bandCutSelect?.value ?? 12);
+const renderAnalyzerScale = () => {
+  const boost = getBandBoostDb(); const cut = getBandCutDb();
+  const boostLabel = document.querySelector('[data-axis-boost]');
+  const cutLabel = document.querySelector('[data-axis-cut]');
+  if (boostLabel) boostLabel.textContent = `+${boost} dB`;
+  if (cutLabel) cutLabel.textContent = `−${cut} dB`;
+};
 const formatBandSliderValue = value => {
   const gainDb = controlToBandGainDb(value, getBandBoostDb(), getBandCutDb());
   const normalizedGainDb = Math.abs(gainDb) < 1e-9 ? 0 : gainDb;
   return `${normalizedGainDb > 0 ? '+' : ''}${normalizedGainDb.toFixed(1)} dB`;
 };
 const renderBandSliderValues = () => faders.forEach((_, index) => renderBand(index));
+// SPREAD is an explicit writer to the authoritative L/R pair. Keep the
+// pre-spread center stable across consecutive writes so channel clamping
+// cannot move that center. Any non-SPREAD band edit invalidates the anchor.
+const spreadCenterDb = Array(BAND_COUNT).fill(0);
+const spreadCenterDirty = Array(BAND_COUNT).fill(true);
+const invalidateSpreadCenter = index => { spreadCenterDirty[index] = true; };
+const invalidateAllSpreadCenters = () => spreadCenterDirty.fill(true);
+const getSpreadCenterDb = (index, boost, cut) => {
+  if (spreadCenterDirty[index]) {
+    const leftDb = controlToBandGainDb(state.bandGainLeft[index], boost, cut);
+    const rightDb = controlToBandGainDb(state.bandGainRight[index], boost, cut);
+    spreadCenterDb[index] = (leftDb + rightDb) / 2;
+    spreadCenterDirty[index] = false;
+  }
+  return spreadCenterDb[index];
+};
 const renderBand = index => {
   const slider = faders[index];
   const leftDb = controlToBandGainDb(state.bandGainLeft[index], getBandBoostDb(), getBandCutDb());
@@ -1733,8 +1945,12 @@ const renderBand = index => {
     input.value = String(input.dataset.channel === 'left' ? state.bandGainLeft[index] : state.bandGainRight[index]);
   });
   const channelValue = channel => document.querySelector(`[data-band-channel-value="${index}-${channel}"]`);
-  if (channelValue('left')) channelValue('left').textContent = `L ${formatBandSliderValue(state.bandGainLeft[index])}`;
-  if (channelValue('right')) channelValue('right').textContent = `R ${formatBandSliderValue(state.bandGainRight[index])}`;
+  if (channelValue('left')) channelValue('left').textContent = formatBandSliderValue(state.bandGainLeft[index]);
+  if (channelValue('right')) channelValue('right').textContent = formatBandSliderValue(state.bandGainRight[index]);
+  [['left', leftDb], ['right', rightDb]].forEach(([channel, gainDb]) => {
+    const marker = document.querySelector(`[data-classic-marker="${index}-${channel}"]`);
+    if (marker) marker.style.bottom = `${(bandGainDbToBipolarPercent(gainDb, getBandBoostDb(), getBandCutDb()) + 100) / 2}%`;
+  });
   const link = document.querySelector(`[data-band-link="${index}"]`);
   if (link) { link.classList.toggle('active', Boolean(state.bandChannelLinked[index])); link.setAttribute('aria-pressed', String(Boolean(state.bandChannelLinked[index]))); }
   updateAnalyzerBand(index);
@@ -1755,7 +1971,21 @@ const setBandPairByDb = (index, sourceChannel, targetControl) => {
     const next = setStateBandBaseGain(state, channel, index, control);
     audioEngine?.setBandBaseGain(channel, index, next);
   });
+  invalidateSpreadCenter(index);
   renderBand(index); refreshStatusStrip();
+};
+const materializeSpreadDb = spreadDb => {
+  const boost = getBandBoostDb(); const cut = getBandCutDb();
+  const offsetDb = Number(spreadDb) || 0;
+  for (let index = 0; index < BAND_COUNT; index += 1) {
+    const centerDb = getSpreadCenterDb(index, boost, cut);
+    const nextLeft = setStateBandBaseGain(state, 'left', index, bandGainDbToControl(centerDb - offsetDb, boost, cut));
+    const nextRight = setStateBandBaseGain(state, 'right', index, bandGainDbToControl(centerDb + offsetDb, boost, cut));
+    audioEngine?.setBandBaseGain('left', index, nextLeft);
+    audioEngine?.setBandBaseGain('right', index, nextRight);
+    renderBand(index);
+  }
+  refreshStatusStrip();
 };
 const setBandBaseGain = (channel, index, value, singleChannel = false) => {
   const channels = !singleChannel && state.channelSelection === 'LR' ? ['left', 'right'] : [channel];
@@ -1763,6 +1993,7 @@ const setBandBaseGain = (channel, index, value, singleChannel = false) => {
     const nextValue = setStateBandBaseGain(state, targetChannel, index, value);
     audioEngine?.setBandBaseGain(targetChannel, index, nextValue);
   });
+  invalidateSpreadCenter(index);
   renderBand(index);
   refreshStatusStrip();
   const gainDb = formatBandSliderValue(state.bandGainLeft[index]);
@@ -1812,12 +2043,6 @@ bars.addEventListener('focusin', event => {
   if (pair) showAnalyzerHover(Number(pair.dataset.analyzerBand), pair);
 });
 bars.addEventListener('focusout', clearAnalyzerHover);
-collapsedPreview.querySelectorAll('[data-collapsed-band]').forEach(button => {
-  button.addEventListener('pointerenter', () => {
-    if (analyzerDisplay.collapsedPreview && filterbankWorkspace?.classList.contains('is-collapsed')) showAnalyzerHover(Number(button.dataset.collapsedBand), button, true);
-  });
-  button.addEventListener('pointerleave', clearAnalyzerHover);
-});
 analyzer?.addEventListener('pointerleave', hideAnalyzerDetails);
 window.addEventListener('blur', hideAnalyzerDetails);
 normalResponseButton.addEventListener('click', hideAnalyzerDetails);
@@ -1844,22 +2069,44 @@ document.querySelectorAll('[data-control]').forEach(slider => {
 document.querySelectorAll('[data-feedback-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.feedbackBand); const nextValue=!state.feedbackBandLeft[index]; setBandFeedback('left', index, nextValue); button.classList.toggle('active',nextValue); button.setAttribute('aria-pressed',String(nextValue)); }));
 document.querySelectorAll('[data-mod-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.modBand); state.modulated[index]=!state.modulated[index]; button.classList.toggle('active',state.modulated[index]); button.setAttribute('aria-pressed',String(state.modulated[index])); }));
 const fbAllButton = document.querySelector('.fb-all-toggle');
-const perChannelButton = document.querySelector('.per-channel-toggle');
+const channelModeToggle = document.querySelector('[data-channel-toggle]');
+const bandResetButton = document.querySelector('[data-band-reset]');
 const spreadControl = document.querySelector('[data-control="spread"]');
 const spreadControlCard = spreadControl?.closest('.control-card');
 const updatePerChannelBands = () => {
   bands.classList.toggle('is-per-channel', state.perChannelBands);
-  perChannelButton?.classList.toggle('active', state.perChannelBands);
-  perChannelButton?.setAttribute('aria-pressed', String(state.perChannelBands));
-  if (spreadControl) spreadControl.disabled = state.perChannelBands;
-  spreadControlCard?.classList.toggle('is-disabled', state.perChannelBands);
+  channelModeToggle?.classList.toggle('is-per-channel', state.perChannelBands);
+  channelModeToggle?.setAttribute('aria-pressed', String(state.perChannelBands));
+  channelModeToggle?.setAttribute('aria-label', state.perChannelBands ? 'CLASSIC aktivieren' : 'P/CH aktivieren');
+  const spreadDisabled = state.perChannelBands;
+  if (spreadControl) spreadControl.disabled = spreadDisabled;
+  spreadControlCard?.classList.toggle('is-disabled', spreadDisabled);
   audioEngine?.setPerChannelBands(state.perChannelBands);
   renderBandSliderValues();
 };
-perChannelButton?.addEventListener('click', () => { state.perChannelBands = !state.perChannelBands; updatePerChannelBands(); });
+channelModeToggle?.addEventListener('click', () => {
+  state.perChannelBands = !state.perChannelBands;
+  updatePerChannelBands();
+});
+const resetBandControls = () => {
+  renderGlobalControlValue('spread', 0);
+  audioEngine?.setSpread(0);
+  for (let index = 0; index < BAND_COUNT; index += 1) {
+    setStateBandBaseGain(state, 'left', index, BAND_GAIN_NEUTRAL);
+    setStateBandBaseGain(state, 'right', index, BAND_GAIN_NEUTRAL);
+    invalidateSpreadCenter(index);
+    audioEngine?.setBandBaseGain('left', index, BAND_GAIN_NEUTRAL);
+    audioEngine?.setBandBaseGain('right', index, BAND_GAIN_NEUTRAL);
+    renderBand(index);
+  }
+  updatePerChannelBands();
+  refreshStatusStrip();
+  scheduleAnalyzerRender();
+};
+bandResetButton?.addEventListener('click', resetBandControls);
 const fbAllControl = fbAllButton?.closest('.fb-all-control');
 if (fbAllControl) document.querySelector('.filterbank-fb-all-group')?.append(fbAllControl);
-fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent=nextValue?'ON':'OFF'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
+fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent='FB ALL'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
 
 const FB_CODES = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0'];
 const FADER_UP_CODES = ['KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI','KeyO','KeyP'];
@@ -1878,12 +2125,25 @@ const renderGlobalControlValue = (name, value) => {
   const definition = GLOBAL_CONTROL_DEFINITIONS[name];
   const slider = document.querySelector(`[data-control="${name}"]`);
   if (!definition || !slider) return;
-  const clamped = Math.min(definition.max, Math.max(definition.min, Number(value)));
+  const minimum = name === 'spread' ? -state.spreadMaxOffsetDb : definition.min;
+  const maximum = name === 'spread' ? state.spreadMaxOffsetDb : definition.max;
+  const clamped = Math.min(maximum, Math.max(minimum, Number(value)));
   const normalized = Number(clamped.toFixed(2));
   state[name] = normalized;
   slider.value = String(normalized);
   const output = document.querySelector(`[data-output="${name}"]`);
   if (output) output.textContent = formatValue(name, normalized);
+};
+const configureSpreadControl = maxOffsetDb => {
+  const limit = Number(maxOffsetDb);
+  if (!spreadControl || !Number.isFinite(limit)) return;
+  spreadControl.min = String(-limit);
+  spreadControl.max = String(limit);
+  spreadControl.step = '0.1';
+  const minLabel = document.querySelector('[data-spread-scale-min]');
+  const maxLabel = document.querySelector('[data-spread-scale-max]');
+  if (minLabel) minLabel.textContent = `−${limit}`;
+  if (maxLabel) maxLabel.textContent = `+${limit}`;
 };
 const setGlobalControlValue = (name, value) => {
   const slider = document.querySelector(`[data-control="${name}"]`);
@@ -2143,15 +2403,21 @@ const bindDevLabSelect = (select, apply, fallback) => {
 };
 bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
-bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); renderBandSliderValues(); }, '12');
-bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); renderBandSliderValues(); }, '12');
+bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
+bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
 bindDevLabSelect(spreadCurveSelect, value => {
   state.spreadCurve = audioEngine.setSpreadCurve(value);
   renderBandSliderValues();
 }, 'linear');
 bindDevLabSelect(spreadMaxOffsetSelect, value => {
   state.spreadMaxOffsetDb = audioEngine.setSpreadMaxOffsetDb(value);
-  renderBandSliderValues();
+  configureSpreadControl(state.spreadMaxOffsetDb);
+  const clampedSpread = window.ResonantState.clampSpread(state.spread, state.spreadMaxOffsetDb);
+  if (clampedSpread !== state.spread) {
+    renderGlobalControlValue('spread', clampedSpread);
+    audioEngine.setSpread(clampedSpread);
+    materializeSpreadDb(clampedSpread);
+  } else renderBandSliderValues();
 }, '6');
 const updateLocalLoopTuningRelevance = () => {
   const zdf = feedbackCoreSelect?.value === 'zdf' || feedbackCoreSelect?.value === 'zdf-per-band';
@@ -2165,7 +2431,7 @@ const updateLocalLoopTuningRelevance = () => {
     fbAllButton.disabled = false;
     fbAllButton.classList.remove('is-phase-one-inactive');
     fbAllButton.title = '';
-    fbAllButton.textContent = state.feedbackAllLeft ? 'ON' : 'OFF';
+    fbAllButton.textContent = 'FB ALL';
     fbAllButton.setAttribute('aria-pressed', String(state.feedbackAllLeft));
   }
 };
@@ -2217,7 +2483,7 @@ document.querySelector('[data-control="volume"]').addEventListener('input', sync
 document.querySelector('[data-control="resonance"]').addEventListener('input', () => audioEngine.setResonance(state.resonance));
 document.querySelector('[data-control="spread"]').addEventListener('input', () => {
   audioEngine.setSpread(state.spread);
-  renderBandSliderValues();
+  materializeSpreadDb(state.spread);
 });
 ['resonance', 'dryWet', 'inputGain', 'volume', 'spread'].forEach(name => {
   const slider = document.querySelector(`[data-control="${name}"]`); let previous = state[name];
@@ -2249,14 +2515,28 @@ const persistSweetspots = () => {
 };
 const syncUiFromAudioState = snapshot => {
   if (!snapshot) return;
+  Object.assign(state, window.ResonantState.normalizeFilterState({
+    filterType: snapshot.filterType ?? state.filterType,
+    filterFrequencyHz: snapshot.filterFrequencyHz ?? state.filterFrequencyHz,
+    filterSlope: snapshot.filterSlope ?? state.filterSlope,
+    filterBandwidth: snapshot.filterBandwidth ?? state.filterBandwidth,
+    filterResonance: snapshot.filterResonance ?? state.filterResonance,
+    filterDepth: snapshot.filterDepth ?? state.filterDepth,
+    ...Object.fromEntries(window.ResonantState.FILTER_EXTRA_FIELDS.map(field => [field, snapshot[field] ?? window.ResonantState.normalizeFilterState({})[field]]))
+  }));
+  if (snapshot.filterEnabled !== undefined) state.filterEnabled = Boolean(snapshot.filterEnabled);
+  if (snapshot.filterbankEnabled !== undefined) state.filterbankEnabled = Boolean(snapshot.filterbankEnabled);
   state.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => Number(snapshot.bandGainLeft?.[index] ?? 0));
   state.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => Number(snapshot.bandGainRight?.[index] ?? 0));
+  invalidateAllSpreadCenters();
   state.perChannelBands = Boolean(snapshot.perChannelBands);
   state.bandChannelLinked = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.bandChannelLinked?.[index]));
   state.feedbackBandLeft = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.feedbackBandLeft?.[index]));
   state.feedbackBandRight = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot.feedbackBandRight?.[index]));
   state.feedbackAllLeft = Boolean(snapshot.feedbackAllLeft);
   state.feedbackAllRight = Boolean(snapshot.feedbackAllRight);
+  if (snapshot.spreadMaxOffsetDb !== undefined) state.spreadMaxOffsetDb = Number(snapshot.spreadMaxOffsetDb);
+  configureSpreadControl(state.spreadMaxOffsetDb);
   if (snapshot.resonance !== undefined) renderGlobalControlValue('resonance', snapshot.resonance);
   if (snapshot.inputGainDb !== undefined) renderGlobalControlValue('inputGain', snapshot.inputGainDb);
   if (snapshot.dryWet !== undefined) renderGlobalControlValue('dryWet', snapshot.dryWet);
@@ -2264,7 +2544,6 @@ const syncUiFromAudioState = snapshot => {
   if (snapshot.volumeDb !== undefined) renderGlobalControlValue('volume', snapshot.volumeDb);
   if (snapshot.spreadMode !== undefined) state.spreadMode = snapshot.spreadMode;
   if (snapshot.spreadCurve !== undefined) state.spreadCurve = snapshot.spreadCurve;
-  if (snapshot.spreadMaxOffsetDb !== undefined) state.spreadMaxOffsetDb = Number(snapshot.spreadMaxOffsetDb);
   faders.forEach((_, index) => renderBand(index));
   document.querySelectorAll('[data-feedback-band]').forEach(button => {
     const active = state.feedbackBandLeft[Number(button.dataset.feedbackBand)];
@@ -2272,7 +2551,7 @@ const syncUiFromAudioState = snapshot => {
   });
   if (fbAllButton) {
     fbAllButton.classList.toggle('active', state.feedbackAllLeft);
-    fbAllButton.textContent = state.feedbackAllLeft ? 'ON' : 'OFF';
+    fbAllButton.textContent = 'FB ALL';
     fbAllButton.setAttribute('aria-pressed', String(state.feedbackAllLeft));
   }
   updatePerChannelBands();
@@ -2316,6 +2595,8 @@ const syncUiFromAudioState = snapshot => {
   updateLocalLoopTuningRelevance();
   updateNegativeResonanceRelevance();
   renderBandSliderValues();
+  renderFilterPower();
+  renderFilterMode();
 };
 // This is the complete, explicit DEV/LAB snapshot contract. Normal app state
 // is intentionally absent: DEV/LAB snapshots are experimental configurations,
@@ -2410,7 +2691,7 @@ panic = () => {
     button.setAttribute('aria-pressed', 'false');
   });
   fbAllButton.classList.remove('active');
-  fbAllButton.textContent = 'OFF';
+  fbAllButton.textContent = 'FB ALL';
   fbAllButton.setAttribute('aria-pressed', 'false');
 };
 const refreshAudioDevices = async () => {

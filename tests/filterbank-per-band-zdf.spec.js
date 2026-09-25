@@ -406,9 +406,9 @@ test('ZDF PER-BAND is selectable live and keeps MAIN selectable without rebuildi
   await page.locator('[data-feedback-core]').selectOption('zdf-per-band');
   await expect(page.locator('[data-feedback-core]')).toHaveValue('zdf-per-band');
   await expect(page.locator('.fb-all-toggle')).toBeEnabled();
-  await expect(page.locator('.fb-all-toggle')).toHaveText('OFF');
+  await expect(page.locator('.fb-all-toggle')).toHaveText('FB ALL');
   await page.locator('.fb-all-toggle').click();
-  await expect(page.locator('.fb-all-toggle')).toHaveText('ON');
+  await expect(page.locator('.fb-all-toggle')).toHaveText('FB ALL');
   await page.locator('[data-feedback-core]').selectOption('zdf');
   await expect(page.locator('.fb-all-toggle')).toBeEnabled();
 });

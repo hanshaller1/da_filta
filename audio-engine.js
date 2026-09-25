@@ -1,10 +1,15 @@
 (function () {
   const {
+    BAND_DEFINITIONS,
     BAND_COUNT,
     BAND_GAIN_MIN,
     BAND_GAIN_MAX,
     clampBandGain,
+    clampBandGainDb,
+    bandGainDbToControl,
+    controlToBandGainDb,
     getEffectiveBandGains,
+    normalizeFilterState,
     normalizeSpreadCurve,
     normalizeSpreadMaxOffsetDb,
     clampSpread
@@ -92,6 +97,17 @@
       this.destination = null;
       this.outputElement = null;
       this.filterbank = null;
+      this.filterbankEnabled = true;
+      this.filterEnabled = false;
+      this.filterType = 'lowpass';
+      this.filterFrequencyHz = 777;
+      this.filterSlope = 50;
+      this.filterBandwidth = 50;
+      this.filterResonance = 0;
+      this.filterDepth = 100;
+      Object.assign(this, normalizeFilterState({}));
+      this.filterModeBandGainsDb = Array(BAND_COUNT).fill(0);
+      this.filterModeBandControls = Array(BAND_COUNT).fill(0);
       this.bandGainLeft = Array(BAND_COUNT).fill(0);
       this.bandGainRight = Array(BAND_COUNT).fill(0);
       this.feedbackBandLeft = Array(BAND_COUNT).fill(false);
@@ -101,6 +117,7 @@
       this.perChannelBands = false;
       this.handleDeviceChange = () => this.refreshDevices().then(devices => this.onDevicesChanged?.(devices)).catch(() => {});
       if (navigator.mediaDevices?.addEventListener) navigator.mediaDevices.addEventListener('devicechange', this.handleDeviceChange);
+      this.rebuildFilterModeBandControls();
     }
 
     setStatus(status, message = '') {
@@ -166,7 +183,7 @@
     setResonance(value) {
       const numericValue = Number(value);
       this.resonance = Number.isFinite(numericValue) ? Math.max(-1, Math.min(1, numericValue)) : 0;
-      this.filterbank?.setResonance(this.resonance);
+      this.filterbank?.setResonance(this.filterbankEnabled ? this.resonance : 0);
       return this.resonance;
     }
 
@@ -217,13 +234,13 @@
     }
 
     setReferenceLevel(value) { this.referenceLevel = [1, 0.75, 0.5, 0.25, 0].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setReferenceLevel(this.referenceLevel); return this.referenceLevel; }
-    setBandBoostDb(value) { this.maxBandBoostDb = [12, 18, 24].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandBoostDb(this.maxBandBoostDb); this.applyEffectiveBandGains(); return this.maxBandBoostDb; }
-    setBandCutDb(value) { this.maxBandCutDb = [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandCutDb(this.maxBandCutDb); this.applyEffectiveBandGains(); return this.maxBandCutDb; }
-    setSpread(value) { this.spread = clampSpread(value); this.applyEffectiveBandGains(); return this.spread; }
+    setBandBoostDb(value) { this.maxBandBoostDb = [12, 18, 24].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandBoostDb(this.maxBandBoostDb); this.rebuildFilterModeBandControls(); this.applyEffectiveBandGains(); return this.maxBandBoostDb; }
+    setBandCutDb(value) { this.maxBandCutDb = [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandCutDb(this.maxBandCutDb); this.rebuildFilterModeBandControls(); this.applyEffectiveBandGains(); return this.maxBandCutDb; }
+    setSpread(value) { this.spread = clampSpread(value, this.spreadMaxOffsetDb); return this.spread; }
     setPerChannelBands(value) { this.perChannelBands = Boolean(value); this.applyEffectiveBandGains(); return this.perChannelBands; }
     setSpreadMode(value) { this.spreadMode = value === 'FB_CH_SELECT' ? 'FB_CH_SELECT' : 'CLASSIC'; this.applyEffectiveBandGains(); return this.spreadMode; }
     setSpreadCurve(value) { this.spreadCurve = normalizeSpreadCurve(value); this.applyEffectiveBandGains(); return this.spreadCurve; }
-    setSpreadMaxOffsetDb(value) { this.spreadMaxOffsetDb = normalizeSpreadMaxOffsetDb(value); this.applyEffectiveBandGains(); return this.spreadMaxOffsetDb; }
+    setSpreadMaxOffsetDb(value) { this.spreadMaxOffsetDb = normalizeSpreadMaxOffsetDb(value); this.spread = clampSpread(this.spread, this.spreadMaxOffsetDb); return this.spreadMaxOffsetDb; }
     setPositiveResonanceEngine(value) { this.positiveResonanceEngine = value === 'phase2' ? value : 'tpt'; this.filterbank?.setPositiveResonanceEngine(this.positiveResonanceEngine); return this.positiveResonanceEngine; }
     setFeedbackTopology(value) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt'; this.filterbank?.setFeedbackTopology(this.feedbackTopology); return this.feedbackTopology; }
     setFeedbackCore(value) { this.feedbackCore = value === 'zdf-per-band' ? 'zdf-per-band' : value === 'zdf' ? 'zdf' : 'current'; this.filterbank?.setFeedbackCore(this.feedbackCore); return this.feedbackCore; }
@@ -247,6 +264,46 @@
     setNegativeResonanceMain(value) { this.negativeResonanceMain = Boolean(value); this.filterbank?.setNegativeResonanceMain(this.negativeResonanceMain); return this.negativeResonanceMain; }
     setNegativeResonancePhase(value) { this.negativeResonancePhase = Number.isFinite(Number(value)) ? Math.min(180, Math.max(0, Number(value))) : 90; this.filterbank?.setNegativeResonancePhase(this.negativeResonancePhase); return this.negativeResonancePhase; }
 
+    rebuildFilterModeBandControls() {
+      this.filterModeBandGainsDb = window.FilterShape.createFilterShape({
+        ...window.FilterShape.shapeParametersFromState(this),
+        bandDefinitions: BAND_DEFINITIONS,
+        maxBandBoostDb: this.maxBandBoostDb,
+        maxBandCutDb: this.maxBandCutDb
+      });
+      this.filterModeBandControls = this.filterModeBandGainsDb.map(gainDb => bandGainDbToControl(gainDb, this.maxBandBoostDb, this.maxBandCutDb));
+      return [...this.filterModeBandControls];
+    }
+
+    setFilterState(nextState = {}) {
+      const normalized = normalizeFilterState({
+        filterType: nextState.filterType ?? this.filterType,
+        filterFrequencyHz: nextState.filterFrequencyHz ?? this.filterFrequencyHz,
+        filterSlope: nextState.filterSlope ?? this.filterSlope,
+        filterBandwidth: nextState.filterBandwidth ?? this.filterBandwidth,
+        filterResonance: nextState.filterResonance ?? this.filterResonance,
+        filterDepth: nextState.filterDepth ?? this.filterDepth,
+        ...Object.fromEntries(window.ResonantState.FILTER_EXTRA_FIELDS.map(field => [field, nextState[field] ?? this[field]]))
+      });
+      Object.assign(this, normalized);
+      this.rebuildFilterModeBandControls();
+      this.applyEffectiveBandGains();
+      return normalized;
+    }
+
+    setFilterEnabled(enabled) {
+      this.filterEnabled = Boolean(enabled);
+      this.applyEffectiveBandGains();
+      return this.filterEnabled;
+    }
+
+    setFilterbankEnabled(enabled) {
+      this.filterbankEnabled = Boolean(enabled);
+      this.applyEffectiveBandGains();
+      this.applyEffectiveFeedbackState();
+      return this.filterbankEnabled;
+    }
+
     setBandBaseGain(channel, index, value) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
       const nextValue = clampBandGain(value);
@@ -257,8 +314,23 @@
     }
 
     getEffectiveBandGains(index) {
-      return getEffectiveBandGains(this, index, {
-        maxBandBoostDb: this.maxBandBoostDb, spread: this.perChannelBands ? 0 : this.spread,
+      if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
+      const storedLeftDb = controlToBandGainDb(this.bandGainLeft[index], this.maxBandBoostDb, this.maxBandCutDb);
+      const storedRightDb = controlToBandGainDb(this.bandGainRight[index], this.maxBandBoostDb, this.maxBandCutDb);
+      const storedCenterDb = (storedLeftDb + storedRightDb) / 2;
+      // The stored pair is authoritative. With FILTERBANK off, its channel
+      // difference remains the global stereo offset around the FILTER shape.
+      const manualLeftDb = this.filterbankEnabled ? storedLeftDb : this.filterEnabled ? storedLeftDb - storedCenterDb : 0;
+      const manualRightDb = this.filterbankEnabled ? storedRightDb : this.filterEnabled ? storedRightDb - storedCenterDb : 0;
+      const filterDb = this.filterEnabled ? this.filterModeBandGainsDb[index] : 0;
+      const combinedLeftDb = clampBandGainDb(manualLeftDb + filterDb, this.maxBandBoostDb, this.maxBandCutDb);
+      const combinedRightDb = clampBandGainDb(manualRightDb + filterDb, this.maxBandBoostDb, this.maxBandCutDb);
+      const combinedState = {
+        bandGainLeft: [this.filterbankEnabled && !this.filterEnabled ? this.bandGainLeft[index] : bandGainDbToControl(combinedLeftDb, this.maxBandBoostDb, this.maxBandCutDb)],
+        bandGainRight: [this.filterbankEnabled && !this.filterEnabled ? this.bandGainRight[index] : bandGainDbToControl(combinedRightDb, this.maxBandBoostDb, this.maxBandCutDb)]
+      };
+      return getEffectiveBandGains(combinedState, 0, {
+        maxBandBoostDb: this.maxBandBoostDb,
         maxBandCutDb: this.maxBandCutDb
       });
     }
@@ -297,7 +369,7 @@
       const target = channel === 'left' ? this.feedbackBandLeft : this.feedbackBandRight;
       const nextValue = Boolean(enabled);
       target[index] = nextValue;
-      this.filterbank?.setBandFeedback(channel, index, nextValue);
+      this.filterbank?.setBandFeedback(channel, index, this.filterbankEnabled && nextValue);
       return nextValue;
     }
 
@@ -306,19 +378,30 @@
       const nextValue = Boolean(enabled);
       if (channel === 'left') this.feedbackAllLeft = nextValue;
       else this.feedbackAllRight = nextValue;
-      this.filterbank?.setFeedbackAll(channel, nextValue);
+      this.filterbank?.setFeedbackAll(channel, this.filterbankEnabled && nextValue);
       return nextValue;
+    }
+
+    applyEffectiveFeedbackState() {
+      if (!this.filterbank) return;
+      for (let index = 0; index < BAND_COUNT; index += 1) {
+        this.filterbank.setBandFeedback('left', index, this.filterbankEnabled && this.feedbackBandLeft[index]);
+        this.filterbank.setBandFeedback('right', index, this.filterbankEnabled && this.feedbackBandRight[index]);
+      }
+      this.filterbank.setFeedbackAll('left', this.filterbankEnabled && this.feedbackAllLeft);
+      this.filterbank.setFeedbackAll('right', this.filterbankEnabled && this.feedbackAllRight);
+      this.filterbank.setResonance(this.filterbankEnabled ? this.resonance : 0);
     }
 
     getFilterbankState() {
       return {
         bandGainLeft: this.effectiveBandGainLeft,
         bandGainRight: this.effectiveBandGainRight,
-        feedbackBandLeft: this.feedbackBandLeft,
-        feedbackBandRight: this.feedbackBandRight,
-        feedbackAllLeft: this.feedbackAllLeft,
-        feedbackAllRight: this.feedbackAllRight,
-        resonance: this.resonance,
+        feedbackBandLeft: this.feedbackBandLeft.map(value => this.filterbankEnabled && value),
+        feedbackBandRight: this.feedbackBandRight.map(value => this.filterbankEnabled && value),
+        feedbackAllLeft: this.filterbankEnabled && this.feedbackAllLeft,
+        feedbackAllRight: this.filterbankEnabled && this.feedbackAllRight,
+        resonance: this.filterbankEnabled ? this.resonance : 0,
         positiveResonanceAuditionGain: this.positiveResonanceAuditionGain,
         positiveResonanceDrive: this.positiveResonanceDrive,
         positiveResonanceDampingFloor: this.positiveResonanceDampingFloor,
@@ -345,8 +428,20 @@
         spreadMode: this.spreadMode,
         spreadCurve: this.spreadCurve,
         spreadMaxOffsetDb: this.spreadMaxOffsetDb,
+        filterbankEnabled: this.filterbankEnabled,
+        filterEnabled: this.filterEnabled,
+        filterType: this.filterType,
+        filterFrequencyHz: this.filterFrequencyHz,
+        filterSlope: this.filterSlope,
+        filterBandwidth: this.filterBandwidth,
+        filterResonance: this.filterResonance,
+        filterDepth: this.filterDepth,
+        ...Object.fromEntries(window.ResonantState.FILTER_EXTRA_FIELDS.map(field => [field, this[field]])),
         feedbackBandLeft: [...this.feedbackBandLeft],
         feedbackBandRight: [...this.feedbackBandRight],
+        feedbackAllLeft: this.feedbackAllLeft,
+        feedbackAllRight: this.feedbackAllRight,
+        resonance: this.resonance,
         inputGainDb: this.inputGainDb,
         inputPreampStage: this.inputPreampStage,
         inputCharacterAmount: this.inputCharacterAmount,
@@ -361,6 +456,14 @@
       const finiteOr = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
       this.bandGainLeft = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(left[index] ?? 0));
       this.bandGainRight = Array.from({ length: BAND_COUNT }, (_, index) => clampBandGain(right[index] ?? 0));
+      this.filterbankEnabled = Boolean(snapshot?.filterbankEnabled ?? this.filterbankEnabled);
+      this.setFilterState({
+        ...snapshot,
+        filterResonance: snapshot?.filterResonance ?? 0,
+        filterDepth: snapshot?.filterDepth ?? 100,
+        ...Object.fromEntries(window.ResonantState.FILTER_EXTRA_FIELDS.map(field => [field, snapshot?.[field] ?? normalizeFilterState({})[field]]))
+      });
+      this.setFilterEnabled(snapshot?.filterEnabled ?? this.filterEnabled);
       this.feedbackBandLeft = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandLeft?.[index]));
       this.feedbackBandRight = Array.from({ length: BAND_COUNT }, (_, index) => Boolean(snapshot?.feedbackBandRight?.[index]));
       this.feedbackAllLeft = Boolean(snapshot?.feedbackAllLeft);

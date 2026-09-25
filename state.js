@@ -23,7 +23,9 @@
     inputCharacterAmount: Object.freeze({ min: 0, max: 100, step: 1, defaultValue: 50 }),
     resonance: Object.freeze({ min: -1, max: 1, step: 0.01, defaultValue: 0 }),
     dryWet: Object.freeze({ min: 0, max: 100, step: 1, defaultValue: 50 }),
-    spread: Object.freeze({ min: -1, max: 1, step: 0.01, defaultValue: 0 }),
+    // SPREAD is stored as the concrete per-channel dB offset. Its live
+    // min/max are synchronized with spreadMaxOffsetDb by the UI.
+    spread: Object.freeze({ min: -6, max: 6, step: 0.1, defaultValue: 0 }),
     volume: Object.freeze({ min: -60, max: 0, step: 0.5, defaultValue: -6 })
   });
 
@@ -41,9 +43,10 @@
     const safeCutDb = Number.isFinite(cutDb) ? cutDb : 12;
     return normalizedControl >= 0 ? safeBoostDb * normalizedControl : safeCutDb * normalizedControl;
   };
-  const clampSpread = value => {
+  const clampSpread = (value, maxOffsetDb = 6) => {
     const numericValue = Number(value);
-    return Number.isFinite(numericValue) ? Math.min(1, Math.max(-1, numericValue)) : 0;
+    const limit = normalizeSpreadMaxOffsetDb(maxOffsetDb);
+    return Number.isFinite(numericValue) ? Math.min(limit, Math.max(-limit, numericValue)) : 0;
   };
   const normalizeBandGainLimit = (value, fallback = 12) => {
     const numericValue = Number(value);
@@ -62,12 +65,40 @@
     return clampBandGain((gainDb / limit) * BAND_GAIN_MAX);
   };
   const normalizeSpreadCurve = value => SPREAD_CURVES.includes(value) ? value : 'linear';
+  const FILTER_EXTRA_FIELDS = Object.freeze(['filterBellFrequencyHz', 'filterLowShelfFrequencyHz', 'filterHighShelfFrequencyHz', 'filterTiltPivotHz', 'filterBellWidth', 'filterLowShelfSlope', 'filterHighShelfSlope', 'filterTiltSlope', 'filterGainDb', 'filterLowShelfGainDb', 'filterHighShelfGainDb', 'filterTiltDb', 'filterFormantVowel', 'filterFormantShiftSemitones', 'filterFormantWidth', 'filterFormantAmount', 'filterBaxandallBassDb', 'filterBaxandallTrebleDb', 'filterBaxandallCenterHz', 'filterBaxandallSlope']);
+  const normalizeFilterState = source => Object.freeze({
+    filterType: window.FilterShape.normalizeFilterType(source?.filterType),
+    filterFrequencyHz: window.FilterShape.normalizeFilterFrequencyHz(source?.filterFrequencyHz),
+    filterSlope: window.FilterShape.normalizeFilterPercent(source?.filterSlope),
+    filterBandwidth: window.FilterShape.normalizeFilterPercent(source?.filterBandwidth),
+    filterResonance: window.FilterShape.normalizeFilterPercent(source?.filterResonance, 0),
+    filterDepth: window.FilterShape.normalizeFilterPercent(source?.filterDepth, 100),
+    filterBellFrequencyHz: window.FilterShape.normalizeFilterFrequencyHz(source?.filterBellFrequencyHz),
+    filterLowShelfFrequencyHz: window.FilterShape.normalizeFilterFrequencyHz(source?.filterLowShelfFrequencyHz),
+    filterHighShelfFrequencyHz: window.FilterShape.normalizeFilterFrequencyHz(source?.filterHighShelfFrequencyHz),
+    filterTiltPivotHz: window.FilterShape.normalizeFilterFrequencyHz(source?.filterTiltPivotHz),
+    filterBellWidth: window.FilterShape.normalizeFilterPercent(source?.filterBellWidth),
+    filterLowShelfSlope: window.FilterShape.normalizeFilterPercent(source?.filterLowShelfSlope),
+    filterHighShelfSlope: window.FilterShape.normalizeFilterPercent(source?.filterHighShelfSlope),
+    filterTiltSlope: window.FilterShape.normalizeFilterPercent(source?.filterTiltSlope),
+    filterGainDb: window.FilterShape.normalizeFilterDb(source?.filterGainDb, 24, 60),
+    filterLowShelfGainDb: window.FilterShape.normalizeFilterDb(source?.filterLowShelfGainDb, 24, 60),
+    filterHighShelfGainDb: window.FilterShape.normalizeFilterDb(source?.filterHighShelfGainDb, 24, 60),
+    filterTiltDb: window.FilterShape.normalizeFilterDb(source?.filterTiltDb, 24, 60),
+    filterFormantVowel: Math.min(4, Math.max(0, Number(source?.filterFormantVowel) || 0)),
+    filterFormantShiftSemitones: Math.min(12, Math.max(-12, Number(source?.filterFormantShiftSemitones) || 0)),
+    filterFormantWidth: window.FilterShape.normalizeFilterPercent(source?.filterFormantWidth),
+    filterFormantAmount: window.FilterShape.normalizeFilterPercent(source?.filterFormantAmount, 70),
+    filterBaxandallBassDb: window.FilterShape.normalizeFilterDb(source?.filterBaxandallBassDb, 24, 60),
+    filterBaxandallTrebleDb: window.FilterShape.normalizeFilterDb(source?.filterBaxandallTrebleDb, 24, 60),
+    filterBaxandallCenterHz: window.FilterShape.normalizeFilterFrequencyHz(source?.filterBaxandallCenterHz),
+    filterBaxandallSlope: window.FilterShape.normalizeFilterPercent(source?.filterBaxandallSlope)
+  });
   const normalizeSpreadMaxOffsetDb = value => SPREAD_MAX_OFFSET_VALUES.includes(Number(value)) ? Number(value) : 6;
-  const spreadCurveValue = (magnitude, curve = 'linear') => {
-    const m = Math.min(1, Math.max(0, Math.abs(Number(magnitude) || 0)));
-    if (normalizeSpreadCurve(curve) === 'quadratic') return m * m;
-    if (normalizeSpreadCurve(curve) === 'smoothstep') return m * m * (3 - 2 * m);
-    return m;
+  const bandGainDbToBipolarPercent = (value, maxBandBoostDb = 12, maxBandCutDb = 12) => {
+    const gainDb = clampBandGainDb(value, maxBandBoostDb, maxBandCutDb);
+    const limit = gainDb >= 0 ? normalizeBandGainLimit(maxBandBoostDb) : normalizeBandGainLimit(maxBandCutDb);
+    return (gainDb / limit) * 100;
   };
   const getEffectiveBandGains = (targetState, index, options = {}) => {
     if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
@@ -75,24 +106,14 @@
     const maxBandCutDb = normalizeBandGainLimit(options.maxBandCutDb, 12);
     const baseLeftDb = controlToBandGainDb(targetState?.bandGainLeft?.[index], maxBandBoostDb, maxBandCutDb);
     const baseRightDb = controlToBandGainDb(targetState?.bandGainRight?.[index], maxBandBoostDb, maxBandCutDb);
-    const spreadMode = options.spreadMode ?? targetState?.spreadMode ?? 'CLASSIC';
-    const activeMode = options.activeMode ?? targetState?.activeMode ?? 'FB';
-    const spread = activeMode === 'FB' && spreadMode === 'CLASSIC' ? clampSpread(options.spread ?? targetState?.spread) : 0;
-    const offsetDb = spreadCurveValue(Math.abs(spread), options.spreadCurve ?? targetState?.spreadCurve)
-      * normalizeSpreadMaxOffsetDb(options.spreadMaxOffsetDb ?? targetState?.spreadMaxOffsetDb);
-    const leftOffsetDb = spread < 0 ? offsetDb : spread > 0 ? -offsetDb : 0;
-    const rightOffsetDb = -leftOffsetDb;
-    const leftDb = clampBandGainDb(baseLeftDb + leftOffsetDb, maxBandBoostDb, maxBandCutDb);
-    const rightDb = clampBandGainDb(baseRightDb + rightOffsetDb, maxBandBoostDb, maxBandCutDb);
-    // Keep the legacy control values byte-for-byte intact when CLASSIC SPREAD
-    // is neutral or inactive. This makes the zero-spread DSP path identical to
-    // the pre-spread handoff instead of merely mathematically equivalent.
-    const leftControl = spread === 0 ? clampBandGain(targetState?.bandGainLeft?.[index]) : bandGainDbToControl(leftDb, maxBandBoostDb, maxBandCutDb);
-    const rightControl = spread === 0 ? clampBandGain(targetState?.bandGainRight?.[index]) : bandGainDbToControl(rightDb, maxBandBoostDb, maxBandCutDb);
+    const leftDb = clampBandGainDb(baseLeftDb, maxBandBoostDb, maxBandCutDb);
+    const rightDb = clampBandGainDb(baseRightDb, maxBandBoostDb, maxBandCutDb);
+    const leftControl = clampBandGain(targetState?.bandGainLeft?.[index]);
+    const rightControl = clampBandGain(targetState?.bandGainRight?.[index]);
     return Object.freeze({
       baseLeftDb,
       baseRightDb,
-      offsetDb,
+      offsetDb: Math.abs(leftDb - rightDb) / 2,
       leftDb,
       rightDb,
       leftControl,
@@ -107,6 +128,35 @@
 
   const createInitialState = () => ({
     activeMode: 'FB',
+    selectedWorkspaceMode: 'filterbank',
+    filterbankEnabled: true,
+    filterEnabled: false,
+    filterType: 'lowpass',
+    filterFrequencyHz: 777,
+    filterSlope: 50,
+    filterBandwidth: 50,
+    filterResonance: 0,
+    filterDepth: 100,
+    filterBellFrequencyHz: 777,
+    filterLowShelfFrequencyHz: 777,
+    filterHighShelfFrequencyHz: 777,
+    filterTiltPivotHz: 777,
+    filterBellWidth: 50,
+    filterLowShelfSlope: 50,
+    filterHighShelfSlope: 50,
+    filterTiltSlope: 50,
+    filterGainDb: 0,
+    filterLowShelfGainDb: 0,
+    filterHighShelfGainDb: 0,
+    filterTiltDb: 0,
+    filterFormantVowel: 0,
+    filterFormantShiftSemitones: 0,
+    filterFormantWidth: 50,
+    filterFormantAmount: 70,
+    filterBaxandallBassDb: 0,
+    filterBaxandallTrebleDb: 0,
+    filterBaxandallCenterHz: 777,
+    filterBaxandallSlope: 50,
     spreadMode: 'CLASSIC',
     channelSelection: 'LR',
     inputGain: GLOBAL_CONTROL_DEFINITIONS.inputGain.defaultValue,
@@ -146,15 +196,18 @@
     SPREAD_CURVES,
     SPREAD_MAX_OFFSET_VALUES,
     GLOBAL_CONTROL_DEFINITIONS,
+    FILTER_EXTRA_FIELDS,
     clampBandGain,
     clampBandGainDb,
     clampSpread,
     bandGainDbToControl,
+    bandGainDbToBipolarPercent,
     controlToBandGainDb,
     createInitialState,
     getEffectiveBandGains,
     normalizeSpreadCurve,
     normalizeSpreadMaxOffsetDb,
+    normalizeFilterState,
     setBandBaseGain
   });
 })();
