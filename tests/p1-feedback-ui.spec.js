@@ -70,7 +70,7 @@ test('OUTPUT group exposes fixed-position soft protection and restores its snaps
   await expect(enabled).toHaveValue('on');
   await expect(threshold).toHaveValue('0.8');
   await expect(softness).toHaveValue('100');
-  await expect(group.locator('select')).toHaveCount(1);
+  await expect(group.locator('select')).toHaveCount(2);
   await threshold.fill('0.7');
   await softness.fill('30');
   await enabled.selectOption('off');

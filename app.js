@@ -563,6 +563,8 @@ const devLabTelemetry = (() => {
   const maxHistory = 150; // 10 seconds at the 15 Hz worklet publish rate.
   const histories = { common: [], main: [], resonance: [] };
   let latest = null;
+  let latestOutputGuard = null;
+  let latestOutputProtection = null;
   let frozen = false;
   let responseMode = 'normal';
   let resetBaseline = null;
@@ -621,7 +623,7 @@ const devLabTelemetry = (() => {
   };
   const resetSessionMax = () => { sessionMax = { local: 0, main: 0, saturator: 0, satActivity: 0, bandEnergy: 0, bandIndex: 0, dominantMs: 0, resets: 0 }; satThreshold = 0; dominant = { index: null, startedAt: performance.now(), logged: new Set() }; };
   const startSession = context => {
-    sessionStartedAt = performance.now(); markerNumber = 0; snapshotNumber = 0; events.length = 0; snapshots.length = 0; lastEventAt.clear(); if (!debugConsole.hidden) debugLog.replaceChildren(); resetSessionMax(); latest = null; resetBaseline = null;
+    sessionStartedAt = performance.now(); markerNumber = 0; snapshotNumber = 0; events.length = 0; snapshots.length = 0; lastEventAt.clear(); if (!debugConsole.hidden) debugLog.replaceChildren(); resetSessionMax(); latest = null; latestOutputGuard = null; latestOutputProtection = null; resetBaseline = null;
     const state = audioEngine || {}; log(`AUDIO START · SR ${Math.round(context?.sampleRate || 0)} Hz · ${context?.state || 'running'} · TOPOLOGY ${state.feedbackTopology || '—'} · TAP ${state.feedbackTap || '—'} · WET ${state.wetModel || '—'} · SAT ${state.commonBusSaturationMode || '—'}`, { force: true });
   };
   const ratio = (returnValue, tap) => Math.abs(finite(tap)) < 1e-6 ? null : Math.min(999, Math.abs(finite(returnValue)) / Math.abs(finite(tap)));
@@ -644,7 +646,7 @@ const devLabTelemetry = (() => {
   const reset = () => {
     histories.common.length = histories.main.length = histories.resonance.length = 0;
     resetBaseline = latest ? { left: finite(latest.left.mainCommonNonFiniteResets), right: finite(latest.right.mainCommonNonFiniteResets) } : null;
-    latest = null; render();
+    latest = null; latestOutputGuard = null; latestOutputProtection = null; audioEngine?.resetOutputGuardTelemetry(); audioEngine?.resetOutputProtectionTelemetry(); render();
   };
   const renderTrace = (canvas, history, keys, range = 1) => {
     const rect = canvas.getBoundingClientRect(); const width = Math.max(1, Math.floor(rect.width)); const height = Math.max(1, Math.floor(rect.height));
@@ -685,6 +687,17 @@ const devLabTelemetry = (() => {
       ['LOCAL RET L/R', `${number(left.commonFeedbackReturn)} / ${number(right.commonFeedbackReturn)}`], ['LOCAL TAP L/R', `${number(left.commonTapSum)} / ${number(right.commonTapSum)}`], ['MAIN RET L/R', `${number(left.mainCommonFeedbackReturn)} / ${number(right.mainCommonFeedbackReturn)}`], ['MAIN TAP L/R', `${number(left.mainTapSum)} / ${number(right.mainTapSum)}`], ['MAIN SCALED L/R', `${number(left.mainTapSumScaled)} / ${number(right.mainTapSumScaled)}`], ['MAIN FB GAIN', number(left.mainFeedbackGain)], ['FB ALL SCALE', number(left.mainFeedbackLevelScale)],
       ['SOURCE PK L/R', `${number(left.sourcePeak)} / ${number(right.sourcePeak)}`], ['WET PK L/R', `${number(left.wetPeak)} / ${number(right.wetPeak)}`], ['LOCAL SAT IN/OUT L', `${number(left.commonSaturationInput)} / ${number(left.commonSaturationOutput)}`], ['LOCAL SAT IN/OUT R', `${number(right.commonSaturationInput)} / ${number(right.commonSaturationOutput)}`], ['MAIN SAT IN/OUT L', `${number(left.mainSaturationInput)} / ${number(left.mainSaturationOutput)}`], ['MAIN SAT IN/OUT R', `${number(right.mainSaturationInput)} / ${number(right.mainSaturationOutput)}`], ['MAIN RESETS L/R', `${Math.max(0, finite(left.mainCommonNonFiniteResets) - resetBaseline.left)} / ${Math.max(0, finite(right.mainCommonNonFiniteResets) - resetBaseline.right)}`]
     ];
+    const guard = latestOutputGuard;
+    const output = latestOutputProtection;
+    items.push(
+      ['MASTER PK L/R', guard ? `${number(guard.inPeakLeft)} / ${number(guard.inPeakRight)}` : '—'],
+      ['GUARD OUT PK L/R', guard ? `${number(guard.outPeakLeft)} / ${number(guard.outPeakRight)}` : '—'],
+      ['GUARD GR', guard ? `${number(guard.gainReductionDb)} dB` : '—'],
+      ['GUARD ACT', guard ? `${finite(guard.activePercent).toFixed(1)} %` : '—'],
+      ['FINAL PK L/R', output ? `${number(output.postPeakLeft)} / ${number(output.postPeakRight)}` : '—'],
+      ['SAFETY GR', output ? `${number(output.gainReductionDb)} dB` : '—'],
+      ['SAFETY ACT', output ? `${finite(output.activePercent).toFixed(1)} %` : '—']
+    );
     summary.replaceChildren(...items.map(([label, value]) => { const item = document.createElement('div'); item.innerHTML = `<span>${label}</span><b>${value ?? '—'}</b>`; return item; }));
     const metrics = telemetryMetrics(latest);
     const sourceCrestL = metrics.sourceRmsLeft > 1e-9 ? left.sourcePeak / metrics.sourceRmsLeft : 0;
@@ -730,13 +743,28 @@ const devLabTelemetry = (() => {
     push(histories.main, { left: packet.left.mainCommonFeedbackReturn, right: packet.right.mainCommonFeedbackReturn });
     push(histories.resonance, { target: packet.left.resonanceTarget, smoothed: packet.left.smoothedResonance }); render();
   };
+  const receiveOutputGuard = packet => {
+    if (!packet || frozen) return;
+    latestOutputGuard = packet;
+    render();
+  };
+  const receiveOutputProtection = packet => {
+    if (!packet || frozen) return;
+    latestOutputProtection = packet;
+    render();
+  };
   updateResonatorDiagnostics = () => {
     const normalTelemetryRequested = analyzerDisplay.selfOscillation || analyzerDisplay.dominantBand
       || analyzerDisplay.feedbackEnergy || analyzerDisplay.saturationIndicators;
     const needed = state.selectedWorkspaceMode === 'filterbank'
       && (responseMode === 'dev-lab' || normalTelemetryRequested);
+    const outputProtectionNeeded = state.selectedWorkspaceMode === 'filterbank' && responseMode === 'dev-lab';
+    summary.classList.toggle('has-output-protection', outputProtectionNeeded);
     // These views use linear band and feedback metrics, not the 2x solver metrics.
     audioEngine?.setResonatorDiagnosticsEnabled(needed);
+    audioEngine?.setOutputGuardTelemetryEnabled(outputProtectionNeeded);
+    audioEngine?.setOutputProtectionTelemetryEnabled(outputProtectionNeeded);
+    if (!outputProtectionNeeded && !frozen) { latestOutputGuard = null; latestOutputProtection = null; }
   };
   const setMode = mode => { hideAnalyzerDetails(); responseMode = mode; const dev = mode === 'dev-lab'; filterbankWorkspace?.classList.toggle('is-dev-lab', dev); responseLab.hidden = !dev; responseChart.hidden = dev; if (responseLegend) responseLegend.hidden = dev; spectrumForegroundControl.hidden = dev; normalResponseButton.classList.toggle('active', !dev); devResponseButton.classList.toggle('active', dev); normalResponseButton.setAttribute('aria-pressed', String(!dev)); devResponseButton.setAttribute('aria-pressed', String(dev)); updateResonatorDiagnostics(); render(); };
   normalResponseButton.addEventListener('click', () => setMode('normal')); devResponseButton.addEventListener('click', () => setMode('dev-lab'));
@@ -758,7 +786,7 @@ const devLabTelemetry = (() => {
     try { await navigator.clipboard.writeText(report); copyState.textContent = 'COPIED'; setTimeout(() => { copyState.textContent = ''; }, 1200); } catch { copyState.textContent = 'COPY FAILED'; }
   });
   setMode('normal');
-  return { receive, reset, render, startSession, getLatest: () => latest, getDominant: () => ({ index: dominant.index, stableMs: dominant.index === null ? 0 : performance.now() - dominant.startedAt }), getMetrics: () => latest ? telemetryMetrics(latest) : null, logEvent: log, eventCount: () => events.length, logStateChange: (label, before, after) => { if (before !== after) log(`${label} ${before} → ${after}`, { key: label, throttle: 350 }); }, logPanic: () => log('PANIC'), setAudioOff: () => { log('AUDIO STOP'); if (!frozen) { latest = null; audioLabel.textContent = 'NO AUDIO'; render(); } } };
+  return { receive, receiveOutputGuard, receiveOutputProtection, reset, render, startSession, getLatest: () => latest, getOutputGuard: () => latestOutputGuard, getOutputProtection: () => latestOutputProtection, getDominant: () => ({ index: dominant.index, stableMs: dominant.index === null ? 0 : performance.now() - dominant.startedAt }), getMetrics: () => latest ? telemetryMetrics(latest) : null, logEvent: log, eventCount: () => events.length, logStateChange: (label, before, after) => { if (before !== after) log(`${label} ${before} → ${after}`, { key: label, throttle: 350 }); }, logPanic: () => log('PANIC'), setAudioOff: () => { log('AUDIO STOP'); if (!frozen) { latest = null; latestOutputGuard = null; latestOutputProtection = null; audioLabel.textContent = 'NO AUDIO'; render(); } } };
 })();
 window.FilterbankDebugConsole = devLabTelemetry;
 devLabToggle?.addEventListener('click', () => {
@@ -791,6 +819,7 @@ const addDevLabSelector = (label, attribute, options) => {
     'data-feedback-all-saturation-return': 'main',
     'data-negative-resonance-mode': 'negative-resonance', 'data-negative-resonance-curve': 'negative-resonance',
     'data-negative-resonance-local': 'negative-resonance', 'data-negative-resonance-main': 'negative-resonance',
+    'data-output-guard-enabled': 'output',
     'data-output-protection-enabled': 'output'
   }[attribute] ?? 'resonator');
   if (!container) return null;
@@ -872,10 +901,29 @@ const keySpeedInput = addKeyboardPreferenceControl({
   value: () => keyboardPreferences.keySpeedHz,
   onChange: value => { keyboardPreferences.keySpeedHz = value; persistKeyboardPreferences(); }
 });
-const outputProtectionSelect = addDevLabSelector('SOFT PROTECTION', 'data-output-protection-enabled', [['on', 'ON'], ['off', 'OFF']]);
+const outputGuardSelect = addDevLabSelector('OUTPUT GUARD', 'data-output-guard-enabled', [['on', 'ON'], ['off', 'OFF']]);
+const outputGuardThresholdInput = addDevLabNumberControl({
+  label: 'GUARD THRESHOLD', attribute: 'data-output-guard-threshold', min: 0.25, max: 0.95, step: 0.01, suffix: 'FS',
+  tooltip: 'Pegelziel für die dynamische Gain Reduction nach dem Master. Standard: 0,80 FS.',
+  value: () => audioEngine?.outputGuardThreshold ?? 0.8,
+  onChange: value => audioEngine?.setOutputGuardThreshold(value), group: 'output'
+});
+const outputGuardAttackInput = addDevLabNumberControl({
+  label: 'ATTACK', attribute: 'data-output-guard-attack-ms', min: 0.1, max: 50, step: 0.1, suffix: 'ms',
+  tooltip: 'Zeitkonstante für schnellere Gain Reduction ohne Lookahead. Standard: 2 ms.',
+  value: () => audioEngine?.outputGuardAttackMs ?? 2,
+  onChange: value => audioEngine?.setOutputGuardAttackMs(value), group: 'output'
+});
+const outputGuardReleaseInput = addDevLabNumberControl({
+  label: 'RELEASE', attribute: 'data-output-guard-release-ms', min: 20, max: 2000, step: 10, suffix: 'ms',
+  tooltip: 'Zeitkonstante für die Rückkehr des Gains zu 1. Standard: 250 ms.',
+  value: () => audioEngine?.outputGuardReleaseMs ?? 250,
+  onChange: value => audioEngine?.setOutputGuardReleaseMs(value), group: 'output'
+});
+const outputProtectionSelect = addDevLabSelector('FINAL SAFETY', 'data-output-protection-enabled', [['on', 'ON'], ['off', 'OFF']]);
 const outputThresholdInput = addDevLabNumberControl({
-  label: 'THRESHOLD', attribute: 'data-output-protection-threshold', min: 0.5, max: 0.95, step: 0.01, suffix: 'FS',
-  tooltip: 'Linearer Full-Scale-Pegel, ab dem die finale Soft Protection eingreift. Standard: 0,80 FS.',
+  label: 'SAFETY KNEE START', attribute: 'data-output-protection-threshold', min: 0.5, max: 0.95, step: 0.01, suffix: 'FS',
+  tooltip: 'Beginn der finalen Soft-Knee-Sicherung; kein zweiter dynamischer Limiter-Threshold. Standard: 0,80 FS.',
   value: () => audioEngine?.outputProtectionThreshold ?? 0.8,
   onChange: value => audioEngine?.setOutputProtectionThreshold(value), group: 'output'
 });
@@ -1001,23 +1049,47 @@ const DEV_LAB_HELP = {
     values: [['0 %', 'Exakt linearer Ausgang; Input Gain bleibt aktiv.'], ['50 %', 'Hälftige Mischung aus linearer Eingangsspur und voller Stage-Kennlinie.'], ['100 %', 'Voller Charakter der gewählten Stage.']],
     default: '50 %', note: 'Input Gain = Ansteuerung, Character = Charakteranteil. Der Regler fügt keinen linearen Gain hinzu; bei LINEAR ist er klanglich wirkungslos.'
   },
+  'data-output-guard-enabled': {
+    title: 'OUTPUT GUARD', what: 'Schaltet die dynamische Stereo-Pegelreduktion hinter dem Master ein oder aus.',
+    scope: 'Feste Position vor FINAL SAFETY, außerhalb aller Feedback-Loops; beide Kanäle verwenden denselben Gain.',
+    values: [['ON', 'Hohe Pegel werden zeitabhängig in Richtung GUARD THRESHOLD reduziert.'], ['OFF', 'Der Guard greift nicht ein. FINAL SAFETY bleibt separat einstellbar.']],
+    default: 'ON', note: 'Ohne Lookahead; kurze Attack-Overshoots fängt die nachfolgende FINAL SAFETY ab.'
+  },
+  'data-output-guard-threshold': {
+    title: 'GUARD THRESHOLD', what: 'Zielpegel der dynamischen Gain Reduction in linearem Full Scale.',
+    scope: 'Nur bei OUTPUT GUARD ON aktiv; kein Makeup Gain.',
+    values: [['0,25 FS', 'Früher Eingriff.'], ['0,80 FS', 'Standard.'], ['0,95 FS', 'Später Eingriff.']],
+    default: '0,80 FS', note: 'Bereich 0,25 bis 0,95 FS; ein kurzer Overshoot während ATTACK ist möglich.'
+  },
+  'data-output-guard-attack-ms': {
+    title: 'ATTACK', what: 'Zeitkonstante für das Einsetzen zusätzlicher Gain Reduction.',
+    scope: 'Nur bei OUTPUT GUARD ON relevant; kein Lookahead und keine zusätzliche Audio-Latenz.',
+    values: [['0,1 ms', 'Sehr schnell.'], ['2 ms', 'Standard.'], ['50 ms', 'Langsamer, mit größerem Overshoot.']],
+    default: '2 ms', note: 'Bereich 0,1 bis 50 ms.'
+  },
+  'data-output-guard-release-ms': {
+    title: 'RELEASE', what: 'Zeitkonstante für die Rückkehr des Guard-Gains Richtung 1.',
+    scope: 'Nur bei OUTPUT GUARD ON relevant.',
+    values: [['20 ms', 'Schnelle Erholung.'], ['250 ms', 'Standard.'], ['2000 ms', 'Langsame Erholung.']],
+    default: '250 ms', note: 'Bereich 20 bis 2000 ms.'
+  },
   'data-output-protection-enabled': {
-    title: 'SOFT PROTECTION', what: 'Schaltet die finale Soft Protection hinter dem Master ein oder aus.',
+    title: 'FINAL SAFETY', what: 'Schaltet die letzte statische Peak-Sicherung nach dem OUTPUT GUARD ein oder aus.',
     scope: 'Feste Position vor dem Audioausgang, außerhalb aller Feedback-Loops. Der direkte BYPASS-Pfad bleibt unverändert.',
-    values: [['ON', 'Peaks oberhalb des Threshold werden weich gegen 0,99 FS begrenzt.'], ['OFF', 'Der bearbeitete Ausgang bleibt unbegrenzt; Pegel über 1,0 FS sind möglich.']],
+    values: [['ON', 'Peaks oberhalb von SAFETY KNEE START werden weich gegen 0,99 FS begrenzt.'], ['OFF', 'Der bearbeitete Ausgang bleibt ohne finale Begrenzung; Pegel über 1,0 FS sind möglich.']],
     default: 'ON', note: 'Umschalten wird geglättet; keine Routing-Auswahl.'
   },
   'data-output-protection-threshold': {
-    title: 'THRESHOLD', what: 'Beginn der weichen Ausgangsbegrenzung als linearer Full-Scale-Pegel.',
-    scope: 'Nur bei SOFT PROTECTION ON aktiv. Werte unter dem Threshold bleiben unverändert.',
+    title: 'SAFETY KNEE START', what: 'Beginn der weichen finalen Ausgangsbegrenzung als linearer Full-Scale-Pegel.',
+    scope: 'Nur bei FINAL SAFETY ON aktiv. Werte darunter bleiben unverändert.',
     values: [['0,50 FS', 'Früher Eingriff.'], ['0,80 FS', 'Standard, etwa -1,94 dBFS.'], ['0,95 FS', 'Später Eingriff.']],
     default: '0,80 FS', note: 'Bereich 0,50 bis 0,95 FS; die Ausgangsgrenze bleibt 0,99 FS.'
   },
   'data-output-protection-softness': {
     title: 'SOFTNESS', what: 'Bestimmt die Stärke der weichen Biegung oberhalb des Threshold.',
-    scope: 'Nur bei SOFT PROTECTION ON aktiv; ändert weder Feedback noch Master-Gain.',
+    scope: 'Nur bei FINAL SAFETY ON aktiv; ändert weder Feedback noch Master-Gain.',
     values: [['0 %', 'Schnellerer Übergang zur 0,99-FS-Grenze.'], ['100 %', 'Weichster Verlauf.']],
-    default: '100 %', note: 'Die Kennlinie beginnt bei beiden Enden glatt am Threshold.'
+    default: '100 %', note: 'Die Kennlinie ist am Knee Start stetig und bleibt unter dem Eingangspegel.'
   },
   'data-reference-level': {
     title: 'DEV REFERENCE', what: 'Steuert den Anteil des Unity-Reference-Pfads im Wet-Signal.',
@@ -1191,7 +1263,7 @@ const DEV_LAB_HELP = {
 
 const DEV_LAB_GROUP_HELP = {
   input: ['data-input-preamp-stage', 'data-input-character-amount'],
-  output: ['data-output-protection-enabled', 'data-output-protection-threshold', 'data-output-protection-softness'],
+  output: ['data-output-guard-enabled', 'data-output-guard-threshold', 'data-output-guard-attack-ms', 'data-output-guard-release-ms', 'data-output-protection-enabled', 'data-output-protection-threshold', 'data-output-protection-softness'],
   keyboard: ['data-key-step-percent', 'data-key-speed-hz'],
   filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-spread-curve', 'data-spread-max-offset-db', 'data-wet-model'],
   'local-feedback': ['data-feedback-topology', 'data-feedback-core', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
@@ -2524,7 +2596,9 @@ audioEngine = new AudioEngine({
   onStatusChange: updateAudioStatus,
   onDevicesChanged: devices => { knownInputDevices = devices.inputs; if (audioSourceMode === 'device') renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät'); renderDevices(outputDeviceSelect, devices.outputs, 'Standardausgabe'); },
   onDiagnostics: packet => { devLabTelemetry.receive(packet); scheduleAnalyzerRender(); },
-  onDynamicEqTelemetry: packet => { dynamicEqTelemetry = packet; if (state.selectedWorkspaceMode === 'dynamic-eq') requestAnimationFrame(renderDynamicEqGraph); }
+  onDynamicEqTelemetry: packet => { dynamicEqTelemetry = packet; if (state.selectedWorkspaceMode === 'dynamic-eq') requestAnimationFrame(renderDynamicEqGraph); },
+  onOutputProtectionTelemetry: packet => devLabTelemetry.receiveOutputProtection(packet),
+  onOutputGuardTelemetry: packet => devLabTelemetry.receiveOutputGuard(packet)
 });
 audioEngine.applyState(state);
 updateResonatorDiagnostics();
@@ -2603,8 +2677,11 @@ const updateDevControlRelevance = () => {
   const positiveResonator = isolatedTpt && audioEngine.positiveResonanceEngine === 'tpt';
   const mainCurrentSaturation = mainBus && audioEngine.feedbackAllEngine === 'common-bus'
     && audioEngine.commonBusSaturationMode === 'current' && topology === 'common-bus';
-  setDevControlRelevance(outputThresholdInput, audioEngine.outputProtectionEnabled, 'Nur bei SOFT PROTECTION ON aktiv.');
-  setDevControlRelevance(outputSoftnessInput, audioEngine.outputProtectionEnabled, 'Nur bei SOFT PROTECTION ON aktiv.');
+  for (const control of [outputGuardThresholdInput, outputGuardAttackInput, outputGuardReleaseInput]) {
+    setDevControlRelevance(control, audioEngine.outputGuardEnabled, 'Nur bei OUTPUT GUARD ON aktiv.');
+  }
+  setDevControlRelevance(outputThresholdInput, audioEngine.outputProtectionEnabled, 'Nur bei FINAL SAFETY ON aktiv.');
+  setDevControlRelevance(outputSoftnessInput, audioEngine.outputProtectionEnabled, 'Nur bei FINAL SAFETY ON aktiv.');
   setDevControlRelevance(referenceLevelSelect, audioEngine.wetModel === 'reference-delta', 'Nur mit REFERENCE + DELTA aktiv.');
   setDevControlRelevance(spreadCurveSelect, false, 'Inaktiv: gespeicherter Kompatibilitätswert ohne Audiofunktion.');
   setDevControlRelevance(spreadMaxOffsetSelect, !state.perChannelBands, 'Nur im CLASSIC-Spread-Modus aktiv.');
@@ -2638,6 +2715,7 @@ const bindDevLabSelect = (select, apply, fallback) => {
   apply(previous);
   select.addEventListener('change', event => { const next = event.target.value; apply(next); updateDevControlRelevance(); devLabTelemetry.logStateChange(select.previousElementSibling?.textContent || select.closest('label')?.querySelector('span')?.textContent || 'DEV PARAMETER', previous, next); previous = next; });
 };
+bindDevLabSelect(outputGuardSelect, value => audioEngine.setOutputGuardEnabled(value === 'on'), 'on');
 bindDevLabSelect(outputProtectionSelect, value => audioEngine.setOutputProtectionEnabled(value === 'on'), 'on');
 bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
@@ -2795,6 +2873,7 @@ const syncUiFromAudioState = snapshot => {
   }
   updatePerChannelBands();
   const selectValues = [
+    [outputGuardSelect, snapshot.outputGuardEnabled === undefined ? undefined : snapshot.outputGuardEnabled ? 'on' : 'off'],
     [outputProtectionSelect, snapshot.outputProtectionEnabled === undefined ? undefined : snapshot.outputProtectionEnabled ? 'on' : 'off'],
     [bandBoostSelect, snapshot.maxBandBoostDb], [bandCutSelect, snapshot.maxBandCutDb],
     [spreadCurveSelect, snapshot.spreadCurve], [spreadMaxOffsetSelect, snapshot.spreadMaxOffsetDb],
@@ -2822,6 +2901,9 @@ const syncUiFromAudioState = snapshot => {
   };
   selectValues.forEach(([select, value]) => setSelectValue(select, value));
   if (feedbackAllAmountInput && snapshot.feedbackAllAmount !== undefined) feedbackAllAmountInput.value = String(snapshot.feedbackAllAmount);
+  if (outputGuardThresholdInput && snapshot.outputGuardThreshold !== undefined) outputGuardThresholdInput.value = String(snapshot.outputGuardThreshold);
+  if (outputGuardAttackInput && snapshot.outputGuardAttackMs !== undefined) outputGuardAttackInput.value = String(snapshot.outputGuardAttackMs);
+  if (outputGuardReleaseInput && snapshot.outputGuardReleaseMs !== undefined) outputGuardReleaseInput.value = String(snapshot.outputGuardReleaseMs);
   if (outputThresholdInput && snapshot.outputProtectionThreshold !== undefined) outputThresholdInput.value = String(snapshot.outputProtectionThreshold);
   if (outputSoftnessInput && snapshot.outputProtectionSoftness !== undefined) outputSoftnessInput.value = String(snapshot.outputProtectionSoftness);
   if (negativeResonanceAmountInput && snapshot.negativeResonanceAmount !== undefined) negativeResonanceAmountInput.value = String(snapshot.negativeResonanceAmount);
@@ -2847,6 +2929,10 @@ const syncUiFromAudioState = snapshot => {
 const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
   ['inputPreampStage', value => audioEngine.setInputPreampStage(value)],
   ['inputCharacterAmount', value => setInputCharacterAmount(value)],
+  ['outputGuardEnabled', value => audioEngine.setOutputGuardEnabled(value)],
+  ['outputGuardThreshold', value => audioEngine.setOutputGuardThreshold(value)],
+  ['outputGuardAttackMs', value => audioEngine.setOutputGuardAttackMs(value)],
+  ['outputGuardReleaseMs', value => audioEngine.setOutputGuardReleaseMs(value)],
   ['outputProtectionEnabled', value => audioEngine.setOutputProtectionEnabled(value)],
   ['outputProtectionThreshold', value => audioEngine.setOutputProtectionThreshold(value)],
   ['outputProtectionSoftness', value => audioEngine.setOutputProtectionSoftness(value)],
@@ -2891,6 +2977,10 @@ const createDevLabSnapshot = () => {
 };
 const applyDevLabSnapshot = snapshot => {
   if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
+  if (!Object.prototype.hasOwnProperty.call(snapshot, 'outputGuardEnabled')) audioEngine.setOutputGuardEnabled(true);
+  if (!Object.prototype.hasOwnProperty.call(snapshot, 'outputGuardThreshold')) audioEngine.setOutputGuardThreshold(0.8);
+  if (!Object.prototype.hasOwnProperty.call(snapshot, 'outputGuardAttackMs')) audioEngine.setOutputGuardAttackMs(2);
+  if (!Object.prototype.hasOwnProperty.call(snapshot, 'outputGuardReleaseMs')) audioEngine.setOutputGuardReleaseMs(250);
   DEV_LAB_SNAPSHOT_PROPERTIES.forEach(({ key, apply }) => {
     if (Object.prototype.hasOwnProperty.call(snapshot, key)) apply(snapshot[key]);
   });
