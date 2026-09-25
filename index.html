@@ -357,7 +357,7 @@
               <button class="mode-select" type="button" role="tab" id="mode-tab-envelope-follower" aria-selected="false" aria-controls="mode-envelope-follower" data-mode="envelope-follower"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 15 6 5h5l3 5h4"/></svg><span>ENVELOPE FOLLOWER</span></button>
             </div>
             <div class="mode-tab-row">
-              <button class="mode-power" type="button" disabled aria-disabled="true" aria-label="DYNAMIC EQ Power nicht verfügbar" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
+              <button class="mode-power" type="button" data-module-power="dynamic-eq" aria-label="DYNAMIC EQ einschalten" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
               <button class="mode-select" type="button" role="tab" id="mode-tab-dynamic-eq" aria-selected="false" aria-controls="mode-dynamic-eq" data-mode="dynamic-eq"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 14c3 0 3-7 6-7s3 5 5 5 2-3 5-3"/><circle cx="8" cy="7" r="1.5"/></svg><span>DYNAMIC EQ</span></button>
             </div>
             <div class="mode-tab-row">
@@ -510,7 +510,25 @@
             <section class="mode-placeholder" id="mode-clock-mod" role="tabpanel" aria-labelledby="mode-tab-clock-mod" data-mode-panel="clock-mod" hidden><strong>CLOCK MOD</strong><span>Clock modulation – coming later</span></section>
             <section class="mode-placeholder" id="mode-lfo" role="tabpanel" aria-labelledby="mode-tab-lfo" data-mode-panel="lfo" hidden><strong>LFO</strong><span>LFO module – coming later</span></section>
             <section class="mode-placeholder" id="mode-envelope-follower" role="tabpanel" aria-labelledby="mode-tab-envelope-follower" data-mode-panel="envelope-follower" hidden><strong>ENVELOPE FOLLOWER</strong><span>Envelope follower – coming later</span></section>
-            <section class="mode-placeholder" id="mode-dynamic-eq" role="tabpanel" aria-labelledby="mode-tab-dynamic-eq" data-mode-panel="dynamic-eq" hidden><strong>DYNAMIC EQ</strong><span>Dynamic EQ – coming later</span></section>
+            <section class="dynamic-eq-panel" id="mode-dynamic-eq" role="tabpanel" aria-labelledby="mode-tab-dynamic-eq" data-mode-panel="dynamic-eq" hidden>
+              <section class="dynamic-eq-response" aria-label="Dynamic EQ response">
+                <header><strong>DYNAMIC EQ RESPONSE</strong><span>STEREO LINKED · PRE GAIN DETECTOR</span></header>
+                <div class="dynamic-eq-graph" data-dynamic-eq-graph>
+                  <div class="dynamic-eq-window-zone" data-dynamic-eq-window-zone></div>
+                  <div class="dynamic-eq-level-guide" data-dynamic-eq-upper></div>
+                  <div class="dynamic-eq-level-guide dynamic-eq-threshold" data-dynamic-eq-threshold></div>
+                  <div class="dynamic-eq-level-guide" data-dynamic-eq-lower></div>
+                  <div class="dynamic-eq-columns" data-dynamic-eq-columns></div>
+                </div>
+                <div class="dynamic-eq-legend"><span>LEVEL · dBFS</span><span>GAIN · dB</span></div>
+                <div class="dynamic-eq-sensitivity"><div class="dynamic-eq-sensitivity-heading"><strong>SENSITIVITY</strong><button type="button" data-dynamic-eq-reset>RESET 100 %</button></div><div class="dynamic-eq-sensitivity-grid" data-dynamic-eq-sensitivity></div></div>
+              </section>
+              <section class="dynamic-eq-controls" aria-label="Dynamic EQ controls"><strong>CONTROLS</strong>
+                <div class="dynamic-eq-mode"><span>MODE</span><div role="group" aria-label="Dynamic EQ mode"><button type="button" data-dynamic-eq-mode="cut">CUT</button><button type="button" data-dynamic-eq-mode="boost">BOOST</button><button type="button" data-dynamic-eq-mode="balance">BALANCE</button></div></div>
+                <div class="dynamic-eq-control-grid" data-dynamic-eq-controls></div>
+                <div class="dynamic-eq-mode"><span>DETECTOR</span><div role="group" aria-label="Dynamic EQ detector"><button type="button" data-dynamic-eq-detector="peak">PEAK</button><button type="button" data-dynamic-eq-detector="rms">RMS</button></div></div>
+              </section>
+            </section>
             <section class="mode-placeholder" id="mode-makros" role="tabpanel" aria-labelledby="mode-tab-makros" data-mode-panel="makros" hidden><strong>MAKROS</strong><span>Macro controls – coming later</span></section>
             <section class="mode-placeholder" id="mode-presets" role="tabpanel" aria-labelledby="mode-tab-presets" data-mode-panel="presets" hidden><strong>PRESETS / SNAPSHOTS</strong><span>Preset management – coming later</span></section>
           </section>

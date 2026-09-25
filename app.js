@@ -14,6 +14,7 @@ const {
 } = window.ResonantState;
 const state = createInitialState();
 let audioEngine = null;
+let dynamicEqTelemetry = null;
 let panic = () => {};
 // FILTERBANK editor visuals intentionally describe the manual FILTERBANK
 // controls, not the final DSP basis selected by another powered module.
@@ -1471,6 +1472,7 @@ const modeTabs = [...document.querySelectorAll('[data-mode]')];
 const modePanels = [...document.querySelectorAll('[data-mode-panel]')];
 const filterbankPowerButton = document.querySelector('[data-module-power="filterbank"]');
 const filterPowerButton = document.querySelector('[data-module-power="filter"]');
+const dynamicEqPowerButton = document.querySelector('[data-module-power="dynamic-eq"]');
 const filterTypeDefinitions = window.FilterShape.FILTER_TYPE_DEFINITIONS;
 const filterControlDefinitions = window.FilterShape.FILTER_CONTROL_DEFINITIONS;
 const filterTypeGroups = document.querySelector('[data-filter-type-groups]');
@@ -1620,6 +1622,128 @@ filterControlSlots.forEach(slot => slot.querySelector('input')?.addEventListener
   updateFilterState({ [definition.field]: value });
 }));
 renderFilterMode();
+const dynamicEqColumns = document.querySelector('[data-dynamic-eq-columns]');
+const dynamicEqSensitivity = document.querySelector('[data-dynamic-eq-sensitivity]');
+const dynamicEqControls = document.querySelector('[data-dynamic-eq-controls]');
+const dynamicEqDefinitions = [
+  ['Threshold', 'dynamicEqThresholdDb', -60, 0, .5, 'dB'],
+  ['Window', 'dynamicEqWindowDb', 0, 12, .5, 'dB'],
+  ['Range', 'dynamicEqRangeDb', 0, 12, .1, 'dB'],
+  ['Strength', 'dynamicEqStrength', 0, 100, 1, '%'],
+  ['Attack', 'dynamicEqAttackMs', 1, 500, 1, 'ms'],
+  ['Release', 'dynamicEqReleaseMs', 10, 2000, 1, 'ms']
+];
+const dynamicEqBars = [];
+const dynamicEqSensitivityInputs = [];
+const levelPosition = db => Math.max(0, Math.min(100, (db + 60) / 60 * 100));
+const formatDynamicGain = db => `${db >= 0 ? '+' : ''}${db.toFixed(1)} dB`;
+BAND_DEFINITIONS.forEach((band, index) => {
+  const column = document.createElement('div');
+  column.className = 'dynamic-eq-column';
+  column.innerHTML = '<div class="dynamic-eq-meter"><i class="dynamic-eq-level"></i><i class="dynamic-eq-gain"></i></div><output class="dynamic-eq-gain-value">+0.0 dB</output><span class="dynamic-eq-frequency"></span>';
+  column.querySelector('.dynamic-eq-frequency').textContent = band.label.replace(' Hz', '').replace(' kHz', 'k');
+  dynamicEqColumns.append(column);
+  dynamicEqBars.push(column);
+  const label = document.createElement('label');
+  label.className = 'dynamic-eq-sensitivity-item';
+  label.innerHTML = '<input type="range" min="0" max="100" step="1"><output>100</output>';
+  const input = label.querySelector('input');
+  input.setAttribute('aria-label', `${band.label} sensitivity`);
+  input.addEventListener('input', () => {
+    state.dynamicEqBandSensitivity[index] = Number(input.value);
+    label.querySelector('output').textContent = input.value;
+    audioEngine?.setDynamicEq(state);
+  });
+  dynamicEqSensitivity.append(label);
+  dynamicEqSensitivityInputs.push(input);
+});
+dynamicEqDefinitions.forEach(([label, field, min, max, step, unit]) => {
+  const control = document.createElement('label');
+  control.className = 'dynamic-eq-control';
+  control.innerHTML = `<span>${label.toUpperCase()}</span><output></output><input type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}">`;
+  const input = control.querySelector('input');
+  input.addEventListener('input', () => {
+    state[field] = Number(input.value);
+    control.querySelector('output').textContent = `${input.value} ${unit}`;
+    audioEngine?.setDynamicEq(state);
+    renderDynamicEqGraph();
+  });
+  dynamicEqControls.append(control);
+});
+const renderDynamicEqGraph = () => {
+  const threshold = state.dynamicEqThresholdDb;
+  const upper = threshold + state.dynamicEqWindowDb / 2;
+  const lower = threshold - state.dynamicEqWindowDb / 2;
+  const zone = document.querySelector('[data-dynamic-eq-window-zone]');
+  zone.style.top = `${100 - levelPosition(upper)}%`;
+  zone.style.bottom = `${levelPosition(lower)}%`;
+  [['upper', threshold + state.dynamicEqWindowDb / 2], ['threshold', threshold], ['lower', threshold - state.dynamicEqWindowDb / 2]].forEach(([name, db]) => {
+    const guide = document.querySelector(`[data-dynamic-eq-${name}]`);
+    guide.style.bottom = `${levelPosition(db)}%`;
+    guide.title = `${name.toUpperCase()} ${db.toFixed(1)} dBFS`;
+  });
+  dynamicEqBars.forEach((column, index) => {
+    const level = dynamicEqTelemetry?.levels?.[index] ?? -120;
+    const gain = state.dynamicEqEnabled ? (dynamicEqTelemetry?.gains?.[index] ?? 0) : 0;
+    column.querySelector('.dynamic-eq-level').style.height = `${levelPosition(level)}%`;
+    const gainBar = column.querySelector('.dynamic-eq-gain');
+    const halfHeight = Math.min(50, Math.abs(gain) / 12 * 50);
+    gainBar.style.height = `${halfHeight}%`;
+    gainBar.style.bottom = gain >= 0 ? '50%' : `${50 - halfHeight}%`;
+    gainBar.classList.toggle('is-cut', gain < 0);
+    column.querySelector('.dynamic-eq-gain-value').textContent = formatDynamicGain(gain);
+    column.querySelector('.dynamic-eq-meter').title = `${BAND_DEFINITIONS[index].label}: ${level.toFixed(1)} dBFS · ${formatDynamicGain(gain)}`;
+  });
+};
+const renderDynamicEqControls = () => {
+  dynamicEqPowerButton?.setAttribute('aria-pressed', String(state.dynamicEqEnabled));
+  dynamicEqPowerButton?.setAttribute('aria-label', state.dynamicEqEnabled ? 'DYNAMIC EQ ausschalten' : 'DYNAMIC EQ einschalten');
+  document.querySelectorAll('[data-dynamic-eq-mode]').forEach(button => {
+    const active = button.dataset.dynamicEqMode === state.dynamicEqMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  document.querySelectorAll('[data-dynamic-eq-detector]').forEach(button => {
+    const active = button.dataset.dynamicEqDetector === state.dynamicEqDetectorMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  dynamicEqDefinitions.forEach(([, field, , , , unit], index) => {
+    const control = dynamicEqControls.children[index];
+    control.querySelector('input').value = state[field];
+    control.querySelector('output').textContent = `${state[field]} ${unit}`;
+  });
+  dynamicEqSensitivityInputs.forEach((input, index) => {
+    input.value = state.dynamicEqBandSensitivity[index];
+    input.nextElementSibling.textContent = input.value;
+  });
+  renderDynamicEqGraph();
+};
+dynamicEqPowerButton?.addEventListener('click', event => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.detail === 0) return;
+  state.dynamicEqEnabled = !state.dynamicEqEnabled;
+  if (!state.dynamicEqEnabled) dynamicEqTelemetry = null;
+  audioEngine?.setDynamicEq(state);
+  renderDynamicEqControls();
+});
+document.querySelectorAll('[data-dynamic-eq-mode]').forEach(button => button.addEventListener('click', () => {
+  state.dynamicEqMode = button.dataset.dynamicEqMode;
+  audioEngine?.setDynamicEq(state);
+  renderDynamicEqControls();
+}));
+document.querySelectorAll('[data-dynamic-eq-detector]').forEach(button => button.addEventListener('click', () => {
+  state.dynamicEqDetectorMode = button.dataset.dynamicEqDetector;
+  audioEngine?.setDynamicEq(state);
+  renderDynamicEqControls();
+}));
+document.querySelector('[data-dynamic-eq-reset]')?.addEventListener('click', () => {
+  state.dynamicEqBandSensitivity.fill(100);
+  audioEngine?.setDynamicEq(state);
+  renderDynamicEqControls();
+});
+renderDynamicEqControls();
 window.FilterMode = Object.freeze({
   getState: () => ({
     selectedWorkspaceMode: state.selectedWorkspaceMode,
@@ -2337,7 +2461,8 @@ const updateAudioStatus = (status, message = '') => {
 audioEngine = new AudioEngine({
   onStatusChange: updateAudioStatus,
   onDevicesChanged: devices => { knownInputDevices = devices.inputs; if (audioSourceMode === 'device') renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät'); renderDevices(outputDeviceSelect, devices.outputs, 'Standardausgabe'); },
-  onDiagnostics: packet => { devLabTelemetry.receive(packet); scheduleAnalyzerRender(); }
+  onDiagnostics: packet => { devLabTelemetry.receive(packet); scheduleAnalyzerRender(); },
+  onDynamicEqTelemetry: packet => { dynamicEqTelemetry = packet; if (state.selectedWorkspaceMode === 'dynamic-eq') requestAnimationFrame(renderDynamicEqGraph); }
 });
 audioEngine.applyState(state);
 const setAudioBypass = enabled => {
@@ -2515,6 +2640,8 @@ const persistSweetspots = () => {
 };
 const syncUiFromAudioState = snapshot => {
   if (!snapshot) return;
+  Object.assign(state, window.ResonantState.normalizeDynamicEqState(snapshot));
+  renderDynamicEqControls();
   Object.assign(state, window.ResonantState.normalizeFilterState({
     filterType: snapshot.filterType ?? state.filterType,
     filterFrequencyHz: snapshot.filterFrequencyHz ?? state.filterFrequencyHz,
