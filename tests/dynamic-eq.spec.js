@@ -205,6 +205,72 @@ test('dynamic EQ graph and controls fit the existing desktop workspace', async (
   }
 });
 
+test('dynamic EQ reuses FILTER sliders and its six controls form one 2 by 3 grid', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="dynamic-eq"]').click();
+  const styles = await page.evaluate(() => {
+    const filter = document.querySelector('.filter-secondary-controls .filter-style-slider');
+    const global = document.querySelector('.dynamic-eq-control .filter-style-slider');
+    const sensitivity = document.querySelector('.dynamic-eq-sensitivity-item .filter-style-slider');
+    const rules = [...document.styleSheets].flatMap(sheet => [...sheet.cssRules]);
+    const thumb = rules.find(rule => rule.selectorText === '.filter-style-slider::-webkit-slider-thumb');
+    const track = rules.find(rule => rule.selectorText === '.filter-style-slider::-webkit-slider-runnable-track');
+    const grid = document.querySelector('.dynamic-eq-control-grid');
+    const cells = [...grid.children].map(child => child.getBoundingClientRect().toJSON());
+    return { shared: [filter, global, sensitivity].every(input => input?.classList.contains('filter-style-slider')),
+      thumb: { width: thumb?.style.width, height: thumb?.style.height, radius: thumb?.style.borderRadius,
+        border: thumb?.style.border, shadow: thumb?.style.boxShadow },
+      track: { height: track?.style.height, background: track?.style.background },
+      gap: getComputedStyle(grid).gap, columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length, cells };
+  });
+  expect(styles.shared).toBe(true);
+  expect(styles.thumb).toMatchObject({ width: '10px', height: '20px', radius: '3px' });
+  expect(styles.thumb.border).toContain('var(--range-thumb-border)');
+  expect(styles.thumb.shadow).toContain('var(--range-thumb-shadow)');
+  expect(styles.track.height).toBe('5px');
+  expect(styles.track.background).toContain('var(--range-track)');
+  expect(styles.gap).toBe('0px');
+  expect(styles.columns).toBe(2);
+  expect(styles.cells).toHaveLength(6);
+  expect(styles.cells[0].right).toBeCloseTo(styles.cells[1].left, 0);
+  expect(styles.cells[0].bottom).toBeCloseTo(styles.cells[2].top, 0);
+});
+
+test('dynamic EQ axes, guide values and detector colors remain visible across themes', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="dynamic-eq"]').click();
+  await page.locator('[data-module-power="dynamic-eq"]').click();
+  await expect(page.locator('.dynamic-eq-y-axis span')).toHaveText(['0 dBFS', '−12 dBFS', '−24 dBFS', '−36 dBFS', '−48 dBFS', '−60 dBFS']);
+  await expect(page.locator('.dynamic-eq-x-axis span')).toHaveText(['29', '61', '115', '218', '411', '777', '1.5k', '2.8k', '5.2k', '11k']);
+  await expect(page.locator('.dynamic-eq-level-guide span')).toHaveText(['UPPER -21.0', 'THRESHOLD -24.0', 'LOWER -27.0']);
+  await page.evaluate(() => window.FilterMode.getAudioEngine().onDynamicEqTelemetry({
+    levels: Array(10).fill(-20), gains: [-3, 3, 0, 0, 0, 0, 0, 0, 0, 0]
+  }));
+  await expect(page.locator('.dynamic-eq-level-value').first()).toHaveText('-20');
+  const visible = await page.evaluate(() => ({
+    detector: document.querySelector('.dynamic-eq-level').getBoundingClientRect().height,
+    cut: document.querySelectorAll('.dynamic-eq-gain')[0].getBoundingClientRect().height,
+    boost: document.querySelectorAll('.dynamic-eq-gain')[1].getBoundingClientRect().height,
+    zero: getComputedStyle(document.querySelector('.dynamic-eq-gain-zero')).borderTopStyle
+  }));
+  expect(visible.detector).toBeGreaterThan(0);
+  expect(visible.cut).toBeGreaterThan(0);
+  expect(visible.boost).toBeGreaterThan(0);
+  expect(visible.zero).toBe('dotted');
+  const initialGainHeight = visible.cut;
+  await page.locator('.dynamic-eq-control input[aria-label="Range"]').fill('3');
+  await expect(page.locator('[data-dynamic-eq-gain-scale]')).toHaveText('GAIN · ±3.0 dB');
+  const scaledGainHeight = await page.locator('.dynamic-eq-gain').first().evaluate(bar => bar.getBoundingClientRect().height);
+  expect(scaledGainHeight).toBeGreaterThan(initialGainHeight * 1.9);
+  const themes = await page.locator('[data-theme-select]').locator('option').evaluateAll(options => options.map(option => option.value).filter(value => value !== 'custom'));
+  for (const theme of themes) {
+    await page.locator('[data-theme-select]').selectOption(theme);
+    const color = await page.locator('.dynamic-eq-level').first().evaluate(bar => getComputedStyle(bar).backgroundColor);
+    expect(color).toMatch(/^rgb/);
+    expect(color).not.toBe('rgba(0, 0, 0, 0)');
+  }
+});
+
 test('dynamic EQ guide lines and bipolar gain bars follow telemetry', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-mode="dynamic-eq"]').click();
@@ -220,4 +286,44 @@ test('dynamic EQ guide lines and bipolar gain bars follow telemetry', async ({ p
   expect(before).not.toBe(after);
   await expect(page.locator('[data-dynamic-eq-upper]')).toHaveAttribute('title', 'UPPER -15.0 dBFS');
   await expect(page.locator('[data-dynamic-eq-lower]')).toHaveAttribute('title', 'LOWER -21.0 dBFS');
+});
+
+test('running sample audio reaches the visible dynamic EQ telemetry graph', async ({ page }) => {
+  test.setTimeout(30000);
+  await page.goto('/');
+  await page.locator('[data-mode="dynamic-eq"]').click();
+  await page.locator('[data-module-power="dynamic-eq"]').click();
+  await page.locator('[data-dynamic-eq-mode="boost"]').click();
+  await page.locator('.dynamic-eq-control input[aria-label="Threshold"]').fill('0');
+  await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    window.__dynamicEqLive = { packets: 0, levels: [], gains: [] };
+    const receive = engine.onDynamicEqTelemetry;
+    engine.onDynamicEqTelemetry = packet => {
+      window.__dynamicEqLive.packets += 1;
+      window.__dynamicEqLive.levels = packet.levels;
+      window.__dynamicEqLive.gains = packet.gains;
+      receive(packet);
+    };
+  });
+  await page.locator('[data-audio-source="sample"]').click();
+  await page.locator('[data-audio-start]').click();
+  await expect(page.locator('[data-audio-status]')).toHaveText('ON');
+  await expect.poll(() => page.evaluate(() => window.__dynamicEqLive.packets)).toBeGreaterThan(3);
+  const live = await page.evaluate(() => ({
+    ...window.__dynamicEqLive,
+    visibleBars: [...document.querySelectorAll('.dynamic-eq-level')].filter(bar => bar.getBoundingClientRect().height > 2).length,
+    visibleGains: [...document.querySelectorAll('.dynamic-eq-gain')].filter(bar => bar.getBoundingClientRect().height > 2).length,
+    background: getComputedStyle(document.querySelector('.dynamic-eq-level')).backgroundColor,
+    shownLevel: document.querySelector('.dynamic-eq-level-value').textContent,
+    shownGain: document.querySelector('.dynamic-eq-gain-value').textContent
+  }));
+  expect(live.levels.some(level => level > -90)).toBe(true);
+  expect(live.gains.some(gain => gain > 0.1)).toBe(true);
+  expect(live.visibleBars).toBeGreaterThan(0);
+  expect(live.visibleGains).toBeGreaterThan(0);
+  expect(live.background).not.toBe('rgba(0, 0, 0, 0)');
+  expect(live.shownLevel).not.toBe('−120');
+  expect(live.shownGain).toContain('dB');
+  await page.locator('[data-audio-stop]').click();
 });

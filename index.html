@@ -498,12 +498,12 @@
               </section>
               <section class="filter-controls" aria-label="Filter controls">
                 <div class="filter-type-control"><span>FILTER TYPE</span><div class="filter-type-groups" data-filter-type-groups aria-label="Filtertyp"></div></div>
-                <label class="filter-parameter-control filter-frequency-control" data-filter-primary-control><span>FREQUENCY</span><output data-filter-frequency-output>777 Hz</output><input type="range" min="0" max="1000" step="1" data-filter-frequency aria-label="Filter frequency"><datalist id="filter-vowel-ticks"><option value="0" label="A"></option><option value="1" label="E"></option><option value="2" label="I"></option><option value="3" label="O"></option><option value="4" label="U"></option></datalist></label>
+                <label class="filter-parameter-control filter-frequency-control" data-filter-primary-control><span>FREQUENCY</span><output data-filter-frequency-output>777 Hz</output><input class="filter-style-slider" type="range" min="0" max="1000" step="1" data-filter-frequency aria-label="Filter frequency"><datalist id="filter-vowel-ticks"><option value="0" label="A"></option><option value="1" label="E"></option><option value="2" label="I"></option><option value="3" label="O"></option><option value="4" label="U"></option></datalist></label>
                 <div class="filter-secondary-controls">
-                  <label class="filter-parameter-control"><span>SLOPE</span><output data-filter-slope-output>50 %</output><input type="range" min="0" max="100" step="1" data-filter-slope aria-label="Filter slope"></label>
-                  <label class="filter-parameter-control"><span>RESONANCE</span><output data-filter-resonance-output>0 %</output><input type="range" min="0" max="100" step="1" value="0" data-filter-resonance aria-label="Filter resonance"></label>
-                  <label class="filter-parameter-control" data-filter-bandwidth-control><span>WIDTH</span><output data-filter-bandwidth-output>50 %</output><input type="range" min="0" max="100" step="1" data-filter-bandwidth aria-label="Filter bandwidth"></label>
-                  <label class="filter-parameter-control"><span>DEPTH</span><output data-filter-depth-output>100 %</output><input type="range" min="0" max="100" step="1" value="100" data-filter-depth aria-label="Filter depth"></label>
+                  <label class="filter-parameter-control"><span>SLOPE</span><output data-filter-slope-output>50 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" data-filter-slope aria-label="Filter slope"></label>
+                  <label class="filter-parameter-control"><span>RESONANCE</span><output data-filter-resonance-output>0 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-filter-resonance aria-label="Filter resonance"></label>
+                  <label class="filter-parameter-control" data-filter-bandwidth-control><span>WIDTH</span><output data-filter-bandwidth-output>50 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" data-filter-bandwidth aria-label="Filter bandwidth"></label>
+                  <label class="filter-parameter-control"><span>DEPTH</span><output data-filter-depth-output>100 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="100" data-filter-depth aria-label="Filter depth"></label>
                 </div>
               </section>
             </section>
@@ -514,13 +514,20 @@
               <section class="dynamic-eq-response" aria-label="Dynamic EQ response">
                 <header><strong>DYNAMIC EQ RESPONSE</strong><span>STEREO LINKED · PRE GAIN DETECTOR</span></header>
                 <div class="dynamic-eq-graph" data-dynamic-eq-graph>
-                  <div class="dynamic-eq-window-zone" data-dynamic-eq-window-zone></div>
-                  <div class="dynamic-eq-level-guide" data-dynamic-eq-upper></div>
-                  <div class="dynamic-eq-level-guide dynamic-eq-threshold" data-dynamic-eq-threshold></div>
-                  <div class="dynamic-eq-level-guide" data-dynamic-eq-lower></div>
-                  <div class="dynamic-eq-columns" data-dynamic-eq-columns></div>
+                  <div class="dynamic-eq-y-axis" aria-label="Detector level axis"><span>0 dBFS</span><span>−12 dBFS</span><span>−24 dBFS</span><span>−36 dBFS</span><span>−48 dBFS</span><span>−60 dBFS</span></div>
+                  <div class="dynamic-eq-plot">
+                    <div class="dynamic-eq-window-zone" data-dynamic-eq-window-zone></div>
+                    <div class="dynamic-eq-gain-zero"><span>GAIN 0 dB</span></div>
+                    <div class="dynamic-eq-level-guide" data-dynamic-eq-upper><span></span></div>
+                    <div class="dynamic-eq-level-guide dynamic-eq-threshold" data-dynamic-eq-threshold><span></span></div>
+                    <div class="dynamic-eq-level-guide" data-dynamic-eq-lower><span></span></div>
+                    <div class="dynamic-eq-columns" data-dynamic-eq-columns></div>
+                  </div>
+                  <div class="dynamic-eq-level-values" data-dynamic-eq-level-values></div>
+                  <div class="dynamic-eq-gain-values" data-dynamic-eq-gain-values></div>
+                  <div class="dynamic-eq-x-axis" data-dynamic-eq-x-axis></div>
                 </div>
-                <div class="dynamic-eq-legend"><span>LEVEL · dBFS</span><span>GAIN · dB</span></div>
+                <div class="dynamic-eq-legend"><span>LEVEL · dBFS</span><span data-dynamic-eq-gain-scale>GAIN · ±6 dB</span></div>
                 <div class="dynamic-eq-sensitivity"><div class="dynamic-eq-sensitivity-heading"><strong>SENSITIVITY</strong><button type="button" data-dynamic-eq-reset>RESET 100 %</button></div><div class="dynamic-eq-sensitivity-grid" data-dynamic-eq-sensitivity></div></div>
               </section>
               <section class="dynamic-eq-controls" aria-label="Dynamic EQ controls"><strong>CONTROLS</strong>

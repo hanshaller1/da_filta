@@ -1623,6 +1623,9 @@ filterControlSlots.forEach(slot => slot.querySelector('input')?.addEventListener
 }));
 renderFilterMode();
 const dynamicEqColumns = document.querySelector('[data-dynamic-eq-columns]');
+const dynamicEqLevelValues = document.querySelector('[data-dynamic-eq-level-values]');
+const dynamicEqGainValues = document.querySelector('[data-dynamic-eq-gain-values]');
+const dynamicEqXAxis = document.querySelector('[data-dynamic-eq-x-axis]');
 const dynamicEqSensitivity = document.querySelector('[data-dynamic-eq-sensitivity]');
 const dynamicEqControls = document.querySelector('[data-dynamic-eq-controls]');
 const dynamicEqDefinitions = [
@@ -1640,13 +1643,24 @@ const formatDynamicGain = db => `${db >= 0 ? '+' : ''}${db.toFixed(1)} dB`;
 BAND_DEFINITIONS.forEach((band, index) => {
   const column = document.createElement('div');
   column.className = 'dynamic-eq-column';
-  column.innerHTML = '<div class="dynamic-eq-meter"><i class="dynamic-eq-level"></i><i class="dynamic-eq-gain"></i></div><output class="dynamic-eq-gain-value">+0.0 dB</output><span class="dynamic-eq-frequency"></span>';
-  column.querySelector('.dynamic-eq-frequency').textContent = band.label.replace(' Hz', '').replace(' kHz', 'k');
+  column.innerHTML = '<i class="dynamic-eq-level"></i><i class="dynamic-eq-gain"></i>';
   dynamicEqColumns.append(column);
   dynamicEqBars.push(column);
+  const levelValue = document.createElement('output');
+  levelValue.className = 'dynamic-eq-level-value';
+  levelValue.textContent = '−120';
+  dynamicEqLevelValues.append(levelValue);
+  const gainValue = document.createElement('output');
+  gainValue.className = 'dynamic-eq-gain-value';
+  gainValue.textContent = '+0.0 dB';
+  dynamicEqGainValues.append(gainValue);
+  const frequency = document.createElement('span');
+  frequency.className = 'dynamic-eq-frequency';
+  frequency.textContent = band.label.replace(' Hz', '').replace(' kHz', 'k');
+  dynamicEqXAxis.append(frequency);
   const label = document.createElement('label');
   label.className = 'dynamic-eq-sensitivity-item';
-  label.innerHTML = '<input type="range" min="0" max="100" step="1"><output>100</output>';
+  label.innerHTML = '<input class="filter-style-slider" type="range" min="0" max="100" step="1"><output>100</output>';
   const input = label.querySelector('input');
   input.setAttribute('aria-label', `${band.label} sensitivity`);
   input.addEventListener('input', () => {
@@ -1659,8 +1673,8 @@ BAND_DEFINITIONS.forEach((band, index) => {
 });
 dynamicEqDefinitions.forEach(([label, field, min, max, step, unit]) => {
   const control = document.createElement('label');
-  control.className = 'dynamic-eq-control';
-  control.innerHTML = `<span>${label.toUpperCase()}</span><output></output><input type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}">`;
+  control.className = 'dynamic-eq-control filter-parameter-control';
+  control.innerHTML = `<span>${label.toUpperCase()}</span><output></output><input class="filter-style-slider" type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}">`;
   const input = control.querySelector('input');
   input.addEventListener('input', () => {
     state[field] = Number(input.value);
@@ -1681,18 +1695,22 @@ const renderDynamicEqGraph = () => {
     const guide = document.querySelector(`[data-dynamic-eq-${name}]`);
     guide.style.bottom = `${levelPosition(db)}%`;
     guide.title = `${name.toUpperCase()} ${db.toFixed(1)} dBFS`;
+    guide.querySelector('span').textContent = `${name.toUpperCase()} ${db.toFixed(1)}`;
+    guide.classList.toggle('is-above-range', db >= 0);
   });
+  document.querySelector('[data-dynamic-eq-gain-scale]').textContent = `GAIN · ±${state.dynamicEqRangeDb.toFixed(1)} dB`;
   dynamicEqBars.forEach((column, index) => {
     const level = dynamicEqTelemetry?.levels?.[index] ?? -120;
     const gain = state.dynamicEqEnabled ? (dynamicEqTelemetry?.gains?.[index] ?? 0) : 0;
     column.querySelector('.dynamic-eq-level').style.height = `${levelPosition(level)}%`;
     const gainBar = column.querySelector('.dynamic-eq-gain');
-    const halfHeight = Math.min(50, Math.abs(gain) / 12 * 50);
+    const halfHeight = state.dynamicEqRangeDb > 0 ? Math.min(50, Math.abs(gain) / state.dynamicEqRangeDb * 50) : 0;
     gainBar.style.height = `${halfHeight}%`;
     gainBar.style.bottom = gain >= 0 ? '50%' : `${50 - halfHeight}%`;
     gainBar.classList.toggle('is-cut', gain < 0);
-    column.querySelector('.dynamic-eq-gain-value').textContent = formatDynamicGain(gain);
-    column.querySelector('.dynamic-eq-meter').title = `${BAND_DEFINITIONS[index].label}: ${level.toFixed(1)} dBFS · ${formatDynamicGain(gain)}`;
+    dynamicEqLevelValues.children[index].textContent = level.toFixed(0);
+    dynamicEqGainValues.children[index].textContent = formatDynamicGain(gain);
+    column.title = `${BAND_DEFINITIONS[index].label}: ${level.toFixed(1)} dBFS · ${formatDynamicGain(gain)}`;
   });
 };
 const renderDynamicEqControls = () => {
