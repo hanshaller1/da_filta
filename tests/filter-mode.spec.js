@@ -139,7 +139,7 @@ test('workspace selection and module power remain independent pointer interactio
 
   await page.locator('[data-mode="filterbank"]').click();
   expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: false });
-  await expect(page.locator('.mode-power:disabled')).toHaveCount(5);
+  await expect(page.locator('.mode-power:disabled')).toHaveCount(4);
   await expect(page.locator('[data-mode="filterbank"]').locator('xpath=..').locator('[data-module-power="filterbank"]')).toHaveCount(1);
   await expect(page.locator('[data-mode="presets"]').locator('xpath=..').locator('.mode-power-slot')).toHaveCount(1);
 });

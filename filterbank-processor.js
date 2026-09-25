@@ -1,4 +1,5 @@
 import { LinearTptSvf, OversampledPositiveTptResonator } from './tpt-svf.js';
+import { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } from './dynamic-eq-core.mjs';
 
 const COMMON_BUS_RESONANCE_EPSILON = 1e-12;
 const DIAGNOSTICS_UPDATE_HZ = 15;
@@ -18,6 +19,25 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.bandFrequencies = this.readBandDefinition(processorOptions.bandFrequencies, 'Frequenzen');
     this.bandQs = this.readBandDefinition(processorOptions.bandQs, 'Q-Werte');
     this.bandCount = this.bandFrequencies.length;
+    this.setDynamicEq(processorOptions);
+    // Dedicated source-only filters keep detection before gain and feedback.
+    this.dynamicEqDetectorFilters = { left: this.createFilters(), right: this.createFilters() };
+    this.dynamicEqPeak = new Float64Array(this.bandCount);
+    this.dynamicEqEnergy = new Float64Array(this.bandCount);
+    this.dynamicEqLevelDb = new Float64Array(this.bandCount).fill(-120);
+    this.dynamicEqGainDb = new Float64Array(this.bandCount);
+    this.dynamicEqSmoothedDb = new Float64Array(this.bandCount);
+    this.dynamicEqTargetDb = new Float64Array(this.bandCount);
+    this.preDynamicGainDb = {
+      left: Float64Array.from(processorOptions.preDynamicGainDbLeft || Array(this.bandCount).fill(0)),
+      right: Float64Array.from(processorOptions.preDynamicGainDbRight || Array(this.bandCount).fill(0))
+    };
+    this.preDynamicSmoothedDb = {
+      left: Float64Array.from(this.preDynamicGainDb.left),
+      right: Float64Array.from(this.preDynamicGainDb.right)
+    };
+    this.dynamicEqTelemetryCounter = 0;
+    this.dynamicEqTelemetryInterval = Math.max(1, Math.round(sampleRate / 15));
     this.maxBandGainDb = this.readPositiveOption(processorOptions.maxBandGainDb, 12);
     this.maxBandBoostDb = this.readBandBoostDb(processorOptions.maxBandBoostDb ?? this.maxBandGainDb);
     this.maxBandCutDb = this.readBandCutDb(processorOptions.maxBandCutDb ?? this.maxBandGainDb);
@@ -438,6 +458,41 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       filters[index] = new LinearTptSvf(sampleRate, this.bandFrequencies[index], this.bandQs[index]);
     }
     return filters;
+  }
+
+  setDynamicEq(source) {
+    const settings = normalizeDynamicEq(source, this.bandCount);
+    Object.assign(this, settings);
+    this.dynamicEqAttackCoefficient = timeCoefficient(this.dynamicEqAttackMs, sampleRate);
+    this.dynamicEqReleaseCoefficient = timeCoefficient(this.dynamicEqReleaseMs, sampleRate);
+    this.dynamicEqPeakCoefficient = timeCoefficient(15, sampleRate);
+    this.dynamicEqRmsCoefficient = timeCoefficient(50, sampleRate);
+    if (!this.dynamicEqEnabled && this.dynamicEqGainDb) {
+      this.dynamicEqGainDb.fill(0);
+      this.dynamicEqSmoothedDb.fill(0);
+    }
+  }
+
+  updateDynamicEq(left, right) {
+    for (let band = 0; band < this.bandCount; band += 1) {
+      const leftBand = this.processBandpass(this.dynamicEqDetectorFilters.left[band], Number.isFinite(left) ? left : 0);
+      const rightBand = this.processBandpass(this.dynamicEqDetectorFilters.right[band], Number.isFinite(right) ? right : 0);
+      const magnitude = Math.max(Math.abs(leftBand), Math.abs(rightBand));
+      const peak = Math.max(magnitude, this.dynamicEqPeak[band] * this.dynamicEqPeakCoefficient);
+      this.dynamicEqPeak[band] = peak;
+      // Linked RMS uses the louder channel's squared band signal.
+      this.dynamicEqEnergy[band] = magnitude * magnitude * (1 - this.dynamicEqRmsCoefficient)
+        + this.dynamicEqEnergy[band] * this.dynamicEqRmsCoefficient;
+      const amplitude = this.dynamicEqDetectorMode === 'peak' ? peak : Math.sqrt(this.dynamicEqEnergy[band]);
+      const levelDb = Math.max(-120, 20 * Math.log10(Math.max(1e-6, amplitude)));
+      this.dynamicEqLevelDb[band] = levelDb;
+      const target = targetGainDb(levelDb, this);
+      const sensitivity = this.dynamicEqBandSensitivity[band] / 100;
+      this.dynamicEqTargetDb[band] = sensitivity === 0 ? 0 : target * sensitivity;
+      this.dynamicEqSmoothedDb[band] = smoothGain(this.dynamicEqSmoothedDb[band], target,
+        this.dynamicEqAttackCoefficient, this.dynamicEqReleaseCoefficient);
+      this.dynamicEqGainDb[band] = sensitivity === 0 ? 0 : this.dynamicEqSmoothedDb[band] * sensitivity;
+    }
   }
 
   isCompensatedLocalLoopBand(index) {
@@ -1522,6 +1577,15 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   setNegativeResonancePhase(value) { this.negativeResonancePhase = this.readNegativeResonancePhase(value); }
 
   applyState(data) {
+    this.setDynamicEq(data);
+    if (data.preDynamicGainDbLeft && data.preDynamicGainDbRight) {
+      for (let i = 0; i < this.bandCount; i += 1) {
+        this.preDynamicGainDb.left[i] = Number.isFinite(data.preDynamicGainDbLeft[i]) ? data.preDynamicGainDbLeft[i] : 0;
+        this.preDynamicGainDb.right[i] = Number.isFinite(data.preDynamicGainDbRight[i]) ? data.preDynamicGainDbRight[i] : 0;
+        this.preDynamicSmoothedDb.left[i] = this.preDynamicGainDb.left[i];
+        this.preDynamicSmoothedDb.right[i] = this.preDynamicGainDb.right[i];
+      }
+    }
     const leftControls = this.readControls(data.bandGainLeft);
     const rightControls = this.readControls(data.bandGainRight);
     const leftFeedback = this.readFeedbackGates(data.feedbackBandLeft);
@@ -1577,6 +1641,14 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   handleMessage(data) {
     if (!data || this.disposed) return;
+    if (data.type === 'set-dynamic-eq') { this.setDynamicEq(data); return; }
+    if (data.type === 'set-pre-dynamic-gain-db') {
+      if (Number.isInteger(data.index) && data.index >= 0 && data.index < this.bandCount) {
+        this.preDynamicGainDb.left[data.index] = Number.isFinite(data.left) ? data.left : 0;
+        this.preDynamicGainDb.right[data.index] = Number.isFinite(data.right) ? data.right : 0;
+      }
+      return;
+    }
     if (data.type === 'set-band-base-gain') {
       this.setBandControl(data.channel, data.index, data.value);
       return;
@@ -1857,15 +1929,25 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       }
       globalTapSum += bandOutput;
       if (!zdfActive) deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
-      const audibleGain = 1 + deltaGains[band];
-      const mainPostGainWeight = this.mainPostGainFeedbackWeight(audibleGain);
+      const staticGain = 1 + deltaGains[band];
+      const dynamicDb = this.dynamicEqGainDb[band];
+      let audibleGain = staticGain;
+      if (dynamicDb !== 0) {
+        const preDynamicTarget = this.preDynamicGainDb[channel][band];
+        const preDynamicDb = preDynamicTarget + this.bandGainSmoothingCoefficient
+          * (this.preDynamicSmoothedDb[channel][band] - preDynamicTarget);
+        this.preDynamicSmoothedDb[channel][band] = preDynamicDb;
+        audibleGain = Math.pow(10, Math.max(-this.maxBandCutDb, Math.min(this.maxBandBoostDb,
+          preDynamicDb + dynamicDb)) / 20);
+      } else this.preDynamicSmoothedDb[channel][band] = this.preDynamicGainDb[channel][band];
+      const mainPostGainWeight = this.mainPostGainFeedbackWeight(staticGain);
       if (this.collectResonatorDiagnostics) {
         this.resonatorDiagnostics[channel].mainPostGainFeedbackWeightDb[band] = 20 * Math.log10(mainPostGainWeight);
       }
-      if (this.wetModel === 'reference-delta') mainOutput += deltaGains[band] * bandOutput;
+      if (this.wetModel === 'reference-delta') mainOutput += (audibleGain - 1) * bandOutput;
       else filterbankSum += audibleGain * bandOutput;
       if (commonBusActive && localGate > 1e-12) {
-        commonTapSum += localGate * (this.feedbackTap === 'post-gain' ? audibleGain * bandOutput : bandOutput);
+        commonTapSum += localGate * (this.feedbackTap === 'post-gain' ? staticGain * bandOutput : bandOutput);
       }
       if (mainCommonBusActive || perBandCoupledMainActive) {
         mainTapSum += feedbackAllGate * (this.feedbackAllSource === 'post-gain-sum'
@@ -2137,6 +2219,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const rightOutput = outputChannels[1];
     const frameCount = Math.max(leftOutput?.length || 0, rightOutput?.length || 0);
     for (let frame = 0; frame < frameCount; frame += 1) {
+      if (this.dynamicEqEnabled) this.updateDynamicEq(inputChannels[0]?.[frame], inputChannels[1]?.[frame]);
       this.resonance = this.resonanceTarget + this.resonanceSmoothingCoefficient * (this.resonance - this.resonanceTarget);
       this.positiveResonanceAuditionGain = this.positiveResonanceAuditionGainTarget
         + this.positiveResonanceAuditionGainSmoothingCoefficient * (
@@ -2178,6 +2261,14 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       }
       if (leftOutput) leftOutput[frame] = this.processChannelFrame(inputChannels[0]?.[frame], 'left');
       if (rightOutput) rightOutput[frame] = this.processChannelFrame(inputChannels[1]?.[frame], 'right');
+    }
+    if (this.dynamicEqEnabled) {
+      this.dynamicEqTelemetryCounter += frameCount;
+      if (this.dynamicEqTelemetryCounter >= this.dynamicEqTelemetryInterval) {
+        this.dynamicEqTelemetryCounter %= this.dynamicEqTelemetryInterval;
+        this.port.postMessage({ type: 'dynamic-eq-telemetry', levels: Array.from(this.dynamicEqLevelDb),
+          targets: Array.from(this.dynamicEqTargetDb), gains: Array.from(this.dynamicEqGainDb) });
+      }
     }
     if (this.collectResonatorDiagnostics) {
       this.diagnosticsFrameCounter += frameCount;

@@ -37,10 +37,12 @@
   };
 
   class AudioEngine {
-    constructor({ onStatusChange, onDevicesChanged, onDiagnostics }) {
+    constructor({ onStatusChange, onDevicesChanged, onDiagnostics, onDynamicEqTelemetry }) {
       this.onStatusChange = onStatusChange;
       this.onDevicesChanged = onDevicesChanged;
       this.onDiagnostics = onDiagnostics;
+      this.onDynamicEqTelemetry = onDynamicEqTelemetry;
+      Object.assign(this, window.ResonantState.normalizeDynamicEqState());
       this.status = 'OFF';
       this.inputGainDb = 0;
       this.inputPreampStage = 'linear';
@@ -304,6 +306,11 @@
       return this.filterbankEnabled;
     }
 
+    setDynamicEq(source) {
+      Object.assign(this, window.ResonantState.normalizeDynamicEqState(source));
+      this.filterbank?.setDynamicEq?.(this);
+    }
+
     setBandBaseGain(channel, index, value) {
       if (!Number.isInteger(index) || index < 0 || index >= BAND_COUNT) throw new RangeError('Ungültiger Bandindex.');
       const nextValue = clampBandGain(value);
@@ -335,6 +342,15 @@
       });
     }
 
+    getPreDynamicGainDb(index, channel) {
+      const left = controlToBandGainDb(this.bandGainLeft[index], this.maxBandBoostDb, this.maxBandCutDb);
+      const right = controlToBandGainDb(this.bandGainRight[index], this.maxBandBoostDb, this.maxBandCutDb);
+      const stored = channel === 'left' ? left : right;
+      const center = (left + right) / 2;
+      const manual = this.filterbankEnabled ? stored : this.filterEnabled ? stored - center : 0;
+      return manual + (this.filterEnabled ? this.filterModeBandGainsDb[index] : 0);
+    }
+
     get effectiveBandGainLeft() {
       return Array.from({ length: BAND_COUNT }, (_, index) => this.getEffectiveBandGains(index).leftControl);
     }
@@ -356,6 +372,7 @@
       const effective = this.getEffectiveBandGains(index);
       this.filterbank.setBandBaseGain('left', index, effective.leftControl);
       this.filterbank.setBandBaseGain('right', index, effective.rightControl);
+      this.filterbank.setPreDynamicGainDb?.(index, this.getPreDynamicGainDb(index, 'left'), this.getPreDynamicGainDb(index, 'right'));
     }
 
     applyEffectiveBandGains() {
@@ -397,6 +414,8 @@
       return {
         bandGainLeft: this.effectiveBandGainLeft,
         bandGainRight: this.effectiveBandGainRight,
+        preDynamicGainDbLeft: Array.from({ length: BAND_COUNT }, (_, i) => this.getPreDynamicGainDb(i, 'left')),
+        preDynamicGainDbRight: Array.from({ length: BAND_COUNT }, (_, i) => this.getPreDynamicGainDb(i, 'right')),
         feedbackBandLeft: this.feedbackBandLeft.map(value => this.filterbankEnabled && value),
         feedbackBandRight: this.feedbackBandRight.map(value => this.filterbankEnabled && value),
         feedbackAllLeft: this.filterbankEnabled && this.feedbackAllLeft,
@@ -415,6 +434,8 @@
         , perChannelBands: this.perChannelBands
         , negativeResonanceMode: this.negativeResonanceMode, negativeResonanceCurve: this.negativeResonanceCurve, negativeResonanceAmount: this.negativeResonanceAmount, negativeResonanceLocal: this.negativeResonanceLocal, negativeResonanceMain: this.negativeResonanceMain, negativeResonancePhase: this.negativeResonancePhase
         , onDiagnostics: this.onDiagnostics
+        , onDynamicEqTelemetry: this.onDynamicEqTelemetry
+        , ...window.ResonantState.normalizeDynamicEqState(this)
       };
     }
 
@@ -430,6 +451,7 @@
         spreadMaxOffsetDb: this.spreadMaxOffsetDb,
         filterbankEnabled: this.filterbankEnabled,
         filterEnabled: this.filterEnabled,
+        ...window.ResonantState.normalizeDynamicEqState(this),
         filterType: this.filterType,
         filterFrequencyHz: this.filterFrequencyHz,
         filterSlope: this.filterSlope,
@@ -451,6 +473,7 @@
     }
 
     applyState(snapshot) {
+      this.setDynamicEq(snapshot);
       const left = Array.isArray(snapshot?.bandGainLeft) ? snapshot.bandGainLeft : [];
       const right = Array.isArray(snapshot?.bandGainRight) ? snapshot.bandGainRight : [];
       const finiteOr = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;

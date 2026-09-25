@@ -30,6 +30,24 @@
   });
 
   const createArray = (value) => Array(BAND_COUNT).fill(value);
+  const normalizeDynamicEqState = source => {
+    const limited = (value, min, max, fallback) => {
+      const number = Number(value);
+      return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+    };
+    return {
+      dynamicEqEnabled: source?.dynamicEqEnabled === true,
+      dynamicEqMode: ['cut', 'boost', 'balance'].includes(source?.dynamicEqMode) ? source.dynamicEqMode : 'cut',
+      dynamicEqThresholdDb: limited(source?.dynamicEqThresholdDb, -60, 0, -24),
+      dynamicEqWindowDb: limited(source?.dynamicEqWindowDb, 0, 12, 6),
+      dynamicEqRangeDb: limited(source?.dynamicEqRangeDb, 0, 12, 6),
+      dynamicEqStrength: limited(source?.dynamicEqStrength, 0, 100, 100),
+      dynamicEqAttackMs: limited(source?.dynamicEqAttackMs, 1, 500, 30),
+      dynamicEqReleaseMs: limited(source?.dynamicEqReleaseMs, 10, 2000, 250),
+      dynamicEqDetectorMode: source?.dynamicEqDetectorMode === 'peak' ? 'peak' : 'rms',
+      dynamicEqBandSensitivity: Array.from({ length: BAND_COUNT }, (_, index) => limited(source?.dynamicEqBandSensitivity?.[index], 0, 100, 100))
+    };
+  };
   const clampBandGain = value => {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) return BAND_GAIN_NEUTRAL;
@@ -131,6 +149,7 @@
     selectedWorkspaceMode: 'filterbank',
     filterbankEnabled: true,
     filterEnabled: false,
+    ...normalizeDynamicEqState(),
     filterType: 'lowpass',
     filterFrequencyHz: 777,
     filterSlope: 50,
@@ -208,6 +227,7 @@
     normalizeSpreadCurve,
     normalizeSpreadMaxOffsetDb,
     normalizeFilterState,
+    normalizeDynamicEqState,
     setBandBaseGain
   });
 })();

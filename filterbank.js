@@ -170,6 +170,10 @@
       this.negativeResonanceMain = initialState?.negativeResonanceMain !== false;
       this.negativeResonancePhase = normalizeNegativeResonancePhase(initialState?.negativeResonancePhase);
       this.onDiagnostics = typeof initialState?.onDiagnostics === 'function' ? initialState.onDiagnostics : null;
+      this.onDynamicEqTelemetry = typeof initialState?.onDynamicEqTelemetry === 'function' ? initialState.onDynamicEqTelemetry : null;
+      this.dynamicEqState = window.ResonantState.normalizeDynamicEqState(initialState);
+      this.preDynamicGainDbLeft = [...(initialState?.preDynamicGainDbLeft || Array(BAND_COUNT).fill(0))];
+      this.preDynamicGainDbRight = [...(initialState?.preDynamicGainDbRight || Array(BAND_COUNT).fill(0))];
       this.inputNode = audioContext.createGain();
       this.outputNode = audioContext.createGain();
       this.inputNode.gain.value = 1;
@@ -186,6 +190,9 @@
           bandQs: [...bandQs],
           bandGainLeft: [...this.bandGainLeft],
           bandGainRight: [...this.bandGainRight],
+          ...this.dynamicEqState,
+          preDynamicGainDbLeft: this.preDynamicGainDbLeft,
+          preDynamicGainDbRight: this.preDynamicGainDbRight,
           feedbackBandLeft: [...this.feedbackBandLeft],
           feedbackBandRight: [...this.feedbackBandRight],
           feedbackAllLeft: this.feedbackAllLeft,
@@ -221,6 +228,7 @@
       });
       this.workletNode.port.onmessage = event => {
         if (event.data?.type === 'resonator-diagnostics') this.onDiagnostics?.(event.data);
+        if (event.data?.type === 'dynamic-eq-telemetry') this.onDynamicEqTelemetry?.(event.data);
       };
       this.inputNode.connect(this.workletNode);
       this.workletNode.connect(this.outputNode);
@@ -247,6 +255,18 @@
         value: nextValue
       });
       return nextValue;
+    }
+
+    setDynamicEq(source) {
+      this.dynamicEqState = window.ResonantState.normalizeDynamicEqState(source);
+      if (!this.disposed) this.workletNode.port.postMessage({ type: 'set-dynamic-eq', ...this.dynamicEqState });
+      return this.dynamicEqState;
+    }
+
+    setPreDynamicGainDb(index, left, right) {
+      this.preDynamicGainDbLeft[index] = left;
+      this.preDynamicGainDbRight[index] = right;
+      if (!this.disposed) this.workletNode.port.postMessage({ type: 'set-pre-dynamic-gain-db', index, left, right });
     }
 
     setBandFeedback(channel, index, enabled) {
@@ -372,6 +392,9 @@
 
     applyState(snapshot) {
       if (this.disposed) return;
+      this.dynamicEqState = window.ResonantState.normalizeDynamicEqState(snapshot);
+      this.preDynamicGainDbLeft = [...(snapshot?.preDynamicGainDbLeft || Array(BAND_COUNT).fill(0))];
+      this.preDynamicGainDbRight = [...(snapshot?.preDynamicGainDbRight || Array(BAND_COUNT).fill(0))];
       this.bandGainLeft = readBandControls(snapshot, 'bandGainLeft');
       this.bandGainRight = readBandControls(snapshot, 'bandGainRight');
       this.feedbackBandLeft = readFeedbackGates(snapshot, 'feedbackBandLeft');
@@ -413,6 +436,9 @@
         type: 'apply-state',
         bandGainLeft: [...this.bandGainLeft],
         bandGainRight: [...this.bandGainRight],
+        ...this.dynamicEqState,
+        preDynamicGainDbLeft: this.preDynamicGainDbLeft,
+        preDynamicGainDbRight: this.preDynamicGainDbRight,
         feedbackBandLeft: [...this.feedbackBandLeft],
         feedbackBandRight: [...this.feedbackBandRight],
         feedbackAllLeft: this.feedbackAllLeft,
