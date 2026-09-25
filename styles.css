@@ -195,10 +195,6 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .audio-button.panic { color: var(--error); border-color: var(--error); }
 .audio-input-source { display: flex; min-width: 0; align-items: center; gap: 7px; }.audio-input-source > .audio-device { flex: 1 1 auto; }.source-toggle { display: inline-flex; flex: 0 0 auto; overflow: hidden; border: 1px solid var(--button-border); border-radius: 3px; }.source-toggle-button { display: grid; width: 31px; height: 32px; padding: 5px; border: 0; border-right: 1px solid var(--button-border); color: var(--button-text); background: var(--output-background); cursor: pointer; place-items: center; }.source-toggle-button:last-child { border-right: 0; }.source-toggle-button.active { color: var(--cyan); background: var(--active-background); box-shadow: var(--active-shadow); }.source-toggle-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .axis-y span:nth-child(2) { visibility: hidden; }
-.fb-workspace .analyzer { padding-left: 0; padding-right: 0; }
-.fb-workspace .analyzer-header, .fb-workspace .analyzer-status { margin-left: 14px; margin-right: 14px; }
-.fb-workspace .chart-grid { width: 100%; }
-.fb-workspace .chart-grid { border-left: 0; width: calc(100% + 2px); margin-left: -1px; margin-right: -1px; }
 .fb-workspace .bars { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: var(--band-gap); padding: 0; }
 .fb-workspace .bar-pair { width: auto; justify-content: center; gap: 4px; }
 .fb-workspace .axis-x { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: var(--band-gap); text-align: center; }
@@ -390,12 +386,10 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .fb-workspace .analyzer {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) 28px;
-  padding: 7px 0 0;
 }
 .analyzer-footer {
   display: grid;
   min-height: 0;
-  border-top: 1px solid var(--secondary-text);
 }
 .fb-workspace.is-dev-lab .analyzer {
   grid-template-rows: auto minmax(0, 1fr);
@@ -488,8 +482,8 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   box-sizing: border-box;
   height: 27px;
   padding-bottom: 4px;
-  width: calc(100% + 2px);
-  margin: 0 -1px;
+  width: 100%;
+  margin: 0;
   align-items: end;
 }
 .band-slider-value {
@@ -1219,12 +1213,14 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 @media (max-width: 1100px) { .dynamic-eq-panel { grid-template-columns: minmax(0, 1fr) 270px; } }
 
 .filter-mode-panel { display: grid; grid-template-rows: minmax(260px, 1fr) auto; gap: var(--panel-gap); padding: var(--panel-gap); }
-.filter-response, .filter-controls { border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); }
-.filter-response { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; padding: 12px 14px 10px; }
+.filter-response, .filter-controls, .fb-workspace .analyzer { border: 1px solid var(--panel-border); border-radius: 5px; background: var(--panel-background); box-shadow: var(--panel-shadow); }
+.filter-response, .fb-workspace .analyzer { padding: 12px 14px 10px; }
+.filter-response { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
 .filter-response > header { display: flex; align-items: center; justify-content: space-between; height: 28px; color: var(--cyan); letter-spacing: 1px; }
 .filter-response > header strong { font-size: 15px; }
 .filter-response > header span { color: var(--secondary-text); font-size: 9px; letter-spacing: .7px; }
 .filter-response-chart { position: relative; min-height: 220px; margin: 5px 0 22px; border: 1px solid var(--output-border); background-color: var(--graph-background); background-image: repeating-linear-gradient(90deg, transparent 0, transparent calc(10% - 1px), color-mix(in srgb, var(--secondary-text) 8%, transparent) calc(10% - 1px), color-mix(in srgb, var(--secondary-text) 8%, transparent) 10%); }
+.fb-workspace .chart-grid { width: 100%; margin: 5px 0 0; border: 0; outline: 1px solid var(--output-border); outline-offset: -1px; background-color: var(--graph-background); }
 .filter-response-chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .filter-response-grid-line { stroke: color-mix(in srgb, var(--secondary-text) 12%, transparent); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .filter-response-zero-grid-line { stroke: color-mix(in srgb, var(--secondary-text) 22%, transparent); }
