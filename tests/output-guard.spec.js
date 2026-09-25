@@ -116,8 +116,12 @@ test('attack, release and stereo link behave across 44.1, 48 and 96 kHz', async 
     expect(linked.steadyLeft).toBeCloseTo(.5, 2);
     expect(linked.steadyRight).toBeCloseTo(.05, 2);
     expect(linked.steadyLeft / linked.steadyRight).toBeCloseTo(10, 3);
+    const minimumThreshold = await renderOutputPath(page, { sampleRate, left: 4, right: 4,
+      guardThreshold: .25, attackMs: .1, safetyEnabled: false });
+    expect(minimumThreshold.steadyLeft).toBeCloseTo(.25, 2);
+    expect(minimumThreshold.nonFinite).toBe(0);
     const releases = [];
-    for (const releaseMs of [20, 250, 1000]) {
+    for (const releaseMs of [20, 250, 1000, 2000]) {
       const result = await renderOutputPath(page, { sampleRate, kind: 'burst', left: 4, right: 4,
         releaseMs, safetyEnabled: false, duration: 1.2, probeTimes: [.09, .15, .35, 1.1] });
       releases.push(result);
@@ -130,6 +134,7 @@ test('attack, release and stereo link behave across 44.1, 48 and 96 kHz', async 
     }
     expect(releases[0].probes['0.15'].left).toBeGreaterThan(releases[1].probes['0.15'].left);
     expect(releases[1].probes['0.15'].left).toBeGreaterThan(releases[2].probes['0.15'].left);
+    expect(releases[2].probes['0.15'].left).toBeGreaterThan(releases[3].probes['0.15'].left);
     expect(releases[0].probes['0.35'].left).toBeCloseTo(.1, 2);
     const transparent = await renderOutputPath(page, { sampleRate, left: .3, right: .2, guardThreshold: .5, invalidInput: true });
     expect(transparent.steadyLeft).toBeCloseTo(.3, 3);
@@ -225,6 +230,44 @@ test('AudioEngine runtime controls drive the real Master → Guard → Safety pa
     return guard?.threshold === .95 && guard.attackMs === 10 && guard.releaseMs === 1000
       && Math.abs(guard.outPeakLeft - .95) < .03;
   }, null, { timeout: 5000 });
+
+  // Save and restore both output stages while the real engine is processing audio.
+  const safetyThreshold = outputGroup.locator('[data-output-protection-threshold]');
+  const safetySoftness = outputGroup.locator('[data-output-protection-softness]');
+  await safetyEnabled.selectOption('on');
+  await safetyThreshold.fill('0.65');
+  await safetySoftness.fill('25');
+  await guardThreshold.fill('0.6');
+  await guardAttack.fill('10');
+  await guardRelease.fill('1000');
+  await guardEnabled.selectOption('off');
+  await safetyEnabled.selectOption('off');
+  const sweetspotsToggle = page.locator('[data-dev-lab-group="sweetspots"] .dev-lab-collapse-toggle');
+  if (await sweetspotsToggle.getAttribute('aria-expanded') === 'false') await sweetspotsToggle.click();
+  await page.locator('[data-sweetspot-save="A"]').click();
+
+  await guardEnabled.selectOption('on');
+  await guardThreshold.fill('0.3');
+  await guardAttack.fill('0.1');
+  await guardRelease.fill('20');
+  await safetyEnabled.selectOption('on');
+  await safetyThreshold.fill('0.9');
+  await safetySoftness.fill('90');
+  await page.locator('[data-sweetspot-load="A"]').click();
+  await page.waitForFunction(() => {
+    const guard = window.FilterbankDebugConsole.getOutputGuard();
+    const safety = window.FilterbankDebugConsole.getOutputProtection();
+    const engine = window.FilterMode.getAudioEngine();
+    return !engine.outputGuardEnabled && !engine.outputProtectionEnabled
+      && guard?.enabledMix < 1e-7 && guard.outPeakLeft > 3.9
+      && safety?.enabledMix < 1e-7 && safety.postPeakLeft > 3.9;
+  }, null, { timeout: 5000 });
+  expect(await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    return [engine.outputGuardThreshold, engine.outputGuardAttackMs, engine.outputGuardReleaseMs,
+      engine.outputProtectionThreshold, engine.outputProtectionSoftness];
+  })).toEqual([.6, 10, 1000, .65, 25]);
+
   console.log('OUTPUT_GUARD_LIVE=' + JSON.stringify({ fullDrums: { inPeak: fullDrums.inPeakLeft, outPeak: fullDrums.outPeakLeft, gr: fullDrums.gainReductionDb, activity: fullDrums.activePercent },
     on: { master: on.guard.inPeakLeft, guardOut: on.guard.outPeakLeft, final: on.safety.postPeakLeft },
     off: { master: off.guard.inPeakLeft, guardOut: off.guard.outPeakLeft, final: off.safety.postPeakLeft }, guardOffMs, guardOnMs }));
@@ -279,9 +322,44 @@ test('OUTPUT controls and snapshots restore guard values while legacy snapshots 
   await page.locator('[data-output-guard-attack-ms]').fill('50');
   await page.locator('[data-output-guard-release-ms]').fill('2000');
   await page.locator('[data-output-guard-enabled]').selectOption('off');
+  await page.locator('[data-output-protection-enabled]').selectOption('on');
+  await page.locator('[data-output-protection-threshold]').fill('0.6');
+  await page.locator('[data-output-protection-softness]').fill('35');
+  await page.locator('[data-output-protection-enabled]').selectOption('off');
   await page.locator('[data-sweetspot-load="A"]').click();
   expect(await page.evaluate(() => {
     const engine = window.FilterMode.getAudioEngine();
     return [engine.outputGuardEnabled, engine.outputGuardThreshold, engine.outputGuardAttackMs, engine.outputGuardReleaseMs];
   })).toEqual([true, .8, 2, 250]);
+  expect(await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    return [engine.outputProtectionEnabled, engine.outputProtectionThreshold, engine.outputProtectionSoftness];
+  })).toEqual([true, .8, 100]);
+
+  await page.evaluate(() => {
+    localStorage.setItem('da-filta-sweetspots-v1', JSON.stringify({ version: 1, slots: {
+      A: { name: 'Malformed numeric state', state: {
+        outputGuardEnabled: 'off', outputGuardThreshold: null, outputGuardAttackMs: 'Infinity', outputGuardReleaseMs: 'invalid',
+        outputProtectionEnabled: 'off', outputProtectionThreshold: null, outputProtectionSoftness: 'invalid'
+      } }, B: null, C: null, D: null
+    } }));
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('[data-dev-lab-group="output"] .dev-lab-collapse-toggle').click();
+  await page.locator('[data-dev-lab-group="sweetspots"] .dev-lab-collapse-toggle').click();
+  await page.locator('[data-sweetspot-load="A"]').click();
+  expect(await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    const values = [engine.outputGuardThreshold, engine.outputGuardAttackMs, engine.outputGuardReleaseMs,
+      engine.outputProtectionThreshold, engine.outputProtectionSoftness];
+    return [values.every(Number.isFinite), engine.outputProtectionEnabled, ...values];
+  })).toEqual([true, true, .8, 2, 250, .8, 100]);
+  expect(await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    engine.setOutputProtectionEnabled(false);
+    engine.setOutputProtectionThreshold(.6);
+    engine.setOutputProtectionSoftness(35);
+    engine.applyState({});
+    return [engine.outputProtectionEnabled, engine.outputProtectionThreshold, engine.outputProtectionSoftness];
+  })).toEqual([true, .8, 100]);
 });

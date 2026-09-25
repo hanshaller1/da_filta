@@ -2977,12 +2977,21 @@ const createDevLabSnapshot = () => {
 };
 const applyDevLabSnapshot = snapshot => {
   if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
-  if (!Object.prototype.hasOwnProperty.call(snapshot, 'outputGuardEnabled')) audioEngine.setOutputGuardEnabled(true);
-  if (!Object.prototype.hasOwnProperty.call(snapshot, 'outputGuardThreshold')) audioEngine.setOutputGuardThreshold(0.8);
-  if (!Object.prototype.hasOwnProperty.call(snapshot, 'outputGuardAttackMs')) audioEngine.setOutputGuardAttackMs(2);
-  if (!Object.prototype.hasOwnProperty.call(snapshot, 'outputGuardReleaseMs')) audioEngine.setOutputGuardReleaseMs(250);
+  const snapshotBoolean = (key, fallback) => typeof snapshot[key] === 'boolean' ? snapshot[key] : fallback;
+  const snapshotNumber = (key, fallback) => typeof snapshot[key] === 'number' && Number.isFinite(snapshot[key]) ? snapshot[key] : fallback;
+  audioEngine.setOutputGuardEnabled(snapshotBoolean('outputGuardEnabled', true));
+  audioEngine.setOutputGuardThreshold(snapshotNumber('outputGuardThreshold', 0.8));
+  audioEngine.setOutputGuardAttackMs(snapshotNumber('outputGuardAttackMs', 2));
+  audioEngine.setOutputGuardReleaseMs(snapshotNumber('outputGuardReleaseMs', 250));
+  audioEngine.setOutputProtectionEnabled(snapshotBoolean('outputProtectionEnabled', true));
+  audioEngine.setOutputProtectionThreshold(snapshotNumber('outputProtectionThreshold', 0.8));
+  audioEngine.setOutputProtectionSoftness(snapshotNumber('outputProtectionSoftness', 100));
+  const outputStateFields = new Set([
+    'outputGuardEnabled', 'outputGuardThreshold', 'outputGuardAttackMs', 'outputGuardReleaseMs',
+    'outputProtectionEnabled', 'outputProtectionThreshold', 'outputProtectionSoftness'
+  ]);
   DEV_LAB_SNAPSHOT_PROPERTIES.forEach(({ key, apply }) => {
-    if (Object.prototype.hasOwnProperty.call(snapshot, key)) apply(snapshot[key]);
+    if (!outputStateFields.has(key) && Object.prototype.hasOwnProperty.call(snapshot, key)) apply(snapshot[key]);
   });
   syncUiFromAudioState(audioEngine.getState());
 };

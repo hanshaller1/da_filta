@@ -48,7 +48,7 @@ test.describe('DEV/LAB snapshots', () => {
     expect(saved.version).toBe(1);
     expect(saved.slots.A.name).toBe('ZDF comparison');
     expect(snapshot).toMatchObject({ feedbackCore: 'zdf', feedbackTopology: 'common-bus', feedbackTap: 'pre-gain', wetModel: 'reference-delta', feedbackAllEngine: 'legacy', spreadCurve: 'quadratic', spreadMaxOffsetDb: 9, feedbackAllLevel: 'sqrt2' });
-    ['bandGainLeft', 'bandGainRight', 'feedbackBandLeft', 'feedbackBandRight', 'feedbackAllLeft', 'feedbackAllRight', 'resonance', 'inputGainDb', 'dryWet', 'spread', 'volumeDb', 'audioStatus', 'audioError'].forEach(key => expect(snapshot).not.toHaveProperty(key));
+    ['bandGainLeft', 'bandGainRight', 'feedbackBandLeft', 'feedbackBandRight', 'feedbackAllLeft', 'feedbackAllRight', 'resonance', 'inputGainDb', 'dryWet', 'spread', 'volumeDb', 'filterbankEnabled', 'filterEnabled', 'dynamicEqEnabled', 'perChannelBands', 'audioStatus', 'audioError'].forEach(key => expect(snapshot).not.toHaveProperty(key));
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
   });
@@ -84,6 +84,15 @@ test.describe('DEV/LAB snapshots', () => {
     await setCompatibilityCurve(page, 'linear');
     await page.locator('[data-spread-max-offset-db]').selectOption('3');
 
+    await page.evaluate(() => {
+      const engine = window.FilterMode.getAudioEngine();
+      engine.setFilterbankEnabled(false);
+      engine.setFilterEnabled(true);
+      engine.setDynamicEq({ ...engine.getState(), dynamicEqEnabled: true });
+      engine.setPerChannelBands(true);
+      engine.setSpread(.5);
+    });
+
     await page.locator('[data-sweetspot-load="B"]').click();
     await expect(page.locator('[data-feedback-core]')).toHaveValue('zdf');
     await expect(page.locator('[data-feedback-topology]')).toHaveValue('common-bus');
@@ -96,11 +105,15 @@ test.describe('DEV/LAB snapshots', () => {
     await expect(page.locator(normalControls.resonance)).toHaveValue('0.82');
     await expect(page.locator(normalControls.inputGain)).toHaveValue('6');
     await expect(page.locator(normalControls.dryWet)).toHaveValue('70');
-    await expect(page.locator(normalControls.spread)).toHaveValue('-0.3');
+    await expect(page.locator(normalControls.spread)).toHaveValue('0.5');
     await expect(page.locator(normalControls.volume)).toHaveValue('-9');
     await expect(page.locator(normalControls.band)).toHaveValue('-25');
     await expect(page.locator('[data-feedback-band="1"]')).toHaveClass(/active/);
     await expect(page.locator('.fb-all-toggle')).toHaveClass(/active/);
+    expect(await page.evaluate(() => {
+      const engine = window.FilterMode.getAudioEngine();
+      return [engine.filterbankEnabled, engine.filterEnabled, engine.dynamicEqEnabled, engine.perChannelBands, engine.spread];
+    })).toEqual([false, true, true, true, .5]);
   });
 
   test('legacy full-state snapshots ignore normal fields and tolerate unknown fields', async ({ page }) => {
