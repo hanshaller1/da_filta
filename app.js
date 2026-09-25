@@ -16,6 +16,7 @@ const state = createInitialState();
 let audioEngine = null;
 let dynamicEqTelemetry = null;
 let panic = () => {};
+let updateResonatorDiagnostics = () => {};
 // FILTERBANK editor visuals intentionally describe the manual FILTERBANK
 // controls, not the final DSP basis selected by another powered module.
 const getFilterbankDisplayBandGains = index => getEffectiveBandGains(state, index, {
@@ -178,8 +179,7 @@ if (analyzer && analyzerAxisX) {
   analyzer.append(analyzerFooter);
 }
 const filterbankWorkspace = document.querySelector('.fb-workspace');
-// This panel is deliberately a UI-only consumer of the existing worklet
-// diagnostics. It never sends a message back into the audio graph.
+// This view requests worklet diagnostics only when its telemetry is needed.
 const responseModeControl = document.createElement('div');
 responseModeControl.className = 'response-mode-control';
 responseModeControl.setAttribute('role', 'group');
@@ -730,7 +730,15 @@ const devLabTelemetry = (() => {
     push(histories.main, { left: packet.left.mainCommonFeedbackReturn, right: packet.right.mainCommonFeedbackReturn });
     push(histories.resonance, { target: packet.left.resonanceTarget, smoothed: packet.left.smoothedResonance }); render();
   };
-  const setMode = mode => { hideAnalyzerDetails(); responseMode = mode; const dev = mode === 'dev-lab'; filterbankWorkspace?.classList.toggle('is-dev-lab', dev); responseLab.hidden = !dev; responseChart.hidden = dev; if (responseLegend) responseLegend.hidden = dev; spectrumForegroundControl.hidden = dev; normalResponseButton.classList.toggle('active', !dev); devResponseButton.classList.toggle('active', dev); normalResponseButton.setAttribute('aria-pressed', String(!dev)); devResponseButton.setAttribute('aria-pressed', String(dev)); render(); };
+  updateResonatorDiagnostics = () => {
+    const normalTelemetryRequested = analyzerDisplay.selfOscillation || analyzerDisplay.dominantBand
+      || analyzerDisplay.feedbackEnergy || analyzerDisplay.saturationIndicators;
+    const needed = state.selectedWorkspaceMode === 'filterbank'
+      && (responseMode === 'dev-lab' || normalTelemetryRequested);
+    // These views use linear band and feedback metrics, not the 2x solver metrics.
+    audioEngine?.setResonatorDiagnosticsEnabled(needed);
+  };
+  const setMode = mode => { hideAnalyzerDetails(); responseMode = mode; const dev = mode === 'dev-lab'; filterbankWorkspace?.classList.toggle('is-dev-lab', dev); responseLab.hidden = !dev; responseChart.hidden = dev; if (responseLegend) responseLegend.hidden = dev; spectrumForegroundControl.hidden = dev; normalResponseButton.classList.toggle('active', !dev); devResponseButton.classList.toggle('active', dev); normalResponseButton.setAttribute('aria-pressed', String(!dev)); devResponseButton.setAttribute('aria-pressed', String(dev)); updateResonatorDiagnostics(); render(); };
   normalResponseButton.addEventListener('click', () => setMode('normal')); devResponseButton.addEventListener('click', () => setMode('dev-lab'));
   freezeButton.addEventListener('click', () => { frozen = !frozen; freezeButton.textContent = frozen ? 'LIVE' : 'FREEZE'; freezeButton.setAttribute('aria-pressed', String(frozen)); });
   resetButton.addEventListener('click', () => { reset(); resetSessionMax(); log('RESET METRICS'); });
@@ -1825,6 +1833,7 @@ const selectMode = mode => {
     tab.tabIndex = selected ? 0 : -1;
   });
   modePanels.forEach(panel => { panel.hidden = panel.dataset.modePanel !== mode; });
+  updateResonatorDiagnostics();
   if (mode === 'filter') renderFilterMode();
 };
 modeTabs.forEach((tab, index) => {
@@ -2027,6 +2036,7 @@ const setAnalyzerDisplayOption = (key, enabled) => {
   if (key === 'bandRegions') responseChart?.classList.toggle('hide-band-regions', !analyzerDisplay[key]);
   if (key === 'grid') responseChart?.classList.toggle('hide-grid', !analyzerDisplay[key]);
   spectrumRenderer.refresh(); scheduleAnalyzerRender();
+  updateResonatorDiagnostics();
 };
 window.FilterbankAnalyzer = { getDisplayState: () => ({ ...analyzerDisplay }), getDetailState: () => ({ mode: analyzerDetailMode, hoveredBand: hoveredAnalyzerBand }), setDisplayOption: setAnalyzerDisplayOption, getBandInfo: index => analyzerBandInfo(index), refresh: scheduleAnalyzerRender, getSpectrumLayers: () => spectrumRenderer.getLayers() };
 const ANALYZER_ZERO_EPSILON = 1e-9;
@@ -2483,6 +2493,7 @@ audioEngine = new AudioEngine({
   onDynamicEqTelemetry: packet => { dynamicEqTelemetry = packet; if (state.selectedWorkspaceMode === 'dynamic-eq') requestAnimationFrame(renderDynamicEqGraph); }
 });
 audioEngine.applyState(state);
+updateResonatorDiagnostics();
 const setAudioBypass = enabled => {
   audioBypassEnabled = Boolean(enabled);
   audioEngine?.setBypass(audioBypassEnabled);

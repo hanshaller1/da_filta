@@ -101,6 +101,8 @@
       this.filterbank = null;
       this.filterbankEnabled = true;
       this.filterEnabled = false;
+      this.resonatorDiagnosticsEnabled = false;
+      this.nonlinearResonatorDiagnosticsEnabled = false;
       this.filterType = 'lowpass';
       this.filterFrequencyHz = 777;
       this.filterSlope = 50;
@@ -296,6 +298,7 @@
     setFilterEnabled(enabled) {
       this.filterEnabled = Boolean(enabled);
       this.applyEffectiveBandGains();
+      this.applySpectralCoreRequired();
       return this.filterEnabled;
     }
 
@@ -303,12 +306,31 @@
       this.filterbankEnabled = Boolean(enabled);
       this.applyEffectiveBandGains();
       this.applyEffectiveFeedbackState();
+      this.applySpectralCoreRequired();
       return this.filterbankEnabled;
     }
 
     setDynamicEq(source) {
       Object.assign(this, window.ResonantState.normalizeDynamicEqState(source));
       this.filterbank?.setDynamicEq?.(this);
+      this.applySpectralCoreRequired();
+    }
+
+    get spectralCoreRequired() {
+      return this.filterbankEnabled || this.filterEnabled || this.dynamicEqEnabled;
+    }
+
+    applySpectralCoreRequired() {
+      this.filterbank?.setSpectralCoreRequired?.(this.spectralCoreRequired);
+    }
+
+    setResonatorDiagnosticsEnabled(enabled, nonlinearDetails = false) {
+      this.resonatorDiagnosticsEnabled = Boolean(enabled);
+      this.nonlinearResonatorDiagnosticsEnabled = this.resonatorDiagnosticsEnabled && Boolean(nonlinearDetails);
+      this.filterbank?.setResonatorDiagnosticsEnabled?.(
+        this.resonatorDiagnosticsEnabled, this.nonlinearResonatorDiagnosticsEnabled
+      );
+      return this.resonatorDiagnosticsEnabled;
     }
 
     setBandBaseGain(channel, index, value) {
@@ -420,6 +442,9 @@
         feedbackBandRight: this.feedbackBandRight.map(value => this.filterbankEnabled && value),
         feedbackAllLeft: this.filterbankEnabled && this.feedbackAllLeft,
         feedbackAllRight: this.filterbankEnabled && this.feedbackAllRight,
+        spectralCoreRequired: this.spectralCoreRequired,
+        collectResonatorDiagnostics: this.resonatorDiagnosticsEnabled,
+        collectNonlinearResonatorDiagnostics: this.nonlinearResonatorDiagnosticsEnabled,
         resonance: this.filterbankEnabled ? this.resonance : 0,
         positiveResonanceAuditionGain: this.positiveResonanceAuditionGain,
         positiveResonanceDrive: this.positiveResonanceDrive,

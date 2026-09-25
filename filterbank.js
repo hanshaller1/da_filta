@@ -170,6 +170,10 @@
       this.negativeResonanceMain = initialState?.negativeResonanceMain !== false;
       this.negativeResonancePhase = normalizeNegativeResonancePhase(initialState?.negativeResonancePhase);
       this.onDiagnostics = typeof initialState?.onDiagnostics === 'function' ? initialState.onDiagnostics : null;
+      this.spectralCoreRequired = initialState?.spectralCoreRequired !== false;
+      this.resonatorDiagnosticsEnabled = initialState?.collectResonatorDiagnostics === true;
+      this.nonlinearResonatorDiagnosticsEnabled = this.resonatorDiagnosticsEnabled
+        && initialState?.collectNonlinearResonatorDiagnostics !== false;
       this.onDynamicEqTelemetry = typeof initialState?.onDynamicEqTelemetry === 'function' ? initialState.onDynamicEqTelemetry : null;
       this.dynamicEqState = window.ResonantState.normalizeDynamicEqState(initialState);
       this.preDynamicGainDbLeft = [...(initialState?.preDynamicGainDbLeft || Array(BAND_COUNT).fill(0))];
@@ -198,6 +202,7 @@
           feedbackAllLeft: this.feedbackAllLeft,
           feedbackAllRight: this.feedbackAllRight,
           resonance: this.resonance,
+          spectralCoreRequired: this.spectralCoreRequired,
           maxBandGainDb: MAX_BAND_GAIN_DB,
           maxBandBoostDb: this.maxBandBoostDb,
           maxBandCutDb: this.maxBandCutDb,
@@ -222,8 +227,9 @@
           positiveResonanceDriveSmoothingTime: POSITIVE_RESONANCE_DRIVE_SMOOTHING_SECONDS,
           positiveResonanceOutputMode: this.positiveResonanceOutputMode,
           positiveResonanceLatencyMode: this.positiveResonanceLatencyMode,
-          positiveResonanceCurve: this.positiveResonanceCurve
-          , collectResonatorDiagnostics: true
+          positiveResonanceCurve: this.positiveResonanceCurve,
+          collectResonatorDiagnostics: this.resonatorDiagnosticsEnabled,
+          collectNonlinearResonatorDiagnostics: this.nonlinearResonatorDiagnosticsEnabled
         }
       });
       this.workletNode.port.onmessage = event => {
@@ -240,6 +246,26 @@
 
     get output() {
       return this.outputNode;
+    }
+
+    setSpectralCoreRequired(required) {
+      const nextValue = Boolean(required);
+      if (this.disposed || nextValue === this.spectralCoreRequired) return nextValue;
+      this.spectralCoreRequired = nextValue;
+      this.workletNode.port.postMessage({ type: 'set-spectral-core-required', required: nextValue });
+      return nextValue;
+    }
+
+    setResonatorDiagnosticsEnabled(enabled, nonlinearDetails = enabled) {
+      const nextValue = Boolean(enabled);
+      const nextDetails = nextValue && Boolean(nonlinearDetails);
+      if (this.disposed || (nextValue === this.resonatorDiagnosticsEnabled
+        && nextDetails === this.nonlinearResonatorDiagnosticsEnabled)) return nextValue;
+      this.resonatorDiagnosticsEnabled = nextValue;
+      this.nonlinearResonatorDiagnosticsEnabled = nextDetails;
+      this.workletNode.port.postMessage({ type: 'set-resonator-diagnostics-enabled', enabled: nextValue,
+        nonlinearDetails: nextDetails });
+      return nextValue;
     }
 
     setBandBaseGain(channel, index, value) {
@@ -402,6 +428,10 @@
       this.feedbackAllLeft = Boolean(snapshot?.feedbackAllLeft);
       this.feedbackAllRight = Boolean(snapshot?.feedbackAllRight);
       this.resonance = clampResonance(snapshot?.resonance);
+      this.spectralCoreRequired = snapshot?.spectralCoreRequired !== false;
+      this.resonatorDiagnosticsEnabled = snapshot?.collectResonatorDiagnostics === true;
+      this.nonlinearResonatorDiagnosticsEnabled = this.resonatorDiagnosticsEnabled
+        && snapshot?.collectNonlinearResonatorDiagnostics !== false;
       this.positiveResonanceAuditionGain = normalizePositiveResonanceAuditionGain(snapshot?.positiveResonanceAuditionGain ?? this.positiveResonanceAuditionGain);
       this.positiveResonanceDrive = normalizePositiveResonanceDrive(snapshot?.positiveResonanceDrive ?? this.positiveResonanceDrive);
       this.positiveResonanceDampingFloor = normalizePositiveResonanceDampingFloor(snapshot?.positiveResonanceDampingFloor ?? this.positiveResonanceDampingFloor);
@@ -444,6 +474,9 @@
         feedbackAllLeft: this.feedbackAllLeft,
         feedbackAllRight: this.feedbackAllRight,
         resonance: this.resonance,
+        spectralCoreRequired: this.spectralCoreRequired,
+        collectResonatorDiagnostics: this.resonatorDiagnosticsEnabled,
+        collectNonlinearResonatorDiagnostics: this.nonlinearResonatorDiagnosticsEnabled,
         positiveResonanceAuditionGain: this.positiveResonanceAuditionGain,
         positiveResonanceDrive: this.positiveResonanceDrive,
         positiveResonanceDampingFloor: this.positiveResonanceDampingFloor,

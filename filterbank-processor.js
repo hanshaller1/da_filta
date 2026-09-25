@@ -19,6 +19,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.bandFrequencies = this.readBandDefinition(processorOptions.bandFrequencies, 'Frequenzen');
     this.bandQs = this.readBandDefinition(processorOptions.bandQs, 'Q-Werte');
     this.bandCount = this.bandFrequencies.length;
+    this.spectralCoreRequired = processorOptions.spectralCoreRequired !== false;
+    this.spectralCoreMix = this.spectralCoreRequired ? 1 : 0;
+    this.spectralCoreMixTarget = this.spectralCoreMix;
+    this.spectralCoreMixCoefficient = this.smoothingCoefficient(0.003, 0.003);
     this.setDynamicEq(processorOptions);
     // Dedicated source-only filters keep detection before gain and feedback.
     this.dynamicEqDetectorFilters = { left: this.createFilters(), right: this.createFilters() };
@@ -240,6 +244,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       right: Array(this.bandCount).fill(0)
     };
     this.collectResonatorDiagnostics = processorOptions.collectResonatorDiagnostics === true;
+    this.collectNonlinearResonatorDiagnostics = this.collectResonatorDiagnostics
+      && processorOptions.collectNonlinearResonatorDiagnostics !== false;
     this.diagnosticsFramesUntilPublish = Math.max(1, Math.round(sampleRate / DIAGNOSTICS_UPDATE_HZ));
     this.diagnosticsFrameCounter = 0;
     this.resonatorDiagnostics = {
@@ -471,6 +477,23 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       this.dynamicEqGainDb.fill(0);
       this.dynamicEqSmoothedDb.fill(0);
     }
+  }
+
+  setSpectralCoreRequired(required) {
+    this.spectralCoreRequired = Boolean(required);
+    this.spectralCoreMixTarget = this.spectralCoreRequired ? 1 : 0;
+  }
+
+  setResonatorDiagnosticsEnabled(enabled, nonlinearDetails = enabled) {
+    const nextValue = Boolean(enabled);
+    const nextDetails = nextValue && Boolean(nonlinearDetails);
+    if (nextValue === this.collectResonatorDiagnostics
+      && nextDetails === this.collectNonlinearResonatorDiagnostics) return;
+    this.collectResonatorDiagnostics = nextValue;
+    this.collectNonlinearResonatorDiagnostics = nextDetails;
+    this.diagnosticsFrameCounter = 0;
+    this.resonatorDiagnostics.left = this.createResonatorDiagnostics();
+    this.resonatorDiagnostics.right = this.createResonatorDiagnostics();
   }
 
   updateDynamicEq(left, right) {
@@ -1578,6 +1601,11 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   applyState(data) {
     this.setDynamicEq(data);
+    if (data.spectralCoreRequired !== undefined) this.setSpectralCoreRequired(data.spectralCoreRequired);
+    if (data.collectResonatorDiagnostics !== undefined || data.collectNonlinearResonatorDiagnostics !== undefined) {
+      const enabled = data.collectResonatorDiagnostics ?? this.collectResonatorDiagnostics;
+      this.setResonatorDiagnosticsEnabled(enabled, data.collectNonlinearResonatorDiagnostics ?? enabled);
+    }
     if (data.preDynamicGainDbLeft && data.preDynamicGainDbRight) {
       for (let i = 0; i < this.bandCount; i += 1) {
         this.preDynamicGainDb.left[i] = Number.isFinite(data.preDynamicGainDbLeft[i]) ? data.preDynamicGainDbLeft[i] : 0;
@@ -1641,6 +1669,11 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   handleMessage(data) {
     if (!data || this.disposed) return;
+    if (data.type === 'set-spectral-core-required') { this.setSpectralCoreRequired(data.required); return; }
+    if (data.type === 'set-resonator-diagnostics-enabled') {
+      this.setResonatorDiagnosticsEnabled(data.enabled, data.nonlinearDetails ?? data.enabled);
+      return;
+    }
     if (data.type === 'set-dynamic-eq') { this.setDynamicEq(data); return; }
     if (data.type === 'set-pre-dynamic-gain-db') {
       if (Number.isInteger(data.index) && data.index >= 0 && data.index < this.bandCount) {
@@ -1815,12 +1848,19 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       );
       resonatorMagnitudes[band] = resonatorMagnitude;
       const resonatorDampingScale = this.getResonatorDampingScale(resonatorMagnitude);
-      resonatorFilters[band].setDampingScale(this.getLinearResonatorDampingScale(resonatorMagnitude));
       const resonatorAuditionTarget = !perBandZdfSelected && this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'tpt' && this.resonanceTarget > 0 && localGate > 1e-12 ? 1 : 0;
       const resonatorAuditionGate = resonatorAuditionTarget + this.resonanceSmoothingCoefficient * (
         resonatorAuditionGates[band] - resonatorAuditionTarget
       );
       resonatorAuditionGates[band] = resonatorAuditionGate;
+      const audibleResonatorRequired = !perBandZdfSelected && this.feedbackTopology === 'isolated-tpt'
+        && this.positiveResonanceEngine === 'tpt'
+        && (resonatorMagnitude > 1e-12 || resonatorAuditionGate > 1e-12);
+      const resonatorRequired = this.collectResonatorDiagnostics || audibleResonatorRequired;
+      // Generic telemetry needs the linear bands; only audible output or explicit
+      // nonlinear detail telemetry needs the oversampled processor.
+      const nonlinearResonatorRequired = audibleResonatorRequired || this.collectNonlinearResonatorDiagnostics;
+      if (resonatorRequired) resonatorFilters[band].setDampingScale(this.getLinearResonatorDampingScale(resonatorMagnitude));
       const previousReturn = Number.isFinite(feedbackReturns[band]) ? feedbackReturns[band] : 0;
       if (!Number.isFinite(feedbackReturns[band])) feedbackReturns[band] = 0;
       const localLoopReturn = localLoopActive && Number.isFinite(this.localFeedbackReturns[channel][band])
@@ -1833,14 +1873,13 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
           : perBandZdfSelected ? source
         : source + previousReturn + localCommonReturn + mainCommonReturn + localLoopReturn;
       const bandOutput = this.processBandpass(baseFilters[band], bandInput);
-      const resonatorBandOutput = this.processBandpass(resonatorFilters[band], source);
+      const resonatorBandOutput = resonatorRequired ? this.processBandpass(resonatorFilters[band], source) : 0;
       const resonanceResidual = resonatorBandOutput - bandOutput;
       let nonlinearResonatorBandOutput = 0;
       let nonlinearResidual = 0;
       let nonlinearBaseResidual = 0;
-      const useAudibleNonlinearResidual = !perBandZdfSelected && this.feedbackTopology === 'isolated-tpt' && this.positiveResonanceEngine === 'tpt' && this.enableNonlinearPositiveResonator
-        && (resonatorMagnitude > 1e-12 || resonatorAuditionGate > 1e-12);
-      if (nonlinearResonatorFilters && (this.collectResonatorDiagnostics || resonatorMagnitude > 1e-12 || resonatorAuditionGate > 1e-12)) {
+      const useAudibleNonlinearResidual = audibleResonatorRequired && this.enableNonlinearPositiveResonator;
+      if (nonlinearResonatorFilters && nonlinearResonatorRequired) {
         const nonlinearFilter = nonlinearResonatorFilters[band];
         nonlinearResonatorBandOutput = nonlinearFilter.process(
           source,
@@ -1891,7 +1930,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         diagnostics.resonatorMagnitudes[band] = resonatorMagnitude;
         diagnostics.resonatorDampingScales[band] = resonatorDampingScale;
         diagnostics.resonatorAuditionGates[band] = resonatorAuditionGate;
-        if (nonlinearResonatorFilters) {
+        if (nonlinearResonatorFilters && nonlinearResonatorRequired) {
           const nonlinearFilter = nonlinearResonatorFilters[band];
           const nonlinearStatePeak = Math.max(
             nonlinearFilter.statePeak,
@@ -2057,7 +2096,6 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       diagnostics.positiveResonanceEngine = this.positiveResonanceEngine;
       diagnostics.feedbackTopology = this.feedbackTopology;
       diagnostics.localLoopTuning = this.localLoopTuning;
-      diagnostics.baseFilterFrequencies = baseFilters.map(filter => filter.frequency);
       diagnostics.feedbackTap = this.feedbackTap;
       diagnostics.wetModel = this.wetModel;
       diagnostics.commonBusSaturationMode = this.commonBusSaturationMode;
@@ -2219,6 +2257,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const rightOutput = outputChannels[1];
     const frameCount = Math.max(leftOutput?.length || 0, rightOutput?.length || 0);
     for (let frame = 0; frame < frameCount; frame += 1) {
+      const mixTarget = this.spectralCoreMixTarget;
+      const nextMix = mixTarget + this.spectralCoreMixCoefficient * (this.spectralCoreMix - mixTarget);
+      this.spectralCoreMix = Math.abs(nextMix - mixTarget) < 1e-6 ? mixTarget : nextMix;
       if (this.dynamicEqEnabled) this.updateDynamicEq(inputChannels[0]?.[frame], inputChannels[1]?.[frame]);
       this.resonance = this.resonanceTarget + this.resonanceSmoothingCoefficient * (this.resonance - this.resonanceTarget);
       this.positiveResonanceAuditionGain = this.positiveResonanceAuditionGainTarget
@@ -2259,8 +2300,20 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       if (this.positiveResonanceLatencyWeights[this.latencyModeIndex(this.positiveResonanceLatencyModeTarget)] > 0.999999) {
         this.positiveResonanceLatencyMode = this.positiveResonanceLatencyModeTarget;
       }
-      if (leftOutput) leftOutput[frame] = this.processChannelFrame(inputChannels[0]?.[frame], 'left');
-      if (rightOutput) rightOutput[frame] = this.processChannelFrame(inputChannels[1]?.[frame], 'right');
+      if (leftOutput) {
+        const source = Number.isFinite(inputChannels[0]?.[frame]) ? inputChannels[0][frame] : 0;
+        const wet = this.spectralCoreMix > 0 || this.collectResonatorDiagnostics
+          ? this.processChannelFrame(source, 'left') : source;
+        leftOutput[frame] = this.spectralCoreMix === 1 ? wet
+          : this.spectralCoreMix === 0 ? source : source + this.spectralCoreMix * (wet - source);
+      }
+      if (rightOutput) {
+        const source = Number.isFinite(inputChannels[1]?.[frame]) ? inputChannels[1][frame] : 0;
+        const wet = this.spectralCoreMix > 0 || this.collectResonatorDiagnostics
+          ? this.processChannelFrame(source, 'right') : source;
+        rightOutput[frame] = this.spectralCoreMix === 1 ? wet
+          : this.spectralCoreMix === 0 ? source : source + this.spectralCoreMix * (wet - source);
+      }
     }
     if (this.dynamicEqEnabled) {
       this.dynamicEqTelemetryCounter += frameCount;
