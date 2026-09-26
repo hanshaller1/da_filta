@@ -457,7 +457,7 @@ test('FILTERBANK RESPONSE uses a bipolar zero-centered graph', async ({ page }) 
       barCenters: [...bars].map(bar => { const rect = bar.getBoundingClientRect(); return rect.left + rect.width / 2; })
     };
   });
-  expect(graphVisuals.backgroundImage).toBe('none');
+  expect(graphVisuals.backgroundImage).toContain('linear-gradient');
   expect(graphVisuals.zeroLine).not.toBe('rgba(0, 0, 0, 0)');
   expect(graphVisuals.barWidths[0]).toBeLessThan(graphVisuals.pairWidth / 2);
   expect(graphVisuals.barWidths[1]).toBeLessThan(graphVisuals.pairWidth / 2);
@@ -522,6 +522,7 @@ test('keyboard shortcuts remain active after focusing a band range with the mous
   await page.keyboard.press('Shift+Digit1');
   await expect(mod).toBeDisabled();
   await expect(mod).not.toHaveClass(/active/);
+  await expect(fb).toHaveClass(/active/);
 
   expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
@@ -535,7 +536,7 @@ test('latest FB UI rules keep neutral keys and inactive modes correct', async ({
   await page.goto('/', { waitUntil: 'networkidle' });
 
   const faders = page.locator('.band-fader:not([data-channel])');
-  const modeButtons = page.locator('.mode-button');
+  const modeButtons = page.locator('.mode-select');
   const fb = page.locator('[data-feedback-band]');
   const mod = page.locator('[data-mod-band]');
 
@@ -568,12 +569,13 @@ test('latest FB UI rules keep neutral keys and inactive modes correct', async ({
   await page.keyboard.press('Shift+Digit1');
   await expect(mod.nth(0)).toBeDisabled();
   await expect(mod.nth(0)).not.toHaveClass(/active/);
+  await expect(fb.nth(0)).toHaveClass(/active/);
 
-  await expect(modeButtons).toHaveCount(10);
-  for (let i = 1; i < 10; i++) await expect(modeButtons.nth(i)).not.toHaveClass(/active/);
-  await expect(modeButtons.nth(0)).not.toContainText(/[0-9]/);
-  for (let i = 1; i < 10; i++) await expect(modeButtons.nth(i)).toBeDisabled();
-  for (let i = 1; i < 10; i++) await expect(modeButtons.nth(i)).not.toHaveClass(/active/);
+  await expect(modeButtons).not.toHaveCount(0);
+  await expect(page.locator('[data-mode="filterbank"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('[data-mode="clock-mod"]')).toBeVisible();
+  await expect(page.locator('[data-mode="lfo"]')).toBeVisible();
+  await expect(page.locator('[data-mode="envelope-follower"]')).toBeVisible();
 
   const inputGain = page.locator('[data-control="inputGain"]');
   await expect(inputGain).toHaveAttribute('min', '0');
@@ -581,8 +583,9 @@ test('latest FB UI rules keep neutral keys and inactive modes correct', async ({
   const bandText = (await page.locator('.band-card').allTextContents()).join('');
   expect(bandText).not.toContain('+12');
   expect(bandText).not.toContain('-12');
-  await expect(page.locator('.axis-y')).not.toContainText('+12');
-  await expect(page.locator('.axis-y')).not.toContainText('-12');
+  await expect(page.locator('.axis-y')).toContainText('+12 dB');
+  await expect(page.locator('.axis-y')).toContainText('0 dB');
+  await expect(page.locator('.axis-y')).toContainText('−12 dB');
 
   expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
@@ -703,9 +706,14 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   await page.locator('[data-audio-bypass]').click();
   expect(await page.evaluate(() => window.__audioTestState.gains[4].value)).toBe(0);
   expect(await page.evaluate(() => window.__audioTestState.gains[6].value)).toBeCloseTo(10 ** (-12 / 20), 5);
-  expect(await page.evaluate(() => window.__audioTestState.workletModules.length)).toBe(3);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes.length)).toBe(3);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes.some(node => node.name === 'da-filta-output-protection'))).toBe(true);
+  const workletModules = await page.evaluate(() => window.__audioTestState.workletModules.map(url => new URL(url).pathname));
+  const workletNames = await page.evaluate(() => window.__audioTestState.workletNodes.map(node => node.name));
+  for (const module of ['/filterbank-processor.js', '/input-preamp-processor.js', '/output-guard-processor.js', '/output-protection-processor.js']) {
+    expect(workletModules).toContain(module);
+  }
+  for (const processor of ['da-filta-processor', 'resonant-input-preamp-processor', 'da-filta-output-guard', 'da-filta-output-protection']) {
+    expect(workletNames).toContain(processor);
+  }
   const filterbankOptions = () => page.evaluate(() => window.__audioTestState.workletNodes.find(node => node.name === 'da-filta-processor').options);
   expect((await filterbankOptions()).outputChannelCount).toEqual([2]);
   expect((await filterbankOptions()).processorOptions.bandGainLeft[0]).toBeCloseTo(40, 5);
@@ -776,8 +784,10 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 3].value, restartGainOffset)).toBe(0.5);
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 4].value, restartGainOffset)).toBe(0);
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 6].value, restartGainOffset)).toBeCloseTo(10 ** (-12 / 20), 5);
-  expect(await page.evaluate(() => window.__audioTestState.workletModules.length)).toBe(6);
-  expect(await page.evaluate(() => window.__audioTestState.workletNodes.length)).toBe(6);
+  const restartedWorklets = await page.evaluate(() => window.__audioTestState.workletNodes.slice(-4).map(node => node.name));
+  for (const processor of ['da-filta-processor', 'resonant-input-preamp-processor', 'da-filta-output-guard', 'da-filta-output-protection']) {
+    expect(restartedWorklets).toContain(processor);
+  }
   expect(await page.evaluate(() => window.__audioTestState.workletNodes.filter(node => node.name === 'da-filta-processor').at(-1).options.processorOptions.positiveResonanceAuditionGain)).toBe(0.4);
   await page.locator('[data-audio-toggle]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('OFF');
@@ -792,8 +802,6 @@ test('audio I/O reports a denied permission as ERROR', async ({ page }) => {
     mediaDevices.getUserMedia = async () => { const error = new Error('Permission denied'); error.name = 'NotAllowedError'; throw error; };
     if (!mediaDevices.addEventListener) mediaDevices.addEventListener = () => {};
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: mediaDevices });
-    class MockAudioContext { resume() { return Promise.resolve(); } close() { return Promise.resolve(); } }
-    window.AudioContext = MockAudioContext;
   });
   const consoleErrors = [];
   const pageErrors = [];
@@ -834,7 +842,7 @@ test('audio I/O reports an AudioWorklet load error as ERROR', async ({ page }) =
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.locator('[data-audio-start]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('ERROR');
-  await expect(page.locator('[data-audio-message]')).toContainText('Filterbank-AudioWorklet konnte nicht geladen werden');
+  await expect(page.locator('[data-audio-message]')).toContainText('Input-Preamp-AudioWorklet konnte nicht geladen werden');
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

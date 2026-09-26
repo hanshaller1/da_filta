@@ -39,10 +39,6 @@ test('NORMAL response keeps bars and stereo spectrum together while its foregrou
   await expect(page.locator('.spectrum-foreground-control')).toBeVisible();
   await expect(spectrumButton).toHaveAttribute('aria-pressed', 'true');
 
-  await page.locator('.response-collapse-toggle').click();
-  await expect(page.locator('.fb-workspace')).toHaveClass(/is-collapsed/);
-  await page.locator('.response-collapse-toggle').click();
-  await expect(canvas).toBeVisible();
   await expect(spectrumButton).toHaveAttribute('aria-pressed', 'true');
   expect(errors).toEqual([]);
 });

@@ -72,4 +72,5 @@ test('held band-fader shortcuts move every pressed key independently and stop sa
   await page.keyboard.press('Shift+Digit1');
   await expect(modulation).toBeDisabled();
   await expect(modulation).not.toHaveClass(/active/);
+  await expect(feedback).toHaveClass(/active/);
 });

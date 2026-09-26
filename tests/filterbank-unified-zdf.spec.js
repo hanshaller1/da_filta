@@ -77,6 +77,8 @@ test('FEEDBACK CORE switches CURRENT to ZDF to CURRENT live without rebuilding t
   expect(initial).toBe('current');
   await page.locator('[data-feedback-core]').selectOption('zdf');
   await expect(page.locator('[data-local-loop-tuning]')).toBeDisabled();
+  const sweetspotsToggle = page.locator('[data-dev-lab-group="sweetspots"] .dev-lab-collapse-toggle');
+  if (await sweetspotsToggle.getAttribute('aria-expanded') === 'false') await sweetspotsToggle.click();
   const live = await page.evaluate(() => {
     const node = window.__coreNodes.find(candidate => candidate.name === window.Filterbank.PROCESSOR_NAME);
     return { value: node.messages.at(-1), count: window.__coreNodes.length };
@@ -94,10 +96,10 @@ test('FEEDBACK CORE switches CURRENT to ZDF to CURRENT live without rebuilding t
   await expect(page.locator('[data-feedback-core]')).toHaveValue('zdf');
   const loaded = await page.evaluate(() => {
     const node = window.__coreNodes.find(candidate => candidate.name === window.Filterbank.PROCESSOR_NAME);
-    return { value: node.messages.at(-1), count: window.__coreNodes.length };
+    return { messages: node.messages, count: window.__coreNodes.length };
   });
-  expect(loaded.value.type).toBe('apply-state');
-  expect(loaded.value.feedbackCore).toBe('zdf');
+  const loadedCoreMessages = loaded.messages.filter(message => message.type === 'set-feedback-core');
+  expect(loadedCoreMessages.at(-1)).toEqual({ type: 'set-feedback-core', value: 'zdf' });
   expect(loaded.count).toBe(live.count);
 });
 

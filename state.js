@@ -202,8 +202,7 @@
     feedbackBandLeft: createArray(false),
     feedbackBandRight: createArray(false),
     feedbackAllLeft: false,
-    feedbackAllRight: false,
-    modulated: createArray(false)
+    feedbackAllRight: false
   });
 
   const setBandBaseGain = (targetState, channel, index, value) => {

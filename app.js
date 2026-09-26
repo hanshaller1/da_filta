@@ -2493,7 +2493,12 @@ document.addEventListener('keydown', event => {
   if (event.code === VOLUME_UP_CODE) { setGlobalControlValue('volume', state.volume + 0.5); event.preventDefault(); return; }
   if (event.code === VOLUME_DOWN_CODE) { setGlobalControlValue('volume', state.volume - 0.5); event.preventDefault(); return; }
   const bandIndex = FB_CODES.indexOf(event.code);
-  if (bandIndex !== -1) { if(event.shiftKey) document.querySelector(`[data-mod-band="${bandIndex}"]`).click(); else document.querySelector(`[data-feedback-band="${bandIndex}"]`).click(); event.preventDefault(); return; }
+  if (bandIndex !== -1) {
+    if (event.shiftKey) { event.preventDefault(); return; }
+    document.querySelector(`[data-feedback-band="${bandIndex}"]`).click();
+    event.preventDefault();
+    return;
+  }
   if (getFaderKeyDelta(event.code)) {
     if (!pressedFaderKeys.has(event.code)) {
       pressedFaderKeys.add(event.code);

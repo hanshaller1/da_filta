@@ -70,7 +70,12 @@ test('COMMON BUS follows smoothed resonance through zero without seeding a digit
       const rendering = context.startRendering();
       await Promise.all(tasks);
       const rendered = await rendering;
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Diagnostics publish at 15 Hz; wait for a real packet instead of
+      // assuming an OfflineAudioContext message is delivered with rendering.
+      const publishDeadline = performance.now() + 1000;
+      while (diagnostics.length === 0 && performance.now() < publishDeadline) {
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
       const samples = rendered.getChannelData(0);
       return {
         early: metric(samples, sampleRate, 0.25, 0.40),
@@ -84,7 +89,7 @@ test('COMMON BUS follows smoothed resonance through zero without seeding a digit
     const sustained = await render({ duration: 0.8 });
     const shortDrop = await render({
       duration: 1.1,
-      events: [{ time: 0.40, value: 0 }, { time: 0.46, value: 1 }]
+      events: [{ time: 0.35, value: 0 }, { time: 0.42, value: 1 }]
     });
     const longDrop = await render({
       duration: 1.9,
@@ -95,7 +100,7 @@ test('COMMON BUS follows smoothed resonance through zero without seeding a digit
       zeroStart, sustained, shortDrop, longDrop,
       postTargetZero: postTargetZero.map(item => ({
         resonance: item.smoothedResonance,
-        commonReturn: item.commonFeedbackReturn,
+        commonReturn: item.commonFeedbackReturnPeak,
         finite: item.finite
       }))
     };

@@ -67,6 +67,8 @@ test('PANIC resets feedback safely while audio stays on and German-layout shortc
   await page.locator('[data-audio-output]').selectOption('output-1');
   await page.locator('[data-audio-start]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('ON');
+  const inputGroupToggle = page.locator('[data-dev-lab-group="input"] .dev-lab-collapse-toggle');
+  if (await inputGroupToggle.getAttribute('aria-expanded') === 'false') await inputGroupToggle.click();
 
   const arm = async (feedbackAllEngine = 'common-bus') => {
     await inputGain.fill('12');

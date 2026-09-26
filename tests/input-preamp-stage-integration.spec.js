@@ -40,6 +40,8 @@ test('DEV input stage and character amount survive UI, runtime restart, and PANI
     HTMLMediaElement.prototype.pause = function () {};
   });
   await page.goto('/', { waitUntil: 'networkidle' });
+  const inputGroupToggle = page.locator('[data-dev-lab-group="input"] .dev-lab-collapse-toggle');
+  if (await inputGroupToggle.getAttribute('aria-expanded') === 'false') await inputGroupToggle.click();
   const selector = page.locator('[data-input-preamp-stage]');
   const character = page.locator('[data-input-character-amount]');
   await expect(selector.locator('option')).toHaveText(['LINEAR', 'SILK', 'TAPE', 'TUBE', 'CONSOLE', 'CRUNCH', 'DESTROY']);
