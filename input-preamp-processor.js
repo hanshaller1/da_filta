@@ -11,6 +11,7 @@ class ResonantInputPreampProcessor extends AudioWorkletProcessor {
     this.characterAmount = this.normalizeCharacterAmount(initial.characterAmount);
     this.targetCharacterAmount = this.characterAmount;
     this.smoothingCoefficient = Math.exp(-1 / Math.max(1, sampleRate * 0.015));
+    this.tubeDcPole = Math.pow(0.9987, 48000 / sampleRate);
     this.tubePreviousInput = new Float64Array(2);
     this.tubePreviousOutput = new Float64Array(2);
     this.port.onmessage = event => this.handleMessage(event.data);
@@ -50,13 +51,13 @@ class ResonantInputPreampProcessor extends AudioWorkletProcessor {
   }
 
   shapeTube(sample, channel) {
-    // Bias creates even harmonics. A 10 Hz DC blocker removes waveform DC afterwards.
+    // Bias creates even harmonics. A 9.94 Hz (48 kHz reference) DC blocker removes waveform DC afterwards.
     const bias = 0.18;
     const biasedZero = Math.tanh(1.3 * bias);
     const biased = (Math.tanh(1.3 * (sample + bias)) - biasedZero) / 1.3;
     const previousInput = this.tubePreviousInput[channel] || 0;
     const previousOutput = this.tubePreviousOutput[channel] || 0;
-    const dcBlocked = biased - previousInput + 0.9987 * previousOutput;
+    const dcBlocked = biased - previousInput + this.tubeDcPole * previousOutput;
     this.tubePreviousInput[channel] = biased;
     this.tubePreviousOutput[channel] = dcBlocked;
     return dcBlocked;
