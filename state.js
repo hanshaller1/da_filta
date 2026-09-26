@@ -41,10 +41,17 @@
       dynamicEqThresholdDb: limited(source?.dynamicEqThresholdDb, -60, 0, -24),
       dynamicEqWindowDb: limited(source?.dynamicEqWindowDb, 0, 12, 6),
       dynamicEqRangeDb: limited(source?.dynamicEqRangeDb, 0, 12, 6),
+      dynamicEqCutRangeDb: limited(source?.dynamicEqCutRangeDb, 0, 12, limited(source?.dynamicEqRangeDb, 0, 12, 6)),
+      dynamicEqBoostRangeDb: limited(source?.dynamicEqBoostRangeDb, 0, 12, limited(source?.dynamicEqRangeDb, 0, 12, 6)),
       dynamicEqStrength: limited(source?.dynamicEqStrength, 0, 100, 100),
       dynamicEqAttackMs: limited(source?.dynamicEqAttackMs, 1, 500, 30),
       dynamicEqReleaseMs: limited(source?.dynamicEqReleaseMs, 10, 2000, 250),
       dynamicEqDetectorMode: source?.dynamicEqDetectorMode === 'peak' ? 'peak' : 'rms',
+      detectorReferenceMode: source?.detectorReferenceMode === 'REL' ? 'REL' : 'ABS',
+      stereoDetectorMode: source?.stereoDetectorMode === 'DUAL' ? 'DUAL' : 'LINKED',
+      learnedReferenceDb: Array.from({ length: BAND_COUNT }, (_, index) => limited(source?.learnedReferenceDb?.[index], -120, 12, -120)),
+      learnedReferenceValid: source?.learnedReferenceValid === true,
+      learnedReferenceFrozen: source?.learnedReferenceFrozen === true,
       dynamicEqBandSensitivity: Array.from({ length: BAND_COUNT }, (_, index) => limited(source?.dynamicEqBandSensitivity?.[index], 0, 100, 100))
     };
   };

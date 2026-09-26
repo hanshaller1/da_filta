@@ -23,6 +23,24 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.spectralCoreMix = this.spectralCoreRequired ? 1 : 0;
     this.spectralCoreMixTarget = this.spectralCoreMix;
     this.spectralCoreMixCoefficient = this.smoothingCoefficient(0.003, 0.003);
+    this.dynamicEqPeakByChannel = { left: new Float64Array(this.bandCount), right: new Float64Array(this.bandCount) };
+    this.dynamicEqEnergyByChannel = { left: new Float64Array(this.bandCount), right: new Float64Array(this.bandCount) };
+    this.dynamicEqGainByChannel = { left: new Float64Array(this.bandCount), right: new Float64Array(this.bandCount) };
+    this.dynamicEqSmoothedByChannel = { left: new Float64Array(this.bandCount), right: new Float64Array(this.bandCount) };
+    this.dynamicEqTargetByChannel = { left: new Float64Array(this.bandCount), right: new Float64Array(this.bandCount) };
+    this.learnAccumulator = new Float64Array(this.bandCount);
+    this.dynamicEqLevelByChannel = { left: new Float64Array(this.bandCount).fill(-120), right: new Float64Array(this.bandCount).fill(-120) };
+    this.learnFrames = 0;
+    this.learnCompleted = false;
+    this.learnDurationFrames = Math.round(sampleRate * 3);
+    this.dynamicEqRelativeWeights = Array.from({ length: this.bandCount }, (_, band) => {
+      const weights = new Float64Array(this.bandCount);
+      for (let neighbor = Math.max(0, band - 2); neighbor <= Math.min(this.bandCount - 1, band + 2); neighbor += 1) {
+        if (neighbor !== band) weights[neighbor] = 1 / Math.max(0.01,
+          Math.abs(Math.log(this.bandFrequencies[neighbor] / this.bandFrequencies[band])));
+      }
+      return weights;
+    });
     this.setDynamicEq(processorOptions);
     // Dedicated source-only filters keep detection before gain and feedback.
     this.dynamicEqDetectorFilters = { left: this.createFilters(), right: this.createFilters() };
@@ -255,6 +273,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.initializeResonatorMagnitudes();
 
     this.port.onmessage = event => this.handleMessage(event.data);
+    this.port.start?.();
   }
 
   readBandDefinition(values, label) {
@@ -469,6 +488,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   setDynamicEq(source) {
     const settings = normalizeDynamicEq(source, this.bandCount);
     Object.assign(this, settings);
+    this.dynamicEqCutRangeDb = settings.dynamicEqCutRangeDb;
+    this.dynamicEqBoostRangeDb = settings.dynamicEqBoostRangeDb;
     this.dynamicEqAttackCoefficient = timeCoefficient(this.dynamicEqAttackMs, sampleRate);
     this.dynamicEqReleaseCoefficient = timeCoefficient(this.dynamicEqReleaseMs, sampleRate);
     this.dynamicEqPeakCoefficient = timeCoefficient(15, sampleRate);
@@ -476,6 +497,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (!this.dynamicEqEnabled && this.dynamicEqGainDb) {
       this.dynamicEqGainDb.fill(0);
       this.dynamicEqSmoothedDb.fill(0);
+      this.dynamicEqGainByChannel.left.fill(0); this.dynamicEqGainByChannel.right.fill(0);
+      this.dynamicEqSmoothedByChannel.left.fill(0); this.dynamicEqSmoothedByChannel.right.fill(0);
     }
   }
 
@@ -500,21 +523,55 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     for (let band = 0; band < this.bandCount; band += 1) {
       const leftBand = this.processBandpass(this.dynamicEqDetectorFilters.left[band], Number.isFinite(left) ? left : 0);
       const rightBand = this.processBandpass(this.dynamicEqDetectorFilters.right[band], Number.isFinite(right) ? right : 0);
-      const magnitude = Math.max(Math.abs(leftBand), Math.abs(rightBand));
-      const peak = Math.max(magnitude, this.dynamicEqPeak[band] * this.dynamicEqPeakCoefficient);
-      this.dynamicEqPeak[band] = peak;
-      // Linked RMS uses the louder channel's squared band signal.
-      this.dynamicEqEnergy[band] = magnitude * magnitude * (1 - this.dynamicEqRmsCoefficient)
-        + this.dynamicEqEnergy[band] * this.dynamicEqRmsCoefficient;
-      const amplitude = this.dynamicEqDetectorMode === 'peak' ? peak : Math.sqrt(this.dynamicEqEnergy[band]);
-      const levelDb = Math.max(-120, 20 * Math.log10(Math.max(1e-6, amplitude)));
+      const channels = this.stereoDetectorMode === 'DUAL' ? 2 : 1;
+      const linkedMagnitude = Math.max(Math.abs(leftBand), Math.abs(rightBand));
+      const leftMagnitude = channels === 2 ? Math.abs(leftBand) : linkedMagnitude;
+      const rightMagnitude = channels === 2 ? Math.abs(rightBand) : linkedMagnitude;
+      const leftLevel = this.dynamicEqDetectorMode === 'peak'
+        ? Math.max(leftMagnitude, this.dynamicEqPeakByChannel.left[band] * this.dynamicEqPeakCoefficient)
+        : 20 * Math.log10(Math.max(1e-6, Math.sqrt(this.dynamicEqEnergyByChannel.left[band] = leftMagnitude ** 2 * (1 - this.dynamicEqRmsCoefficient) + this.dynamicEqEnergyByChannel.left[band] * this.dynamicEqRmsCoefficient)));
+      const rightLevel = this.dynamicEqDetectorMode === 'peak'
+        ? Math.max(rightMagnitude, this.dynamicEqPeakByChannel.right[band] * this.dynamicEqPeakCoefficient)
+        : 20 * Math.log10(Math.max(1e-6, Math.sqrt(this.dynamicEqEnergyByChannel.right[band] = rightMagnitude ** 2 * (1 - this.dynamicEqRmsCoefficient) + this.dynamicEqEnergyByChannel.right[band] * this.dynamicEqRmsCoefficient)));
+      this.dynamicEqPeakByChannel.left[band] = Math.max(leftMagnitude, this.dynamicEqPeakByChannel.left[band] * this.dynamicEqPeakCoefficient);
+      this.dynamicEqPeakByChannel.right[band] = Math.max(rightMagnitude, this.dynamicEqPeakByChannel.right[band] * this.dynamicEqPeakCoefficient);
+      const leftDb = Math.max(-120, this.dynamicEqDetectorMode === 'peak' ? 20 * Math.log10(Math.max(1e-6, leftLevel)) : leftLevel);
+      const rightDb = Math.max(-120, this.dynamicEqDetectorMode === 'peak' ? 20 * Math.log10(Math.max(1e-6, rightLevel)) : rightLevel);
+      const levelDb = channels === 2 ? Math.max(leftDb, rightDb) : leftDb;
       this.dynamicEqLevelDb[band] = levelDb;
-      const target = targetGainDb(levelDb, this);
+      this.dynamicEqLevelByChannel.left[band] = leftDb;
+      this.dynamicEqLevelByChannel.right[band] = rightDb;
       const sensitivity = this.dynamicEqBandSensitivity[band] / 100;
-      this.dynamicEqTargetDb[band] = sensitivity === 0 ? 0 : target * sensitivity;
-      this.dynamicEqSmoothedDb[band] = smoothGain(this.dynamicEqSmoothedDb[band], target,
-        this.dynamicEqAttackCoefficient, this.dynamicEqReleaseCoefficient);
-      this.dynamicEqGainDb[band] = sensitivity === 0 ? 0 : this.dynamicEqSmoothedDb[band] * sensitivity;
+      const leftTarget = this.dynamicEqEnabled ? targetGainDb(leftDb, this, 100, band,
+        this.stereoDetectorMode === 'DUAL' ? this.dynamicEqLevelByChannel.left : this.dynamicEqLevelDb,
+        this.bandFrequencies, this.dynamicEqRelativeWeights) : 0;
+      this.dynamicEqTargetByChannel.left[band] = leftTarget;
+      this.dynamicEqSmoothedByChannel.left[band] = smoothGain(this.dynamicEqSmoothedByChannel.left[band], leftTarget, this.dynamicEqAttackCoefficient, this.dynamicEqReleaseCoefficient);
+      this.dynamicEqGainByChannel.left[band] = sensitivity === 0 ? 0 : this.dynamicEqSmoothedByChannel.left[band] * sensitivity;
+      if (channels === 2) {
+        const rightTarget = this.dynamicEqEnabled ? targetGainDb(rightDb, this, 100, band,
+          this.dynamicEqLevelByChannel.right, this.bandFrequencies, this.dynamicEqRelativeWeights) : 0;
+        this.dynamicEqTargetByChannel.right[band] = rightTarget;
+        this.dynamicEqSmoothedByChannel.right[band] = smoothGain(this.dynamicEqSmoothedByChannel.right[band], rightTarget, this.dynamicEqAttackCoefficient, this.dynamicEqReleaseCoefficient);
+        this.dynamicEqGainByChannel.right[band] = sensitivity === 0 ? 0 : this.dynamicEqSmoothedByChannel.right[band] * sensitivity;
+      }
+      else {
+        this.dynamicEqTargetByChannel.right[band] = this.dynamicEqTargetByChannel.left[band];
+        this.dynamicEqSmoothedByChannel.right[band] = this.dynamicEqSmoothedByChannel.left[band];
+        this.dynamicEqGainByChannel.right[band] = this.dynamicEqGainByChannel.left[band];
+      }
+      this.dynamicEqTargetDb[band] = sensitivity === 0 ? 0 : this.dynamicEqTargetByChannel.left[band] * sensitivity;
+      this.dynamicEqSmoothedDb[band] = this.dynamicEqSmoothedByChannel.left[band];
+      this.dynamicEqGainDb[band] = this.dynamicEqGainByChannel.left[band];
+      if (this.learnFrames < this.learnDurationFrames) this.learnAccumulator[band] += levelDb;
+    }
+    if (this.learnFrames < this.learnDurationFrames && this.learnActive) {
+      this.learnFrames += 1;
+      if (this.learnFrames >= this.learnDurationFrames) {
+        for (let band = 0; band < this.bandCount; band += 1) this.learnedReferenceDb[band] = this.learnAccumulator[band] / this.learnFrames;
+        this.learnedReferenceValid = true; this.learnedReferenceFrozen = false; this.learnActive = false;
+        this.learnCompleted = true;
+      }
     }
   }
 
@@ -1675,6 +1732,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       return;
     }
     if (data.type === 'set-dynamic-eq') { this.setDynamicEq(data); return; }
+    if (data.type === 'dynamic-eq-learn') {
+      this.learnAccumulator.fill(0); this.learnFrames = 0; this.learnActive = true;
+      this.learnedReferenceFrozen = false; return;
+    }
     if (data.type === 'set-pre-dynamic-gain-db') {
       if (Number.isInteger(data.index) && data.index >= 0 && data.index < this.bandCount) {
         this.preDynamicGainDb.left[data.index] = Number.isFinite(data.left) ? data.left : 0;
@@ -1969,7 +2030,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       globalTapSum += bandOutput;
       if (!zdfActive) deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
       const staticGain = 1 + deltaGains[band];
-      const dynamicDb = this.dynamicEqGainDb[band];
+      const dynamicDb = this.stereoDetectorMode === 'DUAL' ? this.dynamicEqGainByChannel[channel][band] : this.dynamicEqGainDb[band];
       let audibleGain = staticGain;
       if (dynamicDb !== 0) {
         const preDynamicTarget = this.preDynamicGainDb[channel][band];
@@ -2260,7 +2321,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const mixTarget = this.spectralCoreMixTarget;
       const nextMix = mixTarget + this.spectralCoreMixCoefficient * (this.spectralCoreMix - mixTarget);
       this.spectralCoreMix = Math.abs(nextMix - mixTarget) < 1e-6 ? mixTarget : nextMix;
-      if (this.dynamicEqEnabled) this.updateDynamicEq(inputChannels[0]?.[frame], inputChannels[1]?.[frame]);
+      if (this.dynamicEqEnabled || this.learnActive) this.updateDynamicEq(inputChannels[0]?.[frame], inputChannels[1]?.[frame]);
       this.resonance = this.resonanceTarget + this.resonanceSmoothingCoefficient * (this.resonance - this.resonanceTarget);
       this.positiveResonanceAuditionGain = this.positiveResonanceAuditionGainTarget
         + this.positiveResonanceAuditionGainSmoothingCoefficient * (
@@ -2315,12 +2376,16 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
           : this.spectralCoreMix === 0 ? source : source + this.spectralCoreMix * (wet - source);
       }
     }
-    if (this.dynamicEqEnabled) {
+    if (this.dynamicEqEnabled || this.learnActive || this.learnCompleted) {
       this.dynamicEqTelemetryCounter += frameCount;
       if (this.dynamicEqTelemetryCounter >= this.dynamicEqTelemetryInterval) {
         this.dynamicEqTelemetryCounter %= this.dynamicEqTelemetryInterval;
         this.port.postMessage({ type: 'dynamic-eq-telemetry', levels: Array.from(this.dynamicEqLevelDb),
-          targets: Array.from(this.dynamicEqTargetDb), gains: Array.from(this.dynamicEqGainDb) });
+          targets: Array.from(this.dynamicEqTargetDb), gains: Array.from(this.dynamicEqGainDb),
+          learnedReferenceDb: Array.from(this.learnedReferenceDb), learnedReferenceValid: this.learnedReferenceValid,
+          learnedReferenceFrozen: this.learnedReferenceFrozen, learnProgress: this.learnActive ? this.learnFrames / this.learnDurationFrames : 0,
+          leftGains: Array.from(this.dynamicEqGainByChannel.left), rightGains: Array.from(this.dynamicEqGainByChannel.right) });
+        this.learnCompleted = false;
       }
     }
     if (this.collectResonatorDiagnostics) {

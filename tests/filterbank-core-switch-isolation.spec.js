@@ -16,8 +16,10 @@ const qs = frequencies.map((frequency, index) => {
 function loadProcessor(source) {
   const tptSource = fs.readFileSync(path.join(root, 'tpt-svf.js'), 'utf8')
     .replaceAll('export class ', 'class ');
+  const dynamicEqSource = fs.readFileSync(path.join(root, 'dynamic-eq-core.mjs'), 'utf8')
+    .replace(/^export /gm, '');
   const processorSource = source
-    .replace(/^import .*?;\s*$/m, '')
+    .replace(/^import .*?;\s*$/gm, '')
     .replace(/registerProcessor\('da-filta-processor', DaFiltaProcessor\);/, 'globalThis.DaFiltaProcessor = DaFiltaProcessor;');
   const context = {
     Math, Number, Array, Float64Array, Object, console, sampleRate: 48000,
@@ -26,7 +28,7 @@ function loadProcessor(source) {
     }
   };
   context.globalThis = context;
-  vm.runInNewContext(`${tptSource}\n${processorSource}`, context, { filename: 'filterbank-processor.js' });
+  vm.runInNewContext(`${tptSource}\n${dynamicEqSource}\n${processorSource}`, context, { filename: 'filterbank-processor.js' });
   return context.DaFiltaProcessor;
 }
 
@@ -87,6 +89,7 @@ test('CURRENT remains bit-identical to the pre-ZDF processor across established 
     { bandGainLeft: Array.from({ length: 10 }, (_, index) => index === 5 ? 100 : 0), feedbackTap: 'post-gain' }
   ];
   let maxDifference = 0;
+  let maxDifferenceConfiguration = null;
   for (const configuration of configurations) {
     const before = new PreZdfProcessor({ processorOptions: options(configuration) });
     const current = new CurrentProcessor({ processorOptions: options(configuration) });
@@ -94,10 +97,11 @@ test('CURRENT remains bit-identical to the pre-ZDF processor across established 
     const beforeOutput = run(before, 8192, input);
     const currentOutput = run(current, 8192, input);
     for (let frame = 0; frame < currentOutput.length; frame += 1) {
-      maxDifference = Math.max(maxDifference, Math.abs(beforeOutput[frame] - currentOutput[frame]));
+      const difference = Math.abs(beforeOutput[frame] - currentOutput[frame]);
+      if (difference > maxDifference) { maxDifference = difference; maxDifferenceConfiguration = configuration; }
     }
   }
-  expect(maxDifference).toBe(0);
+  expect(maxDifference, JSON.stringify(maxDifferenceConfiguration)).toBe(0);
 });
 
 test('CURRENT to ZDF to CURRENT preserves CURRENT returns and does not reset shared base filters', () => {

@@ -512,7 +512,7 @@
             <section class="mode-placeholder" id="mode-envelope-follower" role="tabpanel" aria-labelledby="mode-tab-envelope-follower" data-mode-panel="envelope-follower" hidden><strong>ENVELOPE FOLLOWER</strong><span>Envelope follower – coming later</span></section>
             <section class="dynamic-eq-panel" id="mode-dynamic-eq" role="tabpanel" aria-labelledby="mode-tab-dynamic-eq" data-mode-panel="dynamic-eq" hidden>
               <section class="dynamic-eq-response" aria-label="Dynamic EQ response">
-                <header><strong>DYNAMIC EQ RESPONSE</strong><span>STEREO LINKED · PRE GAIN DETECTOR</span></header>
+                <header><strong>DYNAMIC EQ RESPONSE</strong><span data-dynamic-eq-status>STEREO LINKED · ABS · PRE GAIN DETECTOR</span></header>
                 <div class="dynamic-eq-graph" data-dynamic-eq-graph>
                   <div class="dynamic-eq-y-axis" aria-label="Detector level axis"><span>0 dBFS</span><span>−12 dBFS</span><span>−24 dBFS</span><span>−36 dBFS</span><span>−48 dBFS</span><span>−60 dBFS</span></div>
                   <div class="dynamic-eq-plot">
@@ -534,6 +534,11 @@
                 <div class="dynamic-eq-mode"><span>MODE</span><div role="group" aria-label="Dynamic EQ mode"><button type="button" data-dynamic-eq-mode="cut">CUT</button><button type="button" data-dynamic-eq-mode="boost">BOOST</button><button type="button" data-dynamic-eq-mode="balance">BALANCE</button></div></div>
                 <div class="dynamic-eq-control-grid" data-dynamic-eq-controls></div>
                 <div class="dynamic-eq-mode"><span>DETECTOR</span><div role="group" aria-label="Dynamic EQ detector"><button type="button" data-dynamic-eq-detector="peak">PEAK</button><button type="button" data-dynamic-eq-detector="rms">RMS</button></div></div>
+                <div class="dynamic-eq-v2-modes">
+                  <div class="dynamic-eq-mode"><span>DETECTOR REFERENCE</span><div role="group" aria-label="Detector reference"><button type="button" data-dynamic-eq-reference="ABS">ABS</button><button type="button" data-dynamic-eq-reference="REL">REL</button></div></div>
+                  <div class="dynamic-eq-mode"><span>STEREO</span><div role="group" aria-label="Stereo detector"><button type="button" data-dynamic-eq-stereo="LINKED">LINKED</button><button type="button" data-dynamic-eq-stereo="DUAL">DUAL</button></div></div>
+                  <div class="dynamic-eq-mode"><span>REFERENCE PROFILE</span><div role="group" aria-label="Learn and freeze reference"><button type="button" data-dynamic-eq-learn>LEARN</button><button type="button" data-dynamic-eq-freeze>FREEZE</button></div><output data-dynamic-eq-learn-status>NO PROFILE</output></div>
+                </div>
               </section>
             </section>
             <section class="mode-placeholder" id="mode-makros" role="tabpanel" aria-labelledby="mode-tab-makros" data-mode-panel="makros" hidden><strong>MAKROS</strong><span>Macro controls – coming later</span></section>

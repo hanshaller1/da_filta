@@ -34,6 +34,21 @@ test('dynamic EQ target, sensitivity, range and smoothing', async () => {
   expect(crossing).toBeGreaterThan(0);
 });
 
+test('dynamic EQ V2 supports asymmetric ranges and relative dB detection', async () => {
+  const { normalizeDynamicEq, targetGainDb } = await import('../dynamic-eq-core.mjs');
+  const legacy = normalizeDynamicEq({ dynamicEqRangeDb: 8 });
+  expect(legacy.dynamicEqCutRangeDb).toBe(8);
+  expect(legacy.dynamicEqBoostRangeDb).toBe(8);
+  const balance = { ...legacy, dynamicEqMode: 'balance', dynamicEqWindowDb: 0,
+    dynamicEqCutRangeDb: 8, dynamicEqBoostRangeDb: 3 };
+  expect(targetGainDb(10, balance)).toBe(-8);
+  expect(targetGainDb(-30, balance)).toBe(3);
+  const relative = { ...balance, dynamicEqMode: 'cut', detectorReferenceMode: 'REL', dynamicEqWindowDb: 2 };
+  expect(targetGainDb(-12, relative, 100, 5, [-25, -25, -25, -25, -25, -25, -25, -25, -25, -25])).toBe(-8);
+  expect(targetGainDb(-24, { ...relative, dynamicEqMode: 'boost' }, 100, 5,
+    [-12, -12, -12, -12, -12, -12, -12, -12, -12, -12])).toBe(3);
+});
+
 test('audio worklet applies linked gain from source bands and keeps power independent', async ({ page }) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
@@ -87,6 +102,66 @@ test('audio worklet applies linked gain from source bands and keeps power indepe
   expect(result.boostActive.left).toBeGreaterThan(result.off.left);
   expect(result.muted.gain).toBe(0);
   expect(result.muted.left).toBeCloseTo(result.off.left, 4);
+});
+
+test('DUAL detectors remain channel independent while LINKED shares gain', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const render = async (leftAmplitude, stereoDetectorMode) => {
+      const context = new OfflineAudioContext(2, 48000, 48000);
+      const buffer = context.createBuffer(2, context.length, context.sampleRate);
+      for (let i = 0; i < context.length; i += 1) {
+        const sample = Math.sin(2 * Math.PI * 777 * i / context.sampleRate);
+        buffer.getChannelData(0)[i] = leftAmplitude * sample;
+        buffer.getChannelData(1)[i] = .1 * sample;
+      }
+      const source = context.createBufferSource(); source.buffer = buffer;
+      const packets = [];
+      const bank = await window.Filterbank.create(context, {
+        dynamicEqEnabled: true, dynamicEqMode: 'cut', dynamicEqDetectorMode: 'peak',
+        dynamicEqThresholdDb: -12, dynamicEqWindowDb: 0, dynamicEqAttackMs: 1,
+        stereoDetectorMode, dynamicEqBandSensitivity: Array.from({ length: 10 }, (_, index) => index === 5 ? 100 : 0),
+        onDynamicEqTelemetry: packet => packets.push(packet)
+      });
+      source.connect(bank.input); bank.output.connect(context.destination); source.start();
+      await context.startRendering(); await new Promise(resolve => setTimeout(resolve, 20)); bank.dispose();
+      return packets.at(-1);
+    };
+    return {
+      dualQuietLeft: await render(.1, 'DUAL'), dualLoudLeft: await render(.7, 'DUAL'),
+      linked: await render(.7, 'LINKED')
+    };
+  });
+  expect(result.dualQuietLeft.rightGains[5]).toBeCloseTo(result.dualLoudLeft.rightGains[5], 4);
+  expect(result.dualLoudLeft.leftGains[5]).toBeLessThan(result.dualLoudLeft.rightGains[5]);
+  expect(result.linked.gains[5]).toBeCloseTo(result.linked.leftGains[5], 4);
+  expect(result.linked.gains[5]).toBeCloseTo(result.linked.rightGains[5], 4);
+});
+
+test('LEARN creates a stable ten-band profile and FREEZE persists it', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const context = new AudioContext();
+    const source = context.createOscillator(); source.frequency.value = 777;
+    const gain = context.createGain(); gain.gain.value = .2;
+    let learned = null; let resolveLearn;
+    const learnedReady = new Promise(resolve => { resolveLearn = resolve; });
+    const bank = await window.Filterbank.create(context, { dynamicEqEnabled: true,
+      onDynamicEqTelemetry: packet => {
+        if (packet.learnedReferenceValid) { learned = packet.learnedReferenceDb; resolveLearn(learned); }
+      } });
+    source.connect(gain); gain.connect(bank.input); bank.output.connect(context.destination);
+    await context.resume(); bank.learnDynamicEq(); source.start();
+    await Promise.race([learnedReady, new Promise(resolve => setTimeout(resolve, 10_000))]);
+    bank.setDynamicEq({ ...bank.dynamicEqState, learnedReferenceDb: learned, learnedReferenceValid: true, learnedReferenceFrozen: true });
+    const restored = bank.dynamicEqState; source.stop(); bank.dispose(); await context.close();
+    return { learned, restored };
+  });
+  expect(result.learned).toHaveLength(10);
+  expect(result.learned.every(Number.isFinite)).toBe(true);
+  expect(result.restored.learnedReferenceValid).toBe(true);
+  expect(result.restored.learnedReferenceFrozen).toBe(true);
+  expect(result.restored.learnedReferenceDb).toEqual(result.learned);
 });
 
 test('legacy state defaults and independent FILTERBANK, FILTER and dynamic layers', async ({ page }) => {
@@ -165,18 +240,25 @@ test('dynamic EQ workspace, power and state survive tab changes', async ({ page 
   await expect(page.locator('[data-module-power="dynamic-eq"]')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('[data-dynamic-eq-mode]')).toHaveCount(3);
   await expect(page.locator('[data-dynamic-eq-detector]')).toHaveCount(2);
-  await expect(page.locator('.dynamic-eq-control')).toHaveCount(6);
+  await expect(page.locator('[data-dynamic-eq-reference]')).toHaveCount(2);
+  await expect(page.locator('[data-dynamic-eq-stereo]')).toHaveCount(2);
+  await expect(page.locator('.dynamic-eq-control')).toHaveCount(7);
   await expect(page.locator('.dynamic-eq-sensitivity-item')).toHaveCount(10);
   await page.locator('[data-dynamic-eq-mode="balance"]').click();
   await page.locator('.dynamic-eq-control input[aria-label="Threshold"]').fill('-18');
+  await page.locator('.dynamic-eq-control input[aria-label="Cut Range"]').fill('8');
+  await page.locator('.dynamic-eq-control input[aria-label="Boost Range"]').fill('3');
+  await page.locator('[data-dynamic-eq-reference="REL"]').click();
+  await page.locator('[data-dynamic-eq-stereo="DUAL"]').click();
   await page.locator('.dynamic-eq-sensitivity-item input').first().fill('50');
   await page.locator('[data-module-power="dynamic-eq"]').click();
   await page.locator('[data-mode="filter"]').click();
   await page.locator('[data-mode="dynamic-eq"]').click();
   expect(await page.evaluate(() => {
     const state = window.FilterMode.getAudioEngine().getState();
-    return [state.dynamicEqEnabled, state.dynamicEqMode, state.dynamicEqThresholdDb, state.dynamicEqBandSensitivity[0]];
-  })).toEqual([true, 'balance', -18, 50]);
+    return [state.dynamicEqEnabled, state.dynamicEqMode, state.dynamicEqThresholdDb, state.dynamicEqBandSensitivity[0],
+      state.detectorReferenceMode, state.stereoDetectorMode, state.dynamicEqCutRangeDb, state.dynamicEqBoostRangeDb];
+  })).toEqual([true, 'balance', -18, 50, 'REL', 'DUAL', 8, 3]);
   await expect(page.locator('[data-module-power="dynamic-eq"]')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('[data-dynamic-eq-reset]').click();
   await expect(page.locator('.dynamic-eq-sensitivity-item output').first()).toHaveText('100');
@@ -238,7 +320,7 @@ test('dynamic EQ plot starts at the graph edge and sliders share exact band cent
   }
 });
 
-test('dynamic EQ reuses FILTER sliders and its six controls form one 2 by 3 grid', async ({ page }) => {
+test('dynamic EQ reuses FILTER sliders and its controls form one two-column grid', async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-mode="dynamic-eq"]').click();
   const styles = await page.evaluate(() => {
@@ -264,9 +346,9 @@ test('dynamic EQ reuses FILTER sliders and its six controls form one 2 by 3 grid
   expect(styles.track.background).toContain('var(--range-track)');
   expect(styles.gap).toBe('0px');
   expect(styles.columns).toBe(2);
-  expect(styles.cells).toHaveLength(6);
+  expect(styles.cells).toHaveLength(7);
   expect(styles.cells[0].right).toBeCloseTo(styles.cells[1].left, 0);
-  expect(styles.cells[0].bottom).toBeCloseTo(styles.cells[2].top, 0);
+  expect(styles.cells[2].top).toBeGreaterThanOrEqual(styles.cells[0].top);
 });
 
 test('dynamic EQ axes, guide values and detector colors remain visible across themes', async ({ page }) => {
@@ -291,8 +373,9 @@ test('dynamic EQ axes, guide values and detector colors remain visible across th
   expect(visible.boost).toBeGreaterThan(0);
   expect(visible.zero).toBe('dotted');
   const initialGainHeight = visible.cut;
-  await page.locator('.dynamic-eq-control input[aria-label="Range"]').fill('3');
-  await expect(page.locator('[data-dynamic-eq-gain-scale]')).toHaveText('GAIN · ±3.0 dB');
+  await page.locator('.dynamic-eq-control input[aria-label="Cut Range"]').fill('3');
+  await page.locator('.dynamic-eq-control input[aria-label="Boost Range"]').fill('3');
+  await expect(page.locator('[data-dynamic-eq-gain-scale]')).toHaveText('GAIN · −3.0 / +3.0 dB');
   const scaledGainHeight = await page.locator('.dynamic-eq-gain').first().evaluate(bar => bar.getBoundingClientRect().height);
   expect(scaledGainHeight).toBeGreaterThan(initialGainHeight * 1.9);
   const themes = await page.locator('[data-theme-select]').locator('option').evaluateAll(options => options.map(option => option.value).filter(value => value !== 'custom'));
