@@ -1,0 +1,1816 @@
+{
+  "filter": {
+    "taps": 257,
+    "order": 256,
+    "beta": 8.6,
+    "cutoff": 0.2375,
+    "passbandEnd": 0.225,
+    "stopbandStart": 0.25,
+    "passMin": 0.9999552716394673,
+    "passMax": 1.0000278761025765,
+    "rippleDb": 0.0006306396679263675,
+    "stopbandDb": -87.66540475473872,
+    "latencySamples": {
+      "1": 0,
+      "2": 128,
+      "4": 192,
+      "8": 224,
+      "16": 240
+    }
+  },
+  "summary": [
+    {
+      "stage": "silk",
+      "maxAliasRatios": [
+        0.012111579301961054,
+        0.000004483785018146886,
+        1.1873301675552155e-7
+      ],
+      "maxReferenceErrors": [
+        0.012111589950066677,
+        0.000004816896600525317,
+        0.0000010446049567929458
+      ],
+      "aliasReductionDb": [
+        68.63111991198215,
+        100.172585493314
+      ],
+      "representative": [
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "silk",
+          "amount": 1,
+          "factor": 1,
+          "rms": 0.545297239417061,
+          "peak": 0.7619349360466003,
+          "dc": -7.178938723403847e-16,
+          "finite": true,
+          "fundamental": 0.7711101964048301,
+          "harmonicPower": 5.239083160383243e-18,
+          "aliasPower": 0.000043611816119451864,
+          "totalPower": 0.29734907931586707,
+          "aliasFundamental": 0.012111575426097082,
+          "aliasTotal": 0.012110687198746714,
+          "thd": 4.1978430595870475e-9,
+          "referenceError": {
+            "rms": 0.006603862420923331,
+            "maximum": 0.009423110776666521
+          },
+          "referenceErrorRatio": 0.012111425831558902
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "silk",
+          "amount": 1,
+          "factor": 2,
+          "rms": 0.5452579134735924,
+          "peak": 0.7711028058759515,
+          "dc": -7.143441796766171e-16,
+          "finite": true,
+          "fundamental": 0.7711111362178596,
+          "harmonicPower": 1.1563195117590982e-19,
+          "aliasPower": 5.97714123085969e-12,
+          "totalPower": 0.29730619220557625,
+          "aliasFundamental": 0.000004483785018146886,
+          "aliasTotal": 0.000004483785018101816,
+          "thd": 6.2364428901956e-10,
+          "referenceError": {
+            "rms": 0.000002626455620344421,
+            "maximum": 0.000004734274310025377
+          },
+          "referenceErrorRatio": 0.000004816896600525317
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "silk",
+          "amount": 1,
+          "factor": 4,
+          "rms": 0.5452583447053105,
+          "peak": 0.7711067883369725,
+          "dc": -7.19605780859081e-16,
+          "finite": true,
+          "fundamental": 0.7711117460793493,
+          "harmonicPower": 1.197901434350887e-19,
+          "aliasPower": 4.1013701872906255e-15,
+          "totalPower": 0.2973066624707754,
+          "aliasFundamental": 1.1745247269963941e-7,
+          "aliasTotal": 1.1745247269963862e-7,
+          "thd": 6.347580563764767e-10,
+          "referenceError": {
+            "rms": 5.301373698564857e-7,
+            "maximum": 7.639053475338997e-7
+          },
+          "referenceErrorRatio": 9.722672924274536e-7
+        }
+      ],
+      "cpu": [
+        {
+          "factor": 1,
+          "relative": 1,
+          "cpuFraction": 0.027120410156214803
+        },
+        {
+          "factor": 2,
+          "relative": 3.4440915621564923,
+          "cpuFraction": 0.09340517578124263
+        },
+        {
+          "factor": 4,
+          "relative": 7.570437826111028,
+          "cpuFraction": 0.20531337890625423
+        }
+      ]
+    },
+    {
+      "stage": "tape",
+      "maxAliasRatios": [
+        0.07055445875790006,
+        0.0013398028488143367,
+        0.000006453668528761622
+      ],
+      "maxReferenceErrors": [
+        0.07055346328513352,
+        0.001339830095186779,
+        0.000009034446006390484
+      ],
+      "aliasReductionDb": [
+        34.429671354554344,
+        80.77435618147176
+      ],
+      "representative": [
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "tape",
+          "amount": 1,
+          "factor": 1,
+          "rms": 0.44802193727731104,
+          "peak": 0.592644214630127,
+          "dc": -7.178183469645599e-16,
+          "finite": true,
+          "fundamental": 0.6320275579932342,
+          "harmonicPower": 3.900658734493306e-19,
+          "aliasPower": 0.0009942392502693361,
+          "totalPower": 0.20072365628171474,
+          "aliasFundamental": 0.07055445392063947,
+          "aliasTotal": 0.07037949923406485,
+          "thd": 1.3974875926008117e-9,
+          "referenceError": {
+            "rms": 0.0315312985607149,
+            "maximum": 0.047377705221749056
+          },
+          "referenceErrorRatio": 0.07055259943561601
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "tape",
+          "amount": 1,
+          "factor": 2,
+          "rms": 0.44691466905548605,
+          "peak": 0.6313289966725628,
+          "dc": -7.16307839448063e-16,
+          "finite": true,
+          "fundamental": 0.6320322189346684,
+          "harmonicPower": 1.8775049430602947e-19,
+          "aliasPower": 3.5853123187962846e-7,
+          "totalPower": 0.1997327214169721,
+          "aliasFundamental": 0.0013397978506061025,
+          "aliasTotal": 0.0013397966481001088,
+          "thd": 9.69541324471187e-10,
+          "referenceError": {
+            "rms": 0.0005987955523951776,
+            "maximum": 0.0009599351084191576
+          },
+          "referenceErrorRatio": 0.001339830095186779
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "tape",
+          "amount": 1,
+          "factor": 4,
+          "rms": 0.4469164019236382,
+          "peak": 0.6320310481757617,
+          "dc": -7.170127429557615e-16,
+          "finite": true,
+          "fundamental": 0.6320352368472691,
+          "harmonicPower": 1.5735520092811004e-20,
+          "aliasPower": 7.87278556147438e-14,
+          "totalPower": 0.1997342703083705,
+          "aliasFundamental": 6.278240056833734e-7,
+          "aliasTotal": 6.278240056832497e-7,
+          "thd": 2.8068180277943244e-10,
+          "referenceError": {
+            "rms": 0.0000026194979975923813,
+            "maximum": 0.000003768554314165229
+          },
+          "referenceErrorRatio": 0.000005861236339209727
+        }
+      ],
+      "cpu": [
+        {
+          "factor": 1,
+          "relative": 1,
+          "cpuFraction": 0.02829902343742674
+        },
+        {
+          "factor": 2,
+          "relative": 3.1277615586984697,
+          "cpuFraction": 0.08851259765629038
+        },
+        {
+          "factor": 4,
+          "relative": 7.324906308898993,
+          "cpuFraction": 0.20728769531248759
+        }
+      ]
+    },
+    {
+      "stage": "tube",
+      "maxAliasRatios": [
+        0.12641281827710193,
+        0.0014471929945921564,
+        0.000002319198396771765
+      ],
+      "maxReferenceErrors": [
+        0.1327333724409194,
+        0.0014706804353350367,
+        0.0000886596365661149
+      ],
+      "aliasReductionDb": [
+        38.825293242517716,
+        94.7290642314731
+      ],
+      "representative": [
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "tube",
+          "amount": 1,
+          "factor": 1,
+          "rms": 0.44288256045788166,
+          "peak": 0.6307917833328247,
+          "dc": -2.177864051257131e-9,
+          "finite": true,
+          "fundamental": 0.6228928086537948,
+          "harmonicPower": 0.0013255046928106835,
+          "aliasPower": 0.0008217321286105545,
+          "totalPower": 0.19614496235772763,
+          "aliasFundamental": 0.06508288778306741,
+          "aliasTotal": 0.0647256699825063,
+          "thd": 0.08265941278506318,
+          "referenceError": {
+            "rms": 0.028666958946902146,
+            "maximum": 0.04612757270569051
+          },
+          "referenceErrorRatio": 0.0649031572058408
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "tube",
+          "amount": 1,
+          "factor": 2,
+          "rms": 0.44180074000633685,
+          "peak": 0.6738665392026555,
+          "dc": -1.7746383748257801e-9,
+          "finite": true,
+          "fundamental": 0.6226771596422173,
+          "harmonicPower": 0.0013244474649027947,
+          "aliasPower": 2.3835194613919918e-8,
+          "totalPower": 0.19518789387014696,
+          "aliasFundamental": 0.00035063996417366937,
+          "aliasTotal": 0.0003494482840023143,
+          "thd": 0.08265505711616326,
+          "referenceError": {
+            "rms": 0.00019185986645023657,
+            "maximum": 0.00043979205981026226
+          },
+          "referenceErrorRatio": 0.00043437851558569195
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "tube",
+          "amount": 1,
+          "factor": 4,
+          "rms": 0.4417246640570133,
+          "peak": 0.6740194008903867,
+          "dc": -1.3203266048379526e-9,
+          "finite": true,
+          "fundamental": 0.6225700557398267,
+          "harmonicPower": 0.0013239416842743448,
+          "aliasPower": 6.079469035333784e-14,
+          "totalPower": 0.19512067883628054,
+          "aliasFundamental": 5.600922907870468e-7,
+          "aliasTotal": 5.581888746912278e-7,
+          "thd": 0.08265349028861582,
+          "referenceError": {
+            "rms": 0.0000366354237283003,
+            "maximum": 0.00005679697271276929
+          },
+          "referenceErrorRatio": 0.00008294408451013648
+        }
+      ],
+      "cpu": [
+        {
+          "factor": 1,
+          "relative": 1,
+          "cpuFraction": 0.04060517578128042
+        },
+        {
+          "factor": 2,
+          "relative": 2.801253977300507,
+          "cpuFraction": 0.11374541015629802
+        },
+        {
+          "factor": 4,
+          "relative": 6.417362318625816,
+          "cpuFraction": 0.2605781249999666
+        }
+      ]
+    },
+    {
+      "stage": "console",
+      "maxAliasRatios": [
+        0.054158864068705216,
+        0.00438065735032592,
+        0.0006947867956492992
+      ],
+      "maxReferenceErrors": [
+        0.05415799807660722,
+        0.004380066844062374,
+        0.0006913771920338624
+      ],
+      "aliasReductionDb": [
+        21.84260524663571,
+        37.836359814435234
+      ],
+      "representative": [
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "console",
+          "amount": 1,
+          "factor": 1,
+          "rms": 0.42840306628351693,
+          "peak": 0.5780320167541504,
+          "dc": -7.178183469645599e-16,
+          "finite": true,
+          "fundamental": 0.6049668370693979,
+          "harmonicPower": 2.321408894045596e-19,
+          "aliasPower": 0.0005367502242423775,
+          "totalPower": 0.18352918720111822,
+          "aliasFundamental": 0.054158864068705216,
+          "aliasTotal": 0.05407960945962591,
+          "thd": 1.1263134014313838e-9,
+          "referenceError": {
+            "rms": 0.02316768412390758,
+            "maximum": 0.03538831982257165
+          },
+          "referenceErrorRatio": 0.05415744459472509
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "console",
+          "amount": 1,
+          "factor": 2,
+          "rms": 0.42778335408451945,
+          "peak": 0.6037436212188794,
+          "dc": -7.182714992195089e-16,
+          "finite": true,
+          "fundamental": 0.6049713357249112,
+          "harmonicPower": 1.7657306725216e-19,
+          "aliasPower": 0.000003439507410423587,
+          "totalPower": 0.18299859803180196,
+          "aliasFundamental": 0.004335391530309809,
+          "aliasTotal": 0.004335350787698873,
+          "thd": 9.82296124704286e-10,
+          "referenceError": {
+            "rms": 0.001854522435575286,
+            "maximum": 0.003267868380132044
+          },
+          "referenceErrorRatio": 0.0043351849721871595
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "console",
+          "amount": 1,
+          "factor": 4,
+          "rms": 0.4277814185990382,
+          "peak": 0.6050094433493497,
+          "dc": -7.164840653249876e-16,
+          "finite": true,
+          "fundamental": 0.6049742512158458,
+          "harmonicPower": 8.595127668368013e-20,
+          "aliasPower": 1.9781519482214825e-8,
+          "totalPower": 0.18299694209860606,
+          "aliasFundamental": 0.000328781922942223,
+          "aliasTotal": 0.0003287819051719639,
+          "thd": 6.853371482188295e-10,
+          "referenceError": {
+            "rms": 0.00013962563482179164,
+            "maximum": 0.0002613234376541429
+          },
+          "referenceErrorRatio": 0.0003263928988940778
+        }
+      ],
+      "cpu": [
+        {
+          "factor": 1,
+          "relative": 1,
+          "cpuFraction": 0.026741308593784652
+        },
+        {
+          "factor": 2,
+          "relative": 3.239249756229701,
+          "cpuFraction": 0.08662177734368015
+        },
+        {
+          "factor": 4,
+          "relative": 7.603459798187569,
+          "cpuFraction": 0.20332646484376937
+        }
+      ]
+    },
+    {
+      "stage": "crunch",
+      "maxAliasRatios": [
+        0.024572845993976543,
+        0.010943416762327358,
+        0.003975993181357195
+      ],
+      "maxReferenceErrors": [
+        0.02620261455902102,
+        0.010922756481227557,
+        0.003918878328305686
+      ],
+      "aliasReductionDb": [
+        7.026050397119966,
+        15.820196557296182
+      ],
+      "representative": [
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "crunch",
+          "amount": 1,
+          "factor": 1,
+          "rms": 0.5913051732062338,
+          "peak": 0.8191179037094116,
+          "dc": -7.178938723403847e-16,
+          "finite": true,
+          "fundamental": 0.8359832639461818,
+          "harmonicPower": 3.0016383812362528e-12,
+          "aliasPower": 0.00020779905839344085,
+          "totalPower": 0.34964180786045096,
+          "aliasFundamental": 0.02438592323578412,
+          "aliasTotal": 0.024378675639845297,
+          "thd": 0.0000029308702978809434,
+          "referenceError": {
+            "rms": 0.014411219459243493,
+            "maximum": 0.024368694423549497
+          },
+          "referenceErrorRatio": 0.024379068821092673
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "crunch",
+          "amount": 1,
+          "factor": 2,
+          "rms": 0.5911620281420423,
+          "peak": 0.8372852328836965,
+          "dc": -7.171134434568614e-16,
+          "finite": true,
+          "fundamental": 0.835984022806026,
+          "harmonicPower": 2.972606946443969e-12,
+          "aliasPower": 0.00003790032056540173,
+          "totalPower": 0.349472543517011,
+          "aliasFundamental": 0.010414500906874851,
+          "aliasTotal": 0.010413936164860891,
+          "thd": 0.0000029166597247509807,
+          "referenceError": {
+            "rms": 0.006147151803904761,
+            "maximum": 0.012856015006992239
+          },
+          "referenceErrorRatio": 0.010398969865452667
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "crunch",
+          "amount": 1,
+          "factor": 4,
+          "rms": 0.5911322594306357,
+          "peak": 0.8371270758536112,
+          "dc": -7.160560881953136e-16,
+          "finite": true,
+          "fundamental": 0.8359845162726653,
+          "harmonicPower": 2.95179177667986e-12,
+          "aliasPower": 0.000002292412796765423,
+          "totalPower": 0.3494373481395694,
+          "aliasFundamental": 0.002561316080977499,
+          "aliasTotal": 0.002561307679455765,
+          "thd": 0.0000029064283653721318,
+          "referenceError": {
+            "rms": 0.0014762943861281734,
+            "maximum": 0.002946812505042723
+          },
+          "referenceErrorRatio": 0.002497407144579062
+        }
+      ],
+      "cpu": [
+        {
+          "factor": 1,
+          "relative": 1,
+          "cpuFraction": 0.033053027343783015
+        },
+        {
+          "factor": 2,
+          "relative": 2.92795667472877,
+          "cpuFraction": 0.09677783203122203
+        },
+        {
+          "factor": 4,
+          "relative": 6.827425745200722,
+          "cpuFraction": 0.2256670898437676
+        }
+      ]
+    },
+    {
+      "stage": "destroy",
+      "maxAliasRatios": [
+        0.20516567556109463,
+        0.0070720459292458295,
+        0.0028466240881197063
+      ],
+      "maxReferenceErrors": [
+        0.205161405659695,
+        0.007055773882226197,
+        0.0028062464630269216
+      ],
+      "aliasReductionDb": [
+        29.251192641028965,
+        37.15549169097641
+      ],
+      "representative": [
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "destroy",
+          "amount": 1,
+          "factor": 1,
+          "rms": 0.5636700919906819,
+          "peak": 0.6970245242118835,
+          "dc": -1.1207965772406342e-15,
+          "finite": true,
+          "fundamental": 0.7808844236646549,
+          "harmonicPower": 3.711506560299e-14,
+          "aliasPower": 0.012833731043705027,
+          "totalPower": 0.31772397260478213,
+          "aliasFundamental": 0.2051656755610946,
+          "aliasTotal": 0.20097936732828345,
+          "thd": 3.4890191574540685e-7,
+          "referenceError": {
+            "rms": 0.1132848181241942,
+            "maximum": 0.1601887966426938
+          },
+          "referenceErrorRatio": 0.2051581810505468
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "destroy",
+          "amount": 1,
+          "factor": 2,
+          "rms": 0.5521866305478635,
+          "peak": 0.7895141032378591,
+          "dc": -9.114654105794511e-16,
+          "finite": true,
+          "fundamental": 0.7808925788410354,
+          "harmonicPower": 3.420470980223209e-14,
+          "aliasPower": 0.00001346511126675596,
+          "totalPower": 0.304910074955802,
+          "aliasFundamental": 0.00664551550342367,
+          "aliasTotal": 0.006645368765743967,
+          "thd": 3.3493972341188264e-7,
+          "referenceError": {
+            "rms": 0.003663097724409659,
+            "maximum": 0.008363580883343325
+          },
+          "referenceErrorRatio": 0.0066338497831756865
+        },
+        {
+          "rate": 44100,
+          "frequency": 10000,
+          "amplitude": 0.8,
+          "stage": "destroy",
+          "amount": 1,
+          "factor": 4,
+          "rms": 0.5521789277261896,
+          "peak": 0.7827880554104453,
+          "dc": -8.170083405478504e-16,
+          "finite": true,
+          "fundamental": 0.7808978612494596,
+          "harmonicPower": 3.175533763407829e-14,
+          "aliasPower": 8.333728225492395e-7,
+          "totalPower": 0.3049015682248442,
+          "aliasFundamental": 0.001653257232031442,
+          "aliasTotal": 0.001653254972645491,
+          "thd": 3.227224157438619e-7,
+          "referenceError": {
+            "rms": 0.000886819741281098,
+            "maximum": 0.0017951089124303987
+          },
+          "referenceErrorRatio": 0.0016060256621631991
+        }
+      ],
+      "cpu": [
+        {
+          "factor": 1,
+          "relative": 1,
+          "cpuFraction": 0.045904687500041064
+        },
+        {
+          "factor": 2,
+          "relative": 2.6782204125372924,
+          "cpuFraction": 0.12294287109375546
+        },
+        {
+          "factor": 4,
+          "relative": 6.020103645455602,
+          "cpuFraction": 0.2763509765624974
+        }
+      ]
+    }
+  ],
+  "mix": [
+    {
+      "rate": 44100,
+      "factor": 2,
+      "latencySamples": 128,
+      "latencyMs": 2.9024943310657596,
+      "amounts": [
+        {
+          "amount": 0.25,
+          "architecture": "A",
+          "minimumGainDb": -6.0207275953103085,
+          "maximumGainDb": -0.00020153039241645285,
+          "worstFrequency": 19466.015625,
+          "maximumError": 0.5000073499144907
+        },
+        {
+          "amount": 0.25,
+          "architecture": "B",
+          "minimumGainDb": -0.00018366348208603947,
+          "maximumGainDb": 0.00010066703847634027,
+          "worstFrequency": 19800,
+          "maximumError": 0.000021144816244156317
+        },
+        {
+          "amount": 0.25,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.5,
+          "architecture": "A",
+          "minimumGainDb": -148.24489696856938,
+          "maximumGainDb": -0.0002928660550872713,
+          "worstFrequency": 12230.859375,
+          "maximumError": 0.9999999612960623
+        },
+        {
+          "amount": 0.5,
+          "architecture": "B",
+          "minimumGainDb": -0.0003673308478258374,
+          "maximumGainDb": 0.00020133291026137282,
+          "worstFrequency": 19800,
+          "maximumError": 0.000042289632488312634
+        },
+        {
+          "amount": 0.5,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.75,
+          "architecture": "A",
+          "minimumGainDb": -6.021625453895377,
+          "maximumGainDb": -0.0002740000353903267,
+          "worstFrequency": 19810.546875,
+          "maximumError": 0.5000590313783744
+        },
+        {
+          "amount": 0.75,
+          "architecture": "B",
+          "minimumGainDb": -0.0005510020973826764,
+          "maximumGainDb": 0.000301997615384069,
+          "worstFrequency": 19800,
+          "maximumError": 0.00006343444873235793
+        },
+        {
+          "amount": 0.75,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 1,
+          "architecture": "A",
+          "minimumGainDb": -0.000734677230923707,
+          "maximumGainDb": 0.00040266115387339884,
+          "worstFrequency": 19800,
+          "maximumError": 0.00008457926497662527
+        },
+        {
+          "amount": 1,
+          "architecture": "B",
+          "minimumGainDb": -0.0007346772309227427,
+          "maximumGainDb": 0.00040266115387339884,
+          "worstFrequency": 19800,
+          "maximumError": 0.00008457926497651425
+        },
+        {
+          "amount": 1,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        }
+      ]
+    },
+    {
+      "rate": 44100,
+      "factor": 4,
+      "latencySamples": 192,
+      "latencyMs": 4.35374149659864,
+      "amounts": [
+        {
+          "amount": 0.25,
+          "architecture": "A",
+          "minimumGainDb": -6.020725569423454,
+          "maximumGainDb": -0.00007258133454265931,
+          "worstFrequency": 18949.21875,
+          "maximumError": 0.5000072332967695
+        },
+        {
+          "amount": 0.25,
+          "architecture": "B",
+          "minimumGainDb": -0.0002235723267476818,
+          "maximumGainDb": 0.00008465037372680354,
+          "worstFrequency": 19800,
+          "maximumError": 0.000025739384075129657
+        },
+        {
+          "amount": 0.25,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.5,
+          "architecture": "A",
+          "minimumGainDb": -134.5570994689803,
+          "maximumGainDb": -0.00014516327559803538,
+          "worstFrequency": 19638.28125,
+          "maximumError": 0.9999998128693067
+        },
+        {
+          "amount": 0.5,
+          "architecture": "B",
+          "minimumGainDb": -0.00044715040833153986,
+          "maximumGainDb": 0.00016929992248158502,
+          "worstFrequency": 19800,
+          "maximumError": 0.00005147876815025931
+        },
+        {
+          "amount": 0.5,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.75,
+          "architecture": "A",
+          "minimumGainDb": -6.0213305781745285,
+          "maximumGainDb": -0.00021774582317530034,
+          "worstFrequency": 18719.53125,
+          "maximumError": 0.5000420586833425
+        },
+        {
+          "amount": 0.75,
+          "architecture": "B",
+          "minimumGainDb": -0.000670734245047845,
+          "maximumGainDb": 0.0002539486462784955,
+          "worstFrequency": 19800,
+          "maximumError": 0.00007721815222538897
+        },
+        {
+          "amount": 0.75,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 1,
+          "architecture": "A",
+          "minimumGainDb": -0.0008943238371938557,
+          "maximumGainDb": 0.00033859654513747133,
+          "worstFrequency": 19800,
+          "maximumError": 0.00010295753630062965
+        },
+        {
+          "amount": 1,
+          "architecture": "B",
+          "minimumGainDb": -0.0008943238371928914,
+          "maximumGainDb": 0.00033859654513747133,
+          "worstFrequency": 19800,
+          "maximumError": 0.00010295753630051863
+        },
+        {
+          "amount": 1,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        }
+      ]
+    },
+    {
+      "rate": 48000,
+      "factor": 2,
+      "latencySamples": 128,
+      "latencyMs": 2.6666666666666665,
+      "amounts": [
+        {
+          "amount": 0.25,
+          "architecture": "A",
+          "minimumGainDb": -6.02067740777961,
+          "maximumGainDb": 0.000001575594639551497,
+          "worstFrequency": 19312.5,
+          "maximumError": 0.5000044609221115
+        },
+        {
+          "amount": 0.25,
+          "architecture": "B",
+          "minimumGainDb": -0.00007811710135457417,
+          "maximumGainDb": 0.00005320819100303029,
+          "worstFrequency": 19600,
+          "maximumError": 0.00000899352321237501
+        },
+        {
+          "amount": 0.25,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.5,
+          "architecture": "A",
+          "minimumGainDb": -148.24489671941504,
+          "maximumGainDb": 0.0000031511889932948477,
+          "worstFrequency": 13312.5,
+          "maximumError": 0.9999999612960612
+        },
+        {
+          "amount": 0.5,
+          "architecture": "B",
+          "minimumGainDb": -0.00015623490526659036,
+          "maximumGainDb": 0.00010641605606429007,
+          "worstFrequency": 19600,
+          "maximumError": 0.00001798704642475002
+        },
+        {
+          "amount": 0.5,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.75,
+          "architecture": "A",
+          "minimumGainDb": -6.0210591596854695,
+          "maximumGainDb": 0.0000047267830612301554,
+          "worstFrequency": 19687.5,
+          "maximumError": 0.5000264356493346
+        },
+        {
+          "amount": 0.75,
+          "architecture": "B",
+          "minimumGainDb": -0.00023435341174772145,
+          "maximumGainDb": 0.000159623595185844,
+          "worstFrequency": 19600,
+          "maximumError": 0.000026980569637014007
+        },
+        {
+          "amount": 0.75,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 1,
+          "architecture": "A",
+          "minimumGainDb": -0.0003124726208125337,
+          "maximumGainDb": 0.0002128308083755425,
+          "worstFrequency": 19600,
+          "maximumError": 0.00003597409284938902
+        },
+        {
+          "amount": 1,
+          "architecture": "B",
+          "minimumGainDb": -0.0003124726208125337,
+          "maximumGainDb": 0.0002128308083755425,
+          "worstFrequency": 19600,
+          "maximumError": 0.00003597409284938902
+        },
+        {
+          "amount": 1,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        }
+      ]
+    },
+    {
+      "rate": 48000,
+      "factor": 4,
+      "latencySamples": 192,
+      "latencyMs": 4,
+      "amounts": [
+        {
+          "amount": 0.25,
+          "architecture": "A",
+          "minimumGainDb": -6.020653251158921,
+          "maximumGainDb": 0.000016379194588464774,
+          "worstFrequency": 19375,
+          "maximumError": 0.5000030703657168
+        },
+        {
+          "amount": 0.25,
+          "architecture": "B",
+          "minimumGainDb": -0.00009772214566046937,
+          "maximumGainDb": 0.000042176751018950084,
+          "worstFrequency": 18900,
+          "maximumError": 0.000011250614504021428
+        },
+        {
+          "amount": 0.25,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.5,
+          "architecture": "A",
+          "minimumGainDb": -132.4118414114108,
+          "maximumGainDb": 0.000032758358288411195,
+          "worstFrequency": 8875,
+          "maximumError": 0.9999997604435165
+        },
+        {
+          "amount": 0.5,
+          "architecture": "B",
+          "minimumGainDb": -0.00019544539077368238,
+          "maximumGainDb": 0.00008435329723795878,
+          "worstFrequency": 18900,
+          "maximumError": 0.000022501229008042856
+        },
+        {
+          "amount": 0.5,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.75,
+          "architecture": "A",
+          "minimumGainDb": -6.021173569400054,
+          "maximumGainDb": 0.0000491374911018844,
+          "worstFrequency": 18875,
+          "maximumError": 0.5000330212103369
+        },
+        {
+          "amount": 0.75,
+          "architecture": "B",
+          "minimumGainDb": -0.0002931697353634144,
+          "maximumGainDb": 0.000126529638659015,
+          "worstFrequency": 18900,
+          "maximumError": 0.00003375184351195326
+        },
+        {
+          "amount": 0.75,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 1,
+          "architecture": "A",
+          "minimumGainDb": -0.0003908951794563347,
+          "maximumGainDb": 0.00016870577528603625,
+          "worstFrequency": 18900,
+          "maximumError": 0.00004500245801597469
+        },
+        {
+          "amount": 1,
+          "architecture": "B",
+          "minimumGainDb": -0.0003908951794563347,
+          "maximumGainDb": 0.00016870577528410764,
+          "worstFrequency": 18900,
+          "maximumError": 0.00004500245801597469
+        },
+        {
+          "amount": 1,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        }
+      ]
+    },
+    {
+      "rate": 96000,
+      "factor": 2,
+      "latencySamples": 128,
+      "latencyMs": 1.3333333333333333,
+      "amounts": [
+        {
+          "amount": 0.25,
+          "architecture": "A",
+          "minimumGainDb": -6.020583725593998,
+          "maximumGainDb": 0.0000011894229125964803,
+          "worstFrequency": 19125,
+          "maximumError": 0.49999906816104134
+        },
+        {
+          "amount": 0.25,
+          "architecture": "B",
+          "minimumGainDb": -0.0000390715657881393,
+          "maximumGainDb": 0.000003641398526473024,
+          "worstFrequency": 18600,
+          "maximumError": 0.000004498270129937865
+        },
+        {
+          "amount": 0.25,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.5,
+          "architecture": "A",
+          "minimumGainDb": -114.59258281456913,
+          "maximumGainDb": 0.000002378845662316533,
+          "worstFrequency": 19125,
+          "maximumError": 0.9999981363220828
+        },
+        {
+          "amount": 0.5,
+          "architecture": "B",
+          "minimumGainDb": -0.00007814330733288616,
+          "maximumGainDb": 0.000007282795526357729,
+          "worstFrequency": 18600,
+          "maximumError": 0.000008996540259986752
+        },
+        {
+          "amount": 0.5,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.75,
+          "architecture": "A",
+          "minimumGainDb": -6.020771054316777,
+          "maximumGainDb": 0.000003568268251088858,
+          "worstFrequency": 19875,
+          "maximumError": 0.500009851572969
+        },
+        {
+          "amount": 0.75,
+          "architecture": "B",
+          "minimumGainDb": -0.00011721522463485742,
+          "maximumGainDb": 0.000010924190997726741,
+          "worstFrequency": 18600,
+          "maximumError": 0.000013494810390035639
+        },
+        {
+          "amount": 0.75,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 1,
+          "architecture": "A",
+          "minimumGainDb": -0.00015628731769467,
+          "maximumGainDb": 0.000014565584944438647,
+          "worstFrequency": 18600,
+          "maximumError": 0.000017993080519973503
+        },
+        {
+          "amount": 1,
+          "architecture": "B",
+          "minimumGainDb": -0.00015628731769467,
+          "maximumGainDb": 0.000014565584944438647,
+          "worstFrequency": 18600,
+          "maximumError": 0.000017993080519973503
+        },
+        {
+          "amount": 1,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        }
+      ]
+    },
+    {
+      "rate": 96000,
+      "factor": 4,
+      "latencySamples": 192,
+      "latencyMs": 2,
+      "amounts": [
+        {
+          "amount": 0.25,
+          "architecture": "A",
+          "minimumGainDb": -6.020597832518694,
+          "maximumGainDb": 0.0000013135246226343988,
+          "worstFrequency": 17750,
+          "maximumError": 0.49999988022175823
+        },
+        {
+          "amount": 0.25,
+          "architecture": "B",
+          "minimumGainDb": -0.00006021834140707084,
+          "maximumGainDb": 0.0000037294760595761634,
+          "worstFrequency": 20000,
+          "maximumError": 0.000006932868729991881
+        },
+        {
+          "amount": 0.25,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.5,
+          "architecture": "A",
+          "minimumGainDb": -132.4118414114108,
+          "maximumGainDb": 0.0000026270490466309212,
+          "worstFrequency": 17750,
+          "maximumError": 0.9999997604435165
+        },
+        {
+          "amount": 0.5,
+          "architecture": "B",
+          "minimumGainDb": -0.00012043710030530376,
+          "maximumGainDb": 0.00000745895051782117,
+          "worstFrequency": 20000,
+          "maximumError": 0.000013865737460094785
+        },
+        {
+          "amount": 0.5,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 0.75,
+          "architecture": "A",
+          "minimumGainDb": -6.020955465683757,
+          "maximumGainDb": 0.000003940573270060973,
+          "worstFrequency": 18750,
+          "maximumError": 0.5000204668227362
+        },
+        {
+          "amount": 0.75,
+          "architecture": "B",
+          "minimumGainDb": -0.00018065627669952333,
+          "maximumGainDb": 0.000011188423376665046,
+          "worstFrequency": 20000,
+          "maximumError": 0.000020798606190197688
+        },
+        {
+          "amount": 0.75,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        },
+        {
+          "amount": 1,
+          "architecture": "A",
+          "minimumGainDb": -0.00024087587059455417,
+          "maximumGainDb": 0.000014917894632251863,
+          "worstFrequency": 20000,
+          "maximumError": 0.00002773147492018957
+        },
+        {
+          "amount": 1,
+          "architecture": "B",
+          "minimumGainDb": -0.00024087587059455417,
+          "maximumGainDb": 0.000014917894632251863,
+          "worstFrequency": 20000,
+          "maximumError": 0.00002773147492018957
+        },
+        {
+          "amount": 1,
+          "architecture": "C",
+          "minimumGainDb": 0,
+          "maximumGainDb": 0,
+          "worstFrequency": 100,
+          "maximumError": 0
+        }
+      ]
+    }
+  ],
+  "convergence": [
+    {
+      "rate": 44100,
+      "amplitude": 0.8,
+      "factors": [
+        8,
+        16
+      ],
+      "error": {
+        "rms": 0.00021001115740322033,
+        "maximum": 0.0003942800085632303
+      },
+      "relativeError": 0.00038032758944907545
+    },
+    {
+      "rate": 44100,
+      "amplitude": 12.679145539688907,
+      "factors": [
+        16,
+        32
+      ],
+      "error": {
+        "rms": 0.0006699717269786301,
+        "maximum": 0.0012042109779155652
+      },
+      "relativeError": 0.0017540576319294019
+    },
+    {
+      "rate": 48000,
+      "amplitude": 0.8,
+      "factors": [
+        8,
+        16
+      ],
+      "error": {
+        "rms": 0.00019049481388164376,
+        "maximum": 0.00027308675379988934
+      },
+      "relativeError": 0.0003449820294503075
+    },
+    {
+      "rate": 48000,
+      "amplitude": 12.679145539688907,
+      "factors": [
+        16,
+        32
+      ],
+      "error": {
+        "rms": 0.0013266205989010905,
+        "maximum": 0.0020836924857685624
+      },
+      "relativeError": 0.00347242684752374
+    },
+    {
+      "rate": 96000,
+      "amplitude": 0.8,
+      "factors": [
+        8,
+        16
+      ],
+      "error": {
+        "rms": 0.00007220264939438435,
+        "maximum": 0.00014644917957096215
+      },
+      "relativeError": 0.00012809701207519027
+    },
+    {
+      "rate": 96000,
+      "amplitude": 12.679145539688907,
+      "factors": [
+        16,
+        32
+      ],
+      "error": {
+        "rms": 0.000626261325725835,
+        "maximum": 0.0015898821084077142
+      },
+      "relativeError": 0.001616620926709222
+    }
+  ],
+  "cpu": [
+    {
+      "rate": 48000,
+      "stage": "silk",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 9.257099999987986,
+      "relative": 1,
+      "cpuFraction": 0.027120410156214803,
+      "internalRate": 48000
+    },
+    {
+      "rate": 48000,
+      "stage": "silk",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 31.882299999997485,
+      "relative": 3.4440915621564923,
+      "cpuFraction": 0.09340517578124263,
+      "internalRate": 96000
+    },
+    {
+      "rate": 48000,
+      "stage": "silk",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 70.08030000000144,
+      "relative": 7.570437826111028,
+      "cpuFraction": 0.20531337890625423,
+      "internalRate": 192000
+    },
+    {
+      "rate": 48000,
+      "stage": "tape",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 9.659399999974994,
+      "relative": 1,
+      "cpuFraction": 0.02829902343742674,
+      "internalRate": 48000
+    },
+    {
+      "rate": 48000,
+      "stage": "tape",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 30.212300000013784,
+      "relative": 3.1277615586984697,
+      "cpuFraction": 0.08851259765629038,
+      "internalRate": 96000
+    },
+    {
+      "rate": 48000,
+      "stage": "tape",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 70.75419999999576,
+      "relative": 7.324906308898993,
+      "cpuFraction": 0.20728769531248759,
+      "internalRate": 192000
+    },
+    {
+      "rate": 48000,
+      "stage": "tube",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 13.859900000010384,
+      "relative": 1,
+      "cpuFraction": 0.04060517578128042,
+      "internalRate": 48000
+    },
+    {
+      "rate": 48000,
+      "stage": "tube",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 38.82510000001639,
+      "relative": 2.801253977300507,
+      "cpuFraction": 0.11374541015629802,
+      "internalRate": 96000
+    },
+    {
+      "rate": 48000,
+      "stage": "tube",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 88.94399999998859,
+      "relative": 6.417362318625816,
+      "cpuFraction": 0.2605781249999666,
+      "internalRate": 192000
+    },
+    {
+      "rate": 48000,
+      "stage": "console",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 9.127700000011828,
+      "relative": 1,
+      "cpuFraction": 0.026741308593784652,
+      "internalRate": 48000
+    },
+    {
+      "rate": 48000,
+      "stage": "console",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 29.566899999976158,
+      "relative": 3.239249756229701,
+      "cpuFraction": 0.08662177734368015,
+      "internalRate": 96000
+    },
+    {
+      "rate": 48000,
+      "stage": "console",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 69.40210000000661,
+      "relative": 7.603459798187569,
+      "cpuFraction": 0.20332646484376937,
+      "internalRate": 192000
+    },
+    {
+      "rate": 48000,
+      "stage": "crunch",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 11.282100000011269,
+      "relative": 1,
+      "cpuFraction": 0.033053027343783015,
+      "internalRate": 48000
+    },
+    {
+      "rate": 48000,
+      "stage": "crunch",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 33.033499999990454,
+      "relative": 2.92795667472877,
+      "cpuFraction": 0.09677783203122203,
+      "internalRate": 96000
+    },
+    {
+      "rate": 48000,
+      "stage": "crunch",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 77.027700000006,
+      "relative": 6.827425745200722,
+      "cpuFraction": 0.2256670898437676,
+      "internalRate": 192000
+    },
+    {
+      "rate": 48000,
+      "stage": "destroy",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 15.668800000014016,
+      "relative": 1,
+      "cpuFraction": 0.045904687500041064,
+      "internalRate": 48000
+    },
+    {
+      "rate": 48000,
+      "stage": "destroy",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 41.96450000000186,
+      "relative": 2.6782204125372924,
+      "cpuFraction": 0.12294287109375546,
+      "internalRate": 96000
+    },
+    {
+      "rate": 48000,
+      "stage": "destroy",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 94.32779999999912,
+      "relative": 6.020103645455602,
+      "cpuFraction": 0.2763509765624974,
+      "internalRate": 192000
+    },
+    {
+      "rate": 96000,
+      "stage": "silk",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 9.476399999985006,
+      "relative": 1,
+      "cpuFraction": 0.05552578124991214,
+      "internalRate": 96000
+    },
+    {
+      "rate": 96000,
+      "stage": "silk",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 29.93660000001546,
+      "relative": 3.1590688447155912,
+      "cpuFraction": 0.17540976562509059,
+      "internalRate": 192000
+    },
+    {
+      "rate": 96000,
+      "stage": "silk",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 69.56049999999232,
+      "relative": 7.340392976246505,
+      "cpuFraction": 0.407581054687455,
+      "internalRate": 384000
+    },
+    {
+      "rate": 96000,
+      "stage": "tape",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 9.545200000022305,
+      "relative": 1,
+      "cpuFraction": 0.055928906250130694,
+      "internalRate": 96000
+    },
+    {
+      "rate": 96000,
+      "stage": "tape",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 29.943799999979092,
+      "relative": 3.137053178551431,
+      "cpuFraction": 0.1754519531248775,
+      "internalRate": 192000
+    },
+    {
+      "rate": 96000,
+      "stage": "tape",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 70.79339999999502,
+      "relative": 7.416649205865732,
+      "cpuFraction": 0.4148050781249708,
+      "internalRate": 384000
+    },
+    {
+      "rate": 96000,
+      "stage": "tube",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 13.939099999988684,
+      "relative": 1,
+      "cpuFraction": 0.0816744140624337,
+      "internalRate": 96000
+    },
+    {
+      "rate": 96000,
+      "stage": "tube",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 38.95250000001397,
+      "relative": 2.7944774052876866,
+      "cpuFraction": 0.22823730468758185,
+      "internalRate": 192000
+    },
+    {
+      "rate": 96000,
+      "stage": "tube",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 88.7609999999986,
+      "relative": 6.367771233441948,
+      "cpuFraction": 0.5200839843749918,
+      "internalRate": 384000
+    },
+    {
+      "rate": 96000,
+      "stage": "console",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 9.081299999990733,
+      "relative": 1,
+      "cpuFraction": 0.0532107421874457,
+      "internalRate": 96000
+    },
+    {
+      "rate": 96000,
+      "stage": "console",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 29.15119999999297,
+      "relative": 3.2100249964237184,
+      "cpuFraction": 0.1708078124999588,
+      "internalRate": 192000
+    },
+    {
+      "rate": 96000,
+      "stage": "console",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 69.21230000001378,
+      "relative": 7.6214088291416875,
+      "cpuFraction": 0.40554082031258076,
+      "internalRate": 384000
+    },
+    {
+      "rate": 96000,
+      "stage": "crunch",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 11.035199999983888,
+      "relative": 1,
+      "cpuFraction": 0.0646593749999056,
+      "internalRate": 96000
+    },
+    {
+      "rate": 96000,
+      "stage": "crunch",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 33.143599999981234,
+      "relative": 3.0034435261734833,
+      "cpuFraction": 0.19420078124989004,
+      "internalRate": 192000
+    },
+    {
+      "rate": 96000,
+      "stage": "crunch",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 76.63350000002538,
+      "relative": 6.944459547641843,
+      "cpuFraction": 0.4490244140626487,
+      "internalRate": 384000
+    },
+    {
+      "rate": 96000,
+      "stage": "destroy",
+      "factor": 1,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 15.52960000000894,
+      "relative": 1,
+      "cpuFraction": 0.09099375000005239,
+      "internalRate": 96000
+    },
+    {
+      "rate": 96000,
+      "stage": "destroy",
+      "factor": 2,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 41.58259999999427,
+      "relative": 2.677634968059083,
+      "cpuFraction": 0.24364804687496644,
+      "internalRate": 192000
+    },
+    {
+      "rate": 96000,
+      "stage": "destroy",
+      "factor": 4,
+      "channels": 2,
+      "frames": 16384,
+      "milliseconds": 93.11650000000373,
+      "relative": 5.996065577989782,
+      "cpuFraction": 0.5456044921875218,
+      "internalRate": 384000
+    }
+  ],
+  "validation": {
+    "fftAmplitude": 0.8000000015942813,
+    "streaming": [
+      {
+        "factor": 2,
+        "stage": "linear",
+        "rms": 0,
+        "maximum": 0
+      },
+      {
+        "factor": 2,
+        "stage": "tube",
+        "rms": 7.807491021154502e-9,
+        "maximum": 3.1203622019582156e-8
+      },
+      {
+        "factor": 2,
+        "stage": "destroy",
+        "rms": 1.377825885110392e-8,
+        "maximum": 3.724446706598883e-8
+      },
+      {
+        "factor": 4,
+        "stage": "linear",
+        "rms": 0,
+        "maximum": 0
+      },
+      {
+        "factor": 4,
+        "stage": "tube",
+        "rms": 8.946986089038887e-9,
+        "maximum": 4.2137203726255734e-8
+      },
+      {
+        "factor": 4,
+        "stage": "destroy",
+        "rms": 1.4916919833536034e-8,
+        "maximum": 5.749430154189383e-8
+      }
+    ]
+  }
+}
