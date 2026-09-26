@@ -266,4 +266,4 @@ class StreamingPrototype {
     return this.final;
   }
 }
-module.exports = { processProduction, productionClass, processor, fft, spectrum, prepare, down, wet, mix, delay, metrics, error, filterQuality, StreamingPrototype };
+module.exports = { processProduction, productionClass, processor, fft, spectrum, prepare, down, wet, mix, delay, metrics, error, filterQuality, StreamingPrototype, Up2Stream, Down2Stream };
