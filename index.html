@@ -191,34 +191,55 @@
                 </svg>
               </button>
             </div>
+            <span class="audio-device-label">INPUT</span>
             <label class="audio-device"
               ><select data-audio-input aria-label="Audio-Eingabegerät">
                 <option value="">Geräte werden geladen …</option>
               </select></label
             >
           </div>
-          <span class="audio-device-label">INPUT</span>
-          <span class="audio-routing-arrow" aria-hidden="true">→</span>
-          <span class="audio-device-label">OUTPUT</span>
-          <label class="audio-device"
-            ><select data-audio-output aria-label="Audio-Ausgabegerät">
-              <option value="">Geräte werden geladen …</option>
-            </select></label
-          >
+          <div class="masthead-output-midi">
+            <span class="audio-routing-arrow" aria-hidden="true">→</span>
+            <span class="audio-device-label">OUTPUT</span>
+            <label class="audio-device"
+              ><select data-audio-output aria-label="Audio-Ausgabegerät">
+                <option value="">Geräte werden geladen …</option>
+              </select></label
+            >
+            <span class="masthead-separator" aria-hidden="true"></span>
+            <button
+              type="button"
+              class="theme-editor-toggle midi-setup-button"
+              data-midi-setup
+              title="MIDI Setup"
+              aria-label="MIDI Setup"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <circle cx="12" cy="7.3" r="0.85" />
+                <circle cx="8" cy="10.2" r="0.85" />
+                <circle cx="16" cy="10.2" r="0.85" />
+                <circle cx="9.2" cy="15" r="0.85" />
+                <circle cx="14.8" cy="15" r="0.85" />
+                <path d="M10 20h4" />
+              </svg>
+            </button>
+            <span class="masthead-separator" aria-hidden="true"></span>
+            <button type="button" class="audio-button start" data-audio-toggle data-audio-start data-audio-stop>
+              START AUDIO
+            </button>
           </div>
-          <div class="masthead-controls" aria-label="Audio Controls">
-          <button type="button" class="audio-button start" data-audio-toggle data-audio-start data-audio-stop>
-            START AUDIO
-          </button>
-          <button type="button" class="audio-button panic" data-audio-panic>
-            PANIC
-          </button>
-          <button type="button" class="audio-button bypass" data-audio-bypass aria-pressed="false">
-            BYPASS
-          </button>
-          <div class="audio-state" aria-live="polite">
-            <span>AUDIO STATUS</span><strong data-audio-status>OFF</strong
-            ><small data-audio-message></small>
+          <div class="masthead-audio-actions" role="group" aria-label="Additional Audio Controls">
+            <button type="button" class="audio-button panic" data-audio-panic>
+              PANIC
+            </button>
+            <button type="button" class="audio-button bypass" data-audio-bypass aria-pressed="false">
+              BYPASS
+            </button>
+            <div class="audio-state" aria-live="polite">
+              <span>AUDIO STATUS</span><strong data-audio-status>OFF</strong
+              ><small data-audio-message></small>
+            </div>
           </div>
           </div>
           <div class="masthead-dev-lab" aria-label="DEV / LAB">
