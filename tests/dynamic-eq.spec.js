@@ -1,4 +1,5 @@
 const { test, expect } = require('playwright/test');
+const { browserBundle } = require('./helpers/input-character-full-graph.cjs');
 
 test('dynamic EQ target, sensitivity, range and smoothing', async () => {
   const { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } = await import('../dynamic-eq-core.mjs');
@@ -47,6 +48,138 @@ test('dynamic EQ V2 supports asymmetric ranges and relative dB detection', async
   expect(targetGainDb(-12, relative, 100, 5, [-25, -25, -25, -25, -25, -25, -25, -25, -25, -25])).toBe(-8);
   expect(targetGainDb(-24, { ...relative, dynamicEqMode: 'boost' }, 100, 5,
     [-12, -12, -12, -12, -12, -12, -12, -12, -12, -12])).toBe(3);
+});
+
+test('graph view toggles independently hide only their own layers without changing audio state', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="dynamic-eq"]').click();
+  const stateBefore = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    return JSON.stringify(['dynamicEqEnabled', 'dynamicEqMode', 'detectorReferenceMode', 'dynamicEqDetectorMode', 'stereoDetectorMode']
+      .map(field => engine[field]));
+  });
+  await expect(page.locator('[data-dynamic-eq-view]')).toHaveCount(5);
+  expect(await page.locator('[data-dynamic-eq-view]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-pressed'))))
+    .toEqual(['true', 'true', 'true', 'true', 'true']);
+  await page.locator('[data-dynamic-eq-view="input"]').click();
+  await expect(page.locator('[data-dynamic-eq-graph] .dynamic-eq-input-left').first()).toHaveCSS('visibility', 'hidden');
+  await expect(page.locator('.dynamic-eq-x-axis')).toBeVisible();
+  await expect(page.locator('.dynamic-eq-sensitivity-item input').first()).toBeVisible();
+  await page.locator('[data-dynamic-eq-view="gain"]').click();
+  await expect(page.locator('.dynamic-eq-gain-scale')).toHaveCSS('visibility', 'visible');
+  await expect(page.locator('.dynamic-eq-gain-zero')).toHaveCSS('visibility', 'visible');
+  await expect(page.locator('[data-dynamic-eq-threshold]')).toBeVisible();
+  await page.locator('[data-dynamic-eq-view="reference"]').click();
+  await expect(page.locator('[data-dynamic-eq-threshold]')).toHaveCSS('visibility', 'hidden');
+  await expect(page.locator('[data-dynamic-eq-status]')).toBeVisible();
+  await page.locator('[data-dynamic-eq-view="state"]').click();
+  await expect(page.locator('[data-dynamic-eq-status]')).toHaveCSS('visibility', 'hidden');
+  await page.locator('[data-dynamic-eq-view="out"]').click();
+  await expect(page.locator('.dynamic-eq-out-left').first()).toHaveCSS('visibility', 'hidden');
+  await expect(page.locator('.dynamic-eq-gain-scale')).toHaveCSS('visibility', 'hidden');
+  await expect(page.locator('.dynamic-eq-gain-zero')).toHaveCSS('visibility', 'hidden');
+  const result = await page.evaluate(() => ({
+    state: JSON.stringify(['dynamicEqEnabled', 'dynamicEqMode', 'detectorReferenceMode', 'dynamicEqDetectorMode', 'stereoDetectorMode']
+      .map(field => window.FilterMode.getAudioEngine()[field])),
+    toggles: [...document.querySelectorAll('[data-dynamic-eq-view]')].map(button => button.getAttribute('aria-pressed')),
+    axes: [...document.querySelectorAll('.dynamic-eq-y-axis, .dynamic-eq-x-axis')].every(element => getComputedStyle(element).visibility === 'visible')
+  }));
+  expect(result.state).toBe(stateBefore);
+  expect(result.toggles).toEqual(['false', 'false', 'false', 'false', 'false']);
+  expect(result.axes).toBe(true);
+  await expect(page.locator('[data-dynamic-eq-out-scale]')).not.toContainText('NaN');
+});
+
+test('DUAL graph renders two centered channel bars and separate gain readouts per band', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="dynamic-eq"]').click();
+  await page.locator('[data-module-power="dynamic-eq"]').click();
+  await page.locator('[data-dynamic-eq-stereo="DUAL"]').click();
+  await page.locator('[data-dynamic-eq-reference="REL"]').click();
+  await page.evaluate(() => window.FilterMode.getAudioEngine().onDynamicEqTelemetry({
+    levels: Array(10).fill(-15), leftLevels: Array(10).fill(-12), rightLevels: Array(10).fill(-25),
+    gains: Array(10).fill(-3), leftGains: Array(10).fill(-5.2), rightGains: Array(10).fill(-.8),
+    leftAppliedBandGainDb: Array(10).fill(-9), rightAppliedBandGainDb: Array(10).fill(2),
+    leftRelativeReferences: Array(10).fill(-24), rightRelativeReferences: Array(10).fill(-13),
+    learnedReferenceValid: false
+  }));
+  await expect(page.locator('.dynamic-eq-column')).toHaveCount(10);
+  await expect(page.locator('.dynamic-eq-column').first().locator('.dynamic-eq-input-left')).toBeVisible();
+  await expect(page.locator('.dynamic-eq-column').first().locator('.dynamic-eq-input-right')).toBeVisible();
+  await expect(page.locator('.dynamic-eq-gain-value').first()).toHaveText('L -5.2 dB / R -0.8 dB');
+  await expect(page.locator('.dynamic-eq-out-value').first()).toHaveText('L -9.0 dB / R +2.0 dB');
+  await expect(page.locator('.dynamic-eq-out-left').first()).toBeVisible();
+  await expect(page.locator('.dynamic-eq-out-right').first()).toBeVisible();
+  await expect(page.locator('.dynamic-eq-column').first().locator('.dynamic-eq-reference-left')).toBeVisible();
+  await expect(page.locator('.dynamic-eq-column').first().locator('.dynamic-eq-reference-right')).toBeVisible();
+  await page.locator('.dynamic-eq-column').first().focus();
+  await expect(page.locator('[data-dynamic-eq-band-detail]')).toContainText('29 Hz');
+  await expect(page.locator('[data-dynamic-eq-band-detail]')).toContainText('INPUT  L -12.0 dBFS  ·  R -25.0 dBFS');
+  await expect(page.locator('[data-dynamic-eq-band-detail]')).toContainText('DYNAMIC GAIN  L -5.2 dB  ·  R -0.8 dB');
+  await expect(page.locator('[data-dynamic-eq-band-detail]')).toContainText('APPLIED GAIN  L -9.0 dB  ·  R +2.0 dB');
+  const centered = await page.locator('.dynamic-eq-column').first().evaluate(column => {
+    const bounds = column.getBoundingClientRect();
+    const left = column.querySelector('.dynamic-eq-input-left').getBoundingClientRect();
+    const right = column.querySelector('.dynamic-eq-input-right').getBoundingClientRect();
+    return Math.abs(((left.left + left.right + right.left + right.right) / 4) - (bounds.left + bounds.width / 2));
+  });
+  expect(centered).toBeLessThan(1);
+});
+
+test('DUAL remains independent from P/CH and shares one finite gain scale', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="dynamic-eq"]').click();
+  await page.locator('[data-module-power="dynamic-eq"]').click();
+  await page.locator('[data-dynamic-eq-stereo="DUAL"]').click();
+  await page.locator('[data-channel-toggle]').click();
+  await page.evaluate(() => window.FilterMode.getAudioEngine().onDynamicEqTelemetry({
+    levels: Array(10).fill(-15), leftLevels: Array(10).fill(-10), rightLevels: Array(10).fill(-18),
+    gains: Array(10).fill(-3), leftGains: Array(10).fill(-5), rightGains: Array(10).fill(-1),
+    leftAppliedBandGainDb: Array(10).fill(-9), rightAppliedBandGainDb: Array(10).fill(2),
+    learnedReferenceValid: false
+  }));
+  await expect(page.locator('.dynamic-eq-column').first()).toHaveAttribute('data-details', /INPUT  L -10.0 dBFS  ·  R -18.0 dBFS/);
+  const result = await page.evaluate(() => ({
+    pch: window.FilterMode.getAudioEngine().perChannelBands,
+    mode: window.FilterMode.getAudioEngine().stereoDetectorMode,
+    readout: document.querySelector('.dynamic-eq-column').dataset.details,
+    scale: [document.querySelector('[data-dynamic-eq-gain-scale-positive]').textContent,
+      document.querySelector('[data-dynamic-eq-gain-scale-negative]').textContent]
+  }));
+  expect(result).toMatchObject({ pch: true, mode: 'DUAL', scale: ['+12 dB', '−12 dB'] });
+  expect(result.readout).toContain('INPUT  L -10.0 dBFS  ·  R -18.0 dBFS');
+  expect(result.readout).toContain('DYNAMIC GAIN  L -5.0 dB  ·  R -1.0 dB');
+  expect(result.readout).toContain('APPLIED GAIN  L -9.0 dB  ·  R +2.0 dB');
+});
+
+test('REL DUAL telemetry remains available in the self-contained worklet test bundle', async ({ page }) => {
+  await page.goto('/');
+  const bundle = browserBundle('http://localhost:3000');
+  const result = await page.evaluate(async code => {
+    const engine = new window.AudioEngine({});
+    engine.setDynamicEq({ dynamicEqEnabled: true, detectorReferenceMode: 'REL', stereoDetectorMode: 'DUAL' });
+    const options = engine.getFilterbankState();
+    options.bandFrequencies = [...window.Filterbank.BAND_FREQUENCIES];
+    options.bandQs = [...window.Filterbank.BAND_QS];
+    const bundleUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+    const { Graph } = await import(bundleUrl);
+    URL.revokeObjectURL(bundleUrl);
+    const graph = new Graph(48000, options, 'linear', false);
+    let telemetry = null;
+    graph.onTelemetry = packet => { if (packet.type === 'dynamic-eq-telemetry') telemetry = packet; };
+    for (let block = 0; block < 27; block += 1) {
+      const input = [0, 1].map(channel => Float32Array.from({ length: 128 }, (_, frame) =>
+        .2 * Math.sin(2 * Math.PI * 777 * (block * 128 + frame) / 48000 + channel * .25)));
+      graph.process(input);
+    }
+    return telemetry;
+  }, bundle);
+  expect(result.leftRelativeReferences).toHaveLength(10);
+  expect(result.rightRelativeReferences).toHaveLength(10);
+  expect(result.leftAppliedBandGainDb).toHaveLength(10);
+  expect(result.rightAppliedBandGainDb).toHaveLength(10);
+  expect([...result.leftRelativeReferences, ...result.rightRelativeReferences,
+    ...result.leftAppliedBandGainDb, ...result.rightAppliedBandGainDb].every(Number.isFinite)).toBe(true);
 });
 
 test('audio worklet applies linked gain from source bands and keeps power independent', async ({ page }) => {
@@ -288,7 +421,7 @@ test('dynamic EQ graph and controls fit the existing desktop workspace', async (
 });
 
 test('dynamic EQ plot starts at the graph edge and sliders share exact band centers at varied widths', async ({ page }) => {
-  for (const width of [1914, 1440, 1200]) {
+  for (const width of [1914, 1440, 1200, 1024]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
     await page.locator('[data-mode="dynamic-eq"]').click();
@@ -357,9 +490,14 @@ test('dynamic EQ axes, guide values and detector colors remain visible across th
   await page.locator('[data-module-power="dynamic-eq"]').click();
   await expect(page.locator('.dynamic-eq-y-axis span')).toHaveText(['0 dBFS', '−12 dBFS', '−24 dBFS', '−36 dBFS', '−48 dBFS', '−60 dBFS']);
   await expect(page.locator('.dynamic-eq-x-axis span')).toHaveText(['29', '61', '115', '218', '411', '777', '1.5k', '2.8k', '5.2k', '11k']);
+  await expect(page.locator('.dynamic-eq-column')).toHaveCount(10);
+  await expect(page.locator('.dynamic-eq-profile-learned')).toBeHidden();
+  await expect(page.locator('.dynamic-eq-profile-relative-left')).toBeHidden();
   await expect(page.locator('.dynamic-eq-level-guide span')).toHaveText(['UPPER -21.0', 'THRESHOLD -24.0', 'LOWER -27.0']);
   await page.evaluate(() => window.FilterMode.getAudioEngine().onDynamicEqTelemetry({
-    levels: Array(10).fill(-20), gains: [-3, 3, 0, 0, 0, 0, 0, 0, 0, 0]
+    levels: Array(10).fill(-20), gains: [-3, 3, 0, 0, 0, 0, 0, 0, 0, 0],
+    leftAppliedBandGainDb: [-3, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    rightAppliedBandGainDb: [-3, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   }));
   await expect(page.locator('.dynamic-eq-level-value').first()).toHaveText('-20');
   const visible = await page.evaluate(() => ({
@@ -372,12 +510,18 @@ test('dynamic EQ axes, guide values and detector colors remain visible across th
   expect(visible.cut).toBeGreaterThan(0);
   expect(visible.boost).toBeGreaterThan(0);
   expect(visible.zero).toBe('dotted');
-  const initialGainHeight = visible.cut;
+  const zoneBackgrounds = await page.locator('.dynamic-eq-column').evaluateAll(columns => columns.map(column => getComputedStyle(column).backgroundColor));
+  expect(zoneBackgrounds).toHaveLength(10);
+  expect(zoneBackgrounds.every(color => color !== 'rgba(0, 0, 0, 0)')).toBeTruthy();
+  const appliedHeight = await page.locator('.dynamic-eq-out-left').first().evaluate(bar => bar.getBoundingClientRect().height);
+  expect(visible.cut).toBeCloseTo(appliedHeight, 1);
   await page.locator('.dynamic-eq-control input[aria-label="Cut Range"]').fill('3');
   await page.locator('.dynamic-eq-control input[aria-label="Boost Range"]').fill('3');
-  await expect(page.locator('[data-dynamic-eq-gain-scale]')).toHaveText('GAIN · −3.0 / +3.0 dB');
+  await expect(page.locator('[data-dynamic-eq-gain-scale]')).toHaveText('GAIN / OUT · SHARED SCALE ±12 dB');
+  await expect(page.locator('[data-dynamic-eq-gain-scale-positive]')).toHaveText('+12 dB');
+  await expect(page.locator('[data-dynamic-eq-gain-scale-mid-positive]')).toHaveText('+6 dB');
   const scaledGainHeight = await page.locator('.dynamic-eq-gain').first().evaluate(bar => bar.getBoundingClientRect().height);
-  expect(scaledGainHeight).toBeGreaterThan(initialGainHeight * 1.9);
+  expect(scaledGainHeight).toBeCloseTo(visible.cut, 1);
   const themes = await page.locator('[data-theme-select]').locator('option').evaluateAll(options => options.map(option => option.value).filter(value => value !== 'custom'));
   for (const theme of themes) {
     await page.locator('[data-theme-select]').selectOption(theme);

@@ -3,6 +3,17 @@ import { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } from '.
 
 const COMMON_BUS_RESONANCE_EPSILON = 1e-12;
 const DIAGNOSTICS_UPDATE_HZ = 15;
+const dynamicEqLocalReferenceDb = (levels, band, precomputedWeights) => {
+  let weightedLevel = 0;
+  let totalWeight = 0;
+  for (let neighbor = Math.max(0, band - 2); neighbor <= Math.min(levels.length - 1, band + 2); neighbor += 1) {
+    if (neighbor === band) continue;
+    const weight = precomputedWeights[band][neighbor];
+    weightedLevel += levels[neighbor] * weight;
+    totalWeight += weight;
+  }
+  return totalWeight ? weightedLevel / totalWeight : levels[band];
+};
 const LOCAL_LOOP_COMPENSATED_BAND_INDEXES = Object.freeze([3, 5, 6, 7]);
 const FEEDBACK_ALL_SOFT_KNEE_POINTS = Object.freeze([
   Object.freeze({ resonance: 0.50, gain: 0.25, slope: 1.0 }),
@@ -57,6 +68,11 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.preDynamicSmoothedDb = {
       left: Float64Array.from(this.preDynamicGainDb.left),
       right: Float64Array.from(this.preDynamicGainDb.right)
+    };
+    // Telemetry shadow of the exact per-channel multiplier used by the output path.
+    this.appliedBandGain = {
+      left: new Float64Array(this.bandCount),
+      right: new Float64Array(this.bandCount)
     };
     this.dynamicEqTelemetryCounter = 0;
     this.dynamicEqTelemetryInterval = Math.max(1, Math.round(sampleRate / 15));
@@ -2040,6 +2056,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         audibleGain = Math.pow(10, Math.max(-this.maxBandCutDb, Math.min(this.maxBandBoostDb,
           preDynamicDb + dynamicDb)) / 20);
       } else this.preDynamicSmoothedDb[channel][band] = this.preDynamicGainDb[channel][band];
+      this.appliedBandGain[channel][band] = audibleGain;
       const mainPostGainWeight = this.mainPostGainFeedbackWeight(staticGain);
       if (this.collectResonatorDiagnostics) {
         this.resonatorDiagnostics[channel].mainPostGainFeedbackWeightDb[band] = 20 * Math.log10(mainPostGainWeight);
@@ -2380,11 +2397,20 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       this.dynamicEqTelemetryCounter += frameCount;
       if (this.dynamicEqTelemetryCounter >= this.dynamicEqTelemetryInterval) {
         this.dynamicEqTelemetryCounter %= this.dynamicEqTelemetryInterval;
+        const leftRelativeReferences = Array.from({ length: this.bandCount }, (_, band) =>
+          dynamicEqLocalReferenceDb(this.dynamicEqLevelByChannel.left, band, this.dynamicEqRelativeWeights));
+        const rightRelativeReferences = Array.from({ length: this.bandCount }, (_, band) =>
+          dynamicEqLocalReferenceDb(this.dynamicEqLevelByChannel.right, band, this.dynamicEqRelativeWeights));
         this.port.postMessage({ type: 'dynamic-eq-telemetry', levels: Array.from(this.dynamicEqLevelDb),
+          leftLevels: Array.from(this.dynamicEqLevelByChannel.left), rightLevels: Array.from(this.dynamicEqLevelByChannel.right),
+          relativeReferences: this.stereoDetectorMode === 'DUAL' ? null : leftRelativeReferences,
+          leftRelativeReferences, rightRelativeReferences,
           targets: Array.from(this.dynamicEqTargetDb), gains: Array.from(this.dynamicEqGainDb),
           learnedReferenceDb: Array.from(this.learnedReferenceDb), learnedReferenceValid: this.learnedReferenceValid,
           learnedReferenceFrozen: this.learnedReferenceFrozen, learnProgress: this.learnActive ? this.learnFrames / this.learnDurationFrames : 0,
-          leftGains: Array.from(this.dynamicEqGainByChannel.left), rightGains: Array.from(this.dynamicEqGainByChannel.right) });
+          leftGains: Array.from(this.dynamicEqGainByChannel.left), rightGains: Array.from(this.dynamicEqGainByChannel.right),
+          leftAppliedBandGainDb: Array.from(this.appliedBandGain.left, gain => 20 * Math.log10(Math.max(1e-12, gain))),
+          rightAppliedBandGainDb: Array.from(this.appliedBandGain.right, gain => 20 * Math.log10(Math.max(1e-12, gain))) });
         this.learnCompleted = false;
       }
     }

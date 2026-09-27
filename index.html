@@ -512,22 +512,41 @@
             <section class="mode-placeholder" id="mode-envelope-follower" role="tabpanel" aria-labelledby="mode-tab-envelope-follower" data-mode-panel="envelope-follower" hidden><strong>ENVELOPE FOLLOWER</strong><span>Envelope follower – coming later</span></section>
             <section class="dynamic-eq-panel" id="mode-dynamic-eq" role="tabpanel" aria-labelledby="mode-tab-dynamic-eq" data-mode-panel="dynamic-eq" hidden>
               <section class="dynamic-eq-response" aria-label="Dynamic EQ response">
-                <header><strong>DYNAMIC EQ RESPONSE</strong><span data-dynamic-eq-status>STEREO LINKED · ABS · PRE GAIN DETECTOR</span></header>
+                <header>
+                  <strong>DYNAMIC EQ RESPONSE</strong>
+                  <span class="dynamic-eq-state" data-dynamic-eq-status>STEREO LINKED · ABS · PRE GAIN DETECTOR</span>
+                  <div class="dynamic-eq-view-toggles" role="group" aria-label="Graph views">
+                    <button class="dynamic-eq-view-toggle active" type="button" data-dynamic-eq-view="input" aria-pressed="true">INPUT</button>
+                    <button class="dynamic-eq-view-toggle active" type="button" data-dynamic-eq-view="reference" aria-pressed="true">REF</button>
+                    <button class="dynamic-eq-view-toggle active" type="button" data-dynamic-eq-view="gain" aria-pressed="true">GAIN</button>
+                    <button class="dynamic-eq-view-toggle active" type="button" data-dynamic-eq-view="out" aria-pressed="true">OUT</button>
+                    <button class="dynamic-eq-view-toggle active" type="button" data-dynamic-eq-view="state" aria-pressed="true">STATE</button>
+                  </div>
+                </header>
                 <div class="dynamic-eq-graph" data-dynamic-eq-graph>
                   <div class="dynamic-eq-y-axis" aria-label="Detector level axis"><span>0 dBFS</span><span>−12 dBFS</span><span>−24 dBFS</span><span>−36 dBFS</span><span>−48 dBFS</span><span>−60 dBFS</span></div>
                   <div class="dynamic-eq-plot">
                     <div class="dynamic-eq-window-zone" data-dynamic-eq-window-zone></div>
                     <div class="dynamic-eq-gain-zero"><span>GAIN 0 dB</span></div>
+                    <div class="dynamic-eq-gain-scale" aria-label="Shared gain and applied gain dB scale">
+                      <span class="dynamic-eq-gain-scale-tick" data-dynamic-eq-gain-scale-positive>+12 dB</span>
+                      <span class="dynamic-eq-gain-scale-tick" data-dynamic-eq-gain-scale-mid-positive data-dynamic-eq-out-axis-positive>+6 dB</span>
+                      <span class="dynamic-eq-gain-scale-tick" data-dynamic-eq-gain-scale-mid-negative data-dynamic-eq-out-axis-negative>−6 dB</span>
+                      <span class="dynamic-eq-gain-scale-tick" data-dynamic-eq-gain-scale-negative>−12 dB</span>
+                    </div>
                     <div class="dynamic-eq-level-guide" data-dynamic-eq-upper><span></span></div>
                     <div class="dynamic-eq-level-guide dynamic-eq-threshold" data-dynamic-eq-threshold><span></span></div>
                     <div class="dynamic-eq-level-guide" data-dynamic-eq-lower><span></span></div>
+                    <svg class="dynamic-eq-reference-profiles" data-dynamic-eq-reference-profiles aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 1000 1000"><polyline class="dynamic-eq-profile-learned"></polyline><polyline class="dynamic-eq-profile-relative-left"></polyline><polyline class="dynamic-eq-profile-relative-right"></polyline></svg>
                     <div class="dynamic-eq-columns" data-dynamic-eq-columns></div>
+                    <output class="dynamic-eq-band-detail" data-dynamic-eq-band-detail aria-live="polite" hidden></output>
                   </div>
                   <div class="dynamic-eq-level-values" data-dynamic-eq-level-values></div>
                   <div class="dynamic-eq-gain-values" data-dynamic-eq-gain-values></div>
+                  <div class="dynamic-eq-out-values" data-dynamic-eq-out-values></div>
                   <div class="dynamic-eq-x-axis" data-dynamic-eq-x-axis></div>
                 </div>
-                <div class="dynamic-eq-legend"><span>LEVEL · dBFS</span><span data-dynamic-eq-gain-scale>GAIN · ±6 dB</span></div>
+                <div class="dynamic-eq-legend"><span>INPUT · dBFS</span><span data-dynamic-eq-gain-scale>GAIN / OUT · SHARED SCALE ±12 dB</span><span data-dynamic-eq-out-scale>OUT · APPLIED GAIN L/R</span></div>
                 <div class="dynamic-eq-sensitivity"><div class="dynamic-eq-sensitivity-heading"><strong>SENSITIVITY</strong><button type="button" data-dynamic-eq-reset>RESET 100 %</button></div><div class="dynamic-eq-sensitivity-grid" data-dynamic-eq-sensitivity></div></div>
               </section>
               <section class="dynamic-eq-controls" aria-label="Dynamic EQ controls"><strong>CONTROLS</strong>
