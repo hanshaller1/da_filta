@@ -558,7 +558,13 @@ test('dynamic EQ graph and controls fit the existing desktop workspace', async (
       const controls = rect('.dynamic-eq-controls');
       const graph = rect('.dynamic-eq-graph');
       const sensitivity = rect('.dynamic-eq-sensitivity-grid');
+      const innerPanels = ['.dynamic-eq-response', '.dynamic-eq-controls'].map(selector => {
+        const style = getComputedStyle(document.querySelector(selector));
+        return { background: style.backgroundColor, border: style.borderTopWidth, shadow: style.boxShadow,
+          radius: style.borderTopLeftRadius };
+      });
       return { panel, response, controls, graph, sensitivity,
+        innerPanels,
         controlScroll: document.querySelector('.dynamic-eq-controls').scrollHeight - controls.height };
     });
     expect(geometry.response.left).toBeGreaterThanOrEqual(geometry.panel.left);
@@ -566,6 +572,45 @@ test('dynamic EQ graph and controls fit the existing desktop workspace', async (
     expect(geometry.graph.bottom).toBeLessThan(geometry.sensitivity.top);
     expect(geometry.sensitivity.bottom).toBeLessThanOrEqual(geometry.panel.bottom);
     expect(geometry.controlScroll).toBeLessThan(2);
+    expect(geometry.innerPanels).toEqual(Array(2).fill({ background: 'rgba(0, 0, 0, 0)', border: '0px', shadow: 'none', radius: '0px' }));
+  }
+});
+
+test('Dynamic EQ separator stays subtle and centered in the existing gap across themes and widths', async ({ page }) => {
+  for (const theme of ['dark-studio', 'clean-modern']) {
+    for (const width of [1440, 1024]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/');
+      await page.locator('[data-theme-select]').selectOption(theme);
+      await page.locator('[data-mode="dynamic-eq"]').click();
+      const separator = await page.evaluate(() => {
+        const response = document.querySelector('.dynamic-eq-response');
+        const controls = document.querySelector('.dynamic-eq-controls');
+        const panel = document.querySelector('.dynamic-eq-panel');
+        const style = getComputedStyle(response, '::after');
+        const responseRect = response.getBoundingClientRect();
+        const controlsRect = controls.getBoundingClientRect();
+        const panelRect = panel.getBoundingClientRect();
+        return { width: style.width, top: style.top, bottom: style.bottom, right: style.right,
+          color: style.backgroundColor, display: style.display, position: style.position,
+          lineCenter: responseRect.right - parseFloat(style.right) - .5,
+          expectedCenter: (responseRect.right + controlsRect.left) / 2,
+          gap: controlsRect.left - responseRect.right, gridGap: parseFloat(getComputedStyle(panel).columnGap),
+          panels: [response, controls].map(element => {
+            const css = getComputedStyle(element);
+            return [css.backgroundColor, css.borderTopWidth, css.boxShadow];
+          }) };
+      });
+      expect(separator.width).toBe('1px');
+      expect(separator.top).toBe('8px');
+      expect(separator.bottom).toBe('8px');
+      expect(separator.display).not.toBe('none');
+      expect(separator.position).toBe('absolute');
+      expect(separator.color).not.toBe('rgba(0, 0, 0, 0)');
+      expect(separator.lineCenter).toBeCloseTo(separator.expectedCenter, 0);
+      expect(separator.gap).toBeCloseTo(separator.gridGap, 0);
+      expect(separator.panels).toEqual(Array(2).fill(['rgba(0, 0, 0, 0)', '0px', 'none']));
+    }
   }
 });
 

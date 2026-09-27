@@ -3,6 +3,69 @@ const selectFilterType = async (page, type) => {
   await page.locator(`[data-filter-type="${type}"]`).click();
 };
 
+test('FILTER and FILTERBANK use flat inner workspaces with theme-aware separators', async ({ page }) => {
+  for (const theme of ['dark-studio', 'clean-modern']) {
+    for (const width of [1440, 1024]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/');
+      await page.locator('[data-theme-select]').selectOption(theme);
+      await page.locator('[data-mode="filter"]').click();
+      const filterLayout = await page.evaluate(() => {
+        const response = document.querySelector('.filter-response');
+        const controls = document.querySelector('.filter-controls');
+        const style = getComputedStyle(response, '::after');
+        const responseRect = response.getBoundingClientRect();
+        const controlsRect = controls.getBoundingClientRect();
+        const responseCss = getComputedStyle(response);
+        const controlsCss = getComputedStyle(controls);
+        return { response: [responseCss.backgroundColor, responseCss.borderTopWidth, responseCss.boxShadow],
+          controls: [controlsCss.backgroundColor, controlsCss.borderTopWidth, controlsCss.boxShadow],
+          separatorContent: style.content, separatorWidth: style.width, separatorColor: style.backgroundColor,
+          separatorTop: style.top, separatorBottom: style.bottom,
+          separatorCenter: responseRect.right - parseFloat(style.right) - .5,
+          gapCenter: (responseRect.right + controlsRect.left) / 2,
+          gap: controlsRect.left - responseRect.right };
+      });
+      expect(filterLayout.response).toEqual(['rgba(0, 0, 0, 0)', '0px', 'none']);
+      expect(filterLayout.controls).toEqual(['rgba(0, 0, 0, 0)', '0px', 'none']);
+      if (width >= 1200) {
+        expect(filterLayout.separatorContent).toBe('""');
+        expect(filterLayout.separatorWidth).toBe('1px');
+        expect(filterLayout.separatorColor).not.toBe('rgba(0, 0, 0, 0)');
+        expect(filterLayout.separatorTop).toBe('8px');
+        expect(filterLayout.separatorBottom).toBe('8px');
+        expect(filterLayout.separatorCenter).toBeCloseTo(filterLayout.gapCenter, 0);
+      }
+      else expect(filterLayout.separatorContent).toBe('none');
+
+      await page.locator('[data-mode="filterbank"]').click();
+      const filterbankLayout = await page.evaluate(width => {
+        const workspace = document.querySelector('.filterbank-mode-panel > .fb-workspace');
+        const analyzer = document.querySelector('.filterbank-mode-panel .analyzer');
+        const controls = document.querySelector('.filterbank-mode-panel > .filterbank-controls-panel');
+        const style = getComputedStyle(workspace, '::after');
+        const workspaceRect = workspace.getBoundingClientRect();
+        const controlsRect = controls.getBoundingClientRect();
+        const analyzerCss = getComputedStyle(analyzer);
+        const controlsCss = getComputedStyle(controls);
+        return { analyzer: [analyzerCss.backgroundColor, analyzerCss.borderTopWidth, analyzerCss.boxShadow],
+          controls: [controlsCss.backgroundColor, controlsCss.borderTopWidth, controlsCss.boxShadow],
+          separatorHeight: style.height, separatorColor: style.backgroundColor, separatorLeft: style.left,
+          separatorRight: style.right, separatorBottom: style.bottom,
+          separatorCenter: workspaceRect.bottom - parseFloat(style.bottom) - .5,
+          expectedCenter: width >= 1200 ? (workspaceRect.bottom + controlsRect.top) / 2 : workspaceRect.bottom,
+          areaGap: controlsRect.top - workspaceRect.bottom };
+      }, width);
+      expect(filterbankLayout.analyzer).toEqual(['rgba(0, 0, 0, 0)', '0px', 'none']);
+      expect(filterbankLayout.controls).toEqual(['rgba(0, 0, 0, 0)', '0px', 'none']);
+      expect(filterbankLayout.separatorHeight).toBe('1px');
+      expect(filterbankLayout.separatorColor).not.toBe('rgba(0, 0, 0, 0)');
+      expect(filterbankLayout.separatorLeft).toBe(filterbankLayout.separatorRight);
+      expect(filterbankLayout.separatorCenter).toBeCloseTo(filterbankLayout.expectedCenter, 0);
+    }
+  }
+});
+
 test('FILTER power controls its layer across workspaces without changing FILTERBANK state', async ({ page }) => {
   await page.goto('/');
   const firstManual = page.locator('.center-fader .band-fader').first();
