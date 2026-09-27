@@ -1,3 +1,5 @@
+import { normalizeLfoState } from './lfo-core.mjs';
+
 (function () {
   const BAND_DEFINITIONS = Object.freeze([
     Object.freeze({ frequency: 29, label: '29 Hz' }),
@@ -55,6 +57,7 @@
       dynamicEqBandSensitivity: Array.from({ length: BAND_COUNT }, (_, index) => limited(source?.dynamicEqBandSensitivity?.[index], 0, 100, 100))
     };
   };
+  const normalizeModulationState = normalizeLfoState;
   const clampBandGain = value => {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) return BAND_GAIN_NEUTRAL;
@@ -157,6 +160,7 @@
     filterbankEnabled: true,
     filterEnabled: false,
     ...normalizeDynamicEqState(),
+    ...normalizeModulationState(),
     filterType: 'lowpass',
     filterFrequencyHz: 777,
     filterSlope: 50,
@@ -234,6 +238,7 @@
     normalizeSpreadMaxOffsetDb,
     normalizeFilterState,
     normalizeDynamicEqState,
+    normalizeModulationState,
     setBandBaseGain
   });
 })();

@@ -59,14 +59,16 @@
   };
 
   class AudioEngine {
-    constructor({ onStatusChange, onDevicesChanged, onDiagnostics, onDynamicEqTelemetry, onOutputProtectionTelemetry, onOutputGuardTelemetry }) {
+    constructor({ onStatusChange, onDevicesChanged, onDiagnostics, onDynamicEqTelemetry, onLfoTelemetry, onOutputProtectionTelemetry, onOutputGuardTelemetry }) {
       this.onStatusChange = onStatusChange;
       this.onDevicesChanged = onDevicesChanged;
       this.onDiagnostics = onDiagnostics;
       this.onDynamicEqTelemetry = onDynamicEqTelemetry;
+      this.onLfoTelemetry = onLfoTelemetry;
       this.onOutputProtectionTelemetry = onOutputProtectionTelemetry;
       this.onOutputGuardTelemetry = onOutputGuardTelemetry;
       Object.assign(this, window.ResonantState.normalizeDynamicEqState());
+      Object.assign(this, window.ResonantState.normalizeModulationState());
       this.status = 'OFF';
       this.inputGainDb = 0;
       this.inputPreampStage = 'linear';
@@ -289,7 +291,11 @@
     setResonance(value) {
       const numericValue = Number(value);
       this.resonance = Number.isFinite(numericValue) ? Math.max(-1, Math.min(1, numericValue)) : 0;
-      this.filterbank?.setResonance(this.filterbankEnabled ? this.resonance : 0);
+      if (this.lfoEnabled && this.lfoTargetId === 'global.resonance') this.syncModulationState();
+      else {
+        this.filterbank?.setResonance(this.filterbankEnabled ? this.resonance : 0);
+        this.syncModulationState();
+      }
       return this.resonance;
     }
 
@@ -394,6 +400,7 @@
       Object.assign(this, normalized);
       this.rebuildFilterModeBandControls();
       this.applyEffectiveBandGains();
+      this.syncModulationState();
       return normalized;
     }
 
@@ -401,6 +408,7 @@
       this.filterEnabled = Boolean(enabled);
       this.applyEffectiveBandGains();
       this.applySpectralCoreRequired();
+      this.syncModulationState();
       return this.filterEnabled;
     }
 
@@ -409,6 +417,7 @@
       this.applyEffectiveBandGains();
       this.applyEffectiveFeedbackState();
       this.applySpectralCoreRequired();
+      this.syncModulationState();
       return this.filterbankEnabled;
     }
 
@@ -416,6 +425,39 @@
       Object.assign(this, window.ResonantState.normalizeDynamicEqState(source));
       this.filterbank?.setDynamicEq?.(this);
       this.applySpectralCoreRequired();
+      this.syncModulationState();
+    }
+
+    getModulationState() {
+      const lfo = window.ResonantState.normalizeModulationState(this);
+      return {
+        ...lfo,
+        filterEnabled: this.filterEnabled,
+        filterbankEnabled: this.filterbankEnabled,
+        filterShapeParams: window.FilterShape.shapeParametersFromState(this),
+        baseResonance: this.resonance,
+        dynamicEqEnabled: this.dynamicEqEnabled,
+        dynamicEqThresholdDb: this.dynamicEqThresholdDb,
+        dynamicEqRangeDb: this.dynamicEqRangeDb,
+        dynamicEqStrength: this.dynamicEqStrength,
+        assignments: lfo.lfoTargetId ? [{ sourceId: 'lfo.1', targetId: lfo.lfoTargetId, amount: lfo.lfoAmount }] : []
+      };
+    }
+
+    setModulationState(source = {}) {
+      Object.assign(this, window.ResonantState.normalizeModulationState(source));
+      this.syncModulationState();
+      return window.ResonantState.normalizeModulationState(this);
+    }
+
+    resetLfoPhase() {
+      if (!this.filterbank) return false;
+      this.filterbank.resetLfoPhase();
+      return true;
+    }
+
+    syncModulationState() {
+      this.filterbank?.setModulationState?.(this.getModulationState());
     }
 
     learnDynamicEq() {
@@ -574,6 +616,7 @@
         collectResonatorDiagnostics: this.resonatorDiagnosticsEnabled,
         collectNonlinearResonatorDiagnostics: this.nonlinearResonatorDiagnosticsEnabled,
         resonance: this.filterbankEnabled ? this.resonance : 0,
+        modulationState: this.getModulationState(),
         positiveResonanceAuditionGain: this.positiveResonanceAuditionGain,
         positiveResonanceDrive: this.positiveResonanceDrive,
         positiveResonanceDampingFloor: this.positiveResonanceDampingFloor,
@@ -588,6 +631,7 @@
         , negativeResonanceMode: this.negativeResonanceMode, negativeResonanceCurve: this.negativeResonanceCurve, negativeResonanceAmount: this.negativeResonanceAmount, negativeResonanceLocal: this.negativeResonanceLocal, negativeResonanceMain: this.negativeResonanceMain, negativeResonancePhase: this.negativeResonancePhase
         , onDiagnostics: this.onDiagnostics
         , onDynamicEqTelemetry: packet => this.receiveDynamicEqTelemetry(packet)
+        , onLfoTelemetry: packet => this.onLfoTelemetry?.(packet)
         , ...window.ResonantState.normalizeDynamicEqState(this)
       };
     }
@@ -605,6 +649,7 @@
         filterbankEnabled: this.filterbankEnabled,
         filterEnabled: this.filterEnabled,
         ...window.ResonantState.normalizeDynamicEqState(this),
+        ...window.ResonantState.normalizeModulationState(this),
         filterType: this.filterType,
         filterFrequencyHz: this.filterFrequencyHz,
         filterSlope: this.filterSlope,
@@ -696,6 +741,7 @@
       this.setNegativeResonanceLocal(snapshot?.negativeResonanceLocal ?? this.negativeResonanceLocal);
       this.setNegativeResonanceMain(snapshot?.negativeResonanceMain ?? this.negativeResonanceMain);
       this.setNegativeResonancePhase(snapshot?.negativeResonancePhase ?? this.negativeResonancePhase);
+      this.setModulationState(snapshot);
       if (this.filterbank) this.filterbank.applyState(this.getFilterbankState());
     }
 

@@ -647,7 +647,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .audio-routing-arrow { flex: 0 0 auto; color: var(--cyan); font-size: 18px; line-height: 1; }
 .masthead-controls { flex: 0 0 auto; justify-content: flex-start; gap: 10px; margin-right: calc(var(--panel-gap) - 12px); }
 .masthead-dev-lab { flex: 0 0 var(--dev-lab-width); justify-content: center; width: var(--dev-lab-width); height: 42px; margin-left: auto; gap: 8px; }
-.masthead-dev-lab .dev-lab-toggle { width: 32px; height: 30px; padding: 5px; border: 0; background: transparent; }
+.masthead-dev-lab .dev-lab-toggle { width: 32px; min-width: 0; height: 30px; padding: 5px; border: 0; background: transparent; }
 .masthead-dev-lab .dev-lab-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .masthead-dev-lab .theme-picker { flex: 0 0 calc(var(--dev-lab-width) - 98px); width: calc(var(--dev-lab-width) - 98px); min-width: 0; }
 .theme-editor-panel { left: auto; right: 0; }
@@ -1607,4 +1607,36 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .filter-type-options button[data-filter-type="formant"] {
     font-size: 8px;
   }
+}
+
+.lfo-mode-panel { min-height: 0; }
+.lfo-response .lfo-visualizer { min-height: 0; margin: 5px 0 0; overflow: hidden; background-image: linear-gradient(to bottom, color-mix(in srgb, var(--secondary-text) 8%, transparent) 1px, transparent 1px); background-size: 100% 45%; }
+.lfo-visualizer svg { overflow: hidden; }
+.lfo-grid-line { stroke: color-mix(in srgb, var(--secondary-text) 20%, transparent); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.lfo-grid-line:nth-child(2) { stroke: color-mix(in srgb, var(--secondary-text) 32%, transparent); stroke-dasharray: 2 4; }
+.lfo-wave-path { fill: none; stroke: var(--cyan); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--cyan) 28%, transparent)); }
+.lfo-phase-line { stroke: var(--active-color, #f4d35e); stroke-width: 1.5; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+.lfo-phase-dot { fill: var(--active-color, #f4d35e); stroke: var(--graph-background); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.lfo-visual-readout { position: absolute; right: 6px; bottom: 5px; padding: 2px 4px; border: 1px solid var(--output-border); border-radius: 3px; color: var(--strong-text); background: color-mix(in srgb, var(--graph-background) 88%, transparent); font-size: var(--text-micro); font-variant-numeric: tabular-nums; pointer-events: none; }
+.lfo-controls { grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 9px; overflow: auto; }
+.lfo-wave-control { padding-bottom: 7px; }
+.lfo-wave-buttons { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lfo-wave-buttons button { min-width: 0; height: 23px; padding: 0 3px; overflow: hidden; text-align: center; text-overflow: ellipsis; }
+.lfo-wave-buttons button[aria-pressed=true] { border-color: var(--cyan); color: var(--cyan); background: var(--active-background); }
+.lfo-target-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; min-width: 0; padding: 0 0 8px; border-bottom: 1px solid var(--output-border); color: var(--muted-text); font-size: var(--text-control-label); letter-spacing: .7px; }
+.lfo-target-control select { grid-column: 1 / -1; width: 100%; min-width: 0; height: 27px; padding: 3px 7px; border: 1px solid var(--output-border); border-radius: 3px; color: var(--strong-text); background: var(--output-background); font: inherit; letter-spacing: normal; }
+.lfo-target-control > span { grid-column: 1 / -1; min-height: 10px; color: var(--secondary-text); font-size: var(--text-micro); letter-spacing: .3px; }
+.lfo-target-control.is-inactive > span { color: var(--active-color, #f4d35e); }
+.lfo-parameter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); min-width: 0; min-height: 0; border-top: 1px solid color-mix(in srgb, var(--output-border) 48%, transparent); border-left: 1px solid color-mix(in srgb, var(--output-border) 48%, transparent); }
+.lfo-parameter-grid .filter-parameter-control { gap: 7px 5px; padding: 7px; font-size: var(--text-micro); }
+.lfo-parameter-grid .filter-parameter-control output { min-width: 49px; padding: 2px 3px; font-size: var(--text-micro); }
+.lfo-parameter-grid .filter-parameter-control > input { align-self: end; }
+.lfo-polarity-control { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; min-width: 0; padding: 7px; border-right: 1px solid color-mix(in srgb, var(--output-border) 48%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--output-border) 48%, transparent); color: var(--muted-text); font-size: var(--text-micro); letter-spacing: .7px; }
+.lfo-polarity-control > div { display: flex; gap: 4px; align-items: center; }
+.lfo-polarity-control button { min-width: 0; flex: 1 1 0; padding-inline: 4px; }
+.lfo-reset { justify-self: end; min-height: 23px; padding: 2px 7px; }
+@media (min-width: 1200px) and (max-height: 800px) {
+  .lfo-controls { gap: 6px; }
+  .lfo-parameter-grid .filter-parameter-control { gap: 4px 4px; padding: 5px; }
+  .lfo-target-control { padding-bottom: 5px; }
 }

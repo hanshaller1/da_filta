@@ -175,7 +175,9 @@
       this.nonlinearResonatorDiagnosticsEnabled = this.resonatorDiagnosticsEnabled
         && initialState?.collectNonlinearResonatorDiagnostics !== false;
       this.onDynamicEqTelemetry = typeof initialState?.onDynamicEqTelemetry === 'function' ? initialState.onDynamicEqTelemetry : null;
+      this.onLfoTelemetry = typeof initialState?.onLfoTelemetry === 'function' ? initialState.onLfoTelemetry : null;
       this.dynamicEqState = window.ResonantState.normalizeDynamicEqState(initialState);
+      this.modulationState = initialState?.modulationState || null;
       this.preDynamicGainDbLeft = [...(initialState?.preDynamicGainDbLeft || Array(BAND_COUNT).fill(0))];
       this.preDynamicGainDbRight = [...(initialState?.preDynamicGainDbRight || Array(BAND_COUNT).fill(0))];
       this.inputNode = audioContext.createGain();
@@ -195,6 +197,7 @@
           bandGainLeft: [...this.bandGainLeft],
           bandGainRight: [...this.bandGainRight],
           ...this.dynamicEqState,
+          modulationState: this.modulationState,
           preDynamicGainDbLeft: this.preDynamicGainDbLeft,
           preDynamicGainDbRight: this.preDynamicGainDbRight,
           feedbackBandLeft: [...this.feedbackBandLeft],
@@ -235,6 +238,7 @@
       this.workletNode.port.onmessage = event => {
         if (event.data?.type === 'resonator-diagnostics') this.onDiagnostics?.(event.data);
         if (event.data?.type === 'dynamic-eq-telemetry') this.onDynamicEqTelemetry?.(event.data);
+        if (event.data?.type === 'lfo-telemetry') this.onLfoTelemetry?.(event.data);
       };
       this.inputNode.connect(this.workletNode);
       this.workletNode.connect(this.outputNode);
@@ -287,6 +291,18 @@
       this.dynamicEqState = window.ResonantState.normalizeDynamicEqState(source);
       if (!this.disposed) this.workletNode.port.postMessage({ type: 'set-dynamic-eq', ...this.dynamicEqState });
       return this.dynamicEqState;
+    }
+
+    setModulationState(source) {
+      this.modulationState = source || null;
+      if (!this.disposed) this.workletNode.port.postMessage({ type: 'set-modulation-state', ...(this.modulationState || {}) });
+      return this.modulationState;
+    }
+
+    resetLfoPhase() {
+      if (this.disposed) return false;
+      this.workletNode.port.postMessage({ type: 'reset-lfo-phase' });
+      return true;
     }
 
     learnDynamicEq() {
@@ -469,11 +485,13 @@
       this.negativeResonanceLocal = snapshot?.negativeResonanceLocal !== undefined ? Boolean(snapshot.negativeResonanceLocal) : this.negativeResonanceLocal;
       this.negativeResonanceMain = snapshot?.negativeResonanceMain !== undefined ? Boolean(snapshot.negativeResonanceMain) : this.negativeResonanceMain;
       this.negativeResonancePhase = normalizeNegativeResonancePhase(snapshot?.negativeResonancePhase ?? this.negativeResonancePhase);
+      this.modulationState = snapshot?.modulationState || this.modulationState;
       this.workletNode.port.postMessage({
         type: 'apply-state',
         bandGainLeft: [...this.bandGainLeft],
         bandGainRight: [...this.bandGainRight],
         ...this.dynamicEqState,
+        modulationState: this.modulationState,
         preDynamicGainDbLeft: this.preDynamicGainDbLeft,
         preDynamicGainDbRight: this.preDynamicGainDbRight,
         feedbackBandLeft: [...this.feedbackBandLeft],

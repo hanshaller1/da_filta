@@ -349,7 +349,7 @@
               <button class="mode-select" type="button" role="tab" id="mode-tab-clock-mod" aria-selected="false" aria-controls="mode-clock-mod" data-mode="clock-mod"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg><span>CLOCK MOD</span></button>
             </div>
             <div class="mode-tab-row">
-              <button class="mode-power" type="button" disabled aria-disabled="true" aria-label="LFO Power nicht verfügbar" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
+              <button class="mode-power" type="button" data-module-power="lfo" aria-label="LFO einschalten" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
               <button class="mode-select" type="button" role="tab" id="mode-tab-lfo" aria-selected="false" aria-controls="mode-lfo" data-mode="lfo"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M1 10c2.2-6 4.5-6 6.7 0s4.5 6 6.7 0S18 4 19 7"/></svg><span>LFO</span></button>
             </div>
             <div class="mode-tab-row">
@@ -508,7 +508,47 @@
               </section>
             </section>
             <section class="mode-placeholder" id="mode-clock-mod" role="tabpanel" aria-labelledby="mode-tab-clock-mod" data-mode-panel="clock-mod" hidden><strong>CLOCK MOD</strong><span>Clock modulation – coming later</span></section>
-            <section class="mode-placeholder" id="mode-lfo" role="tabpanel" aria-labelledby="mode-tab-lfo" data-mode-panel="lfo" hidden><strong>LFO</strong><span>LFO module – coming later</span></section>
+            <section class="filter-mode-panel lfo-mode-panel" id="mode-lfo" role="tabpanel" aria-labelledby="mode-tab-lfo" data-mode-panel="lfo" hidden>
+  <section class="filter-response lfo-response" aria-label="LFO waveform display">
+    <header><strong>LFO WAVEFORM</strong><span data-lfo-status>OFF - NO TARGET</span></header>
+    <div class="filter-response-chart lfo-visualizer" data-lfo-visualizer>
+      <svg viewBox="0 0 1000 240" preserveAspectRatio="none" role="img" aria-label="LFO wave shape and current DSP phase">
+        <line class="lfo-grid-line" x1="0" y1="12" x2="1000" y2="12"></line>
+        <line class="lfo-grid-line" x1="0" y1="120" x2="1000" y2="120"></line>
+        <line class="lfo-grid-line" x1="0" y1="228" x2="1000" y2="228"></line>
+        <path class="lfo-wave-path" data-lfo-wave-path></path>
+        <line class="lfo-phase-line" data-lfo-phase-line x1="0" y1="12" x2="0" y2="228"></line>
+        <circle class="lfo-phase-dot" data-lfo-phase-dot cx="0" cy="120" r="5"></circle>
+      </svg>
+      <output class="lfo-visual-readout" data-lfo-phase-readout>0 deg - 1.00 Hz</output>
+    </div>
+  </section>
+  <section class="filter-controls lfo-controls" aria-label="LFO controls">
+    <div class="filter-type-control lfo-wave-control">
+      <span>WAVEFORM</span>
+      <div class="filter-type-options lfo-wave-buttons" role="group" aria-label="LFO waveform">
+        <button type="button" data-lfo-waveform="sine" aria-pressed="true">SINE</button>
+        <button type="button" data-lfo-waveform="triangle" aria-pressed="false">TRIANGLE</button>
+        <button type="button" data-lfo-waveform="saw-up" aria-pressed="false">SAW UP</button>
+        <button type="button" data-lfo-waveform="saw-down" aria-pressed="false">SAW DOWN</button>
+        <button type="button" data-lfo-waveform="square" aria-pressed="false">SQUARE</button>
+        <button type="button" data-lfo-waveform="sample-hold" aria-pressed="false">S&amp;H</button>
+      </div>
+    </div>
+    <div class="lfo-target-control">
+      <label for="lfo-target">TARGET</label>
+      <select id="lfo-target" data-lfo-target aria-label="LFO target"><option value="">NONE</option></select>
+      <span data-lfo-target-state>NO TARGET ASSIGNED</span>
+    </div>
+    <div class="lfo-parameter-grid">
+      <label class="filter-parameter-control lfo-rate-control"><span>FREE RATE</span><output data-lfo-rate-output>1.00 Hz</output><input class="filter-style-slider" type="range" min="0" max="1000" step="1" value="434" data-lfo-rate aria-label="LFO rate"></label>
+      <label class="filter-parameter-control"><span>AMOUNT</span><output data-lfo-amount-output>25 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="25" data-lfo-amount aria-label="LFO amount"></label>
+      <label class="filter-parameter-control"><span>PHASE</span><output data-lfo-phase-output>0 deg</output><input class="filter-style-slider" type="range" min="0" max="360" step="1" value="0" data-lfo-phase aria-label="LFO phase offset"></label>
+      <div class="lfo-polarity-control"><span>POLARITY</span><div role="group" aria-label="LFO polarity"><button class="dynamic-eq-view-toggle active" type="button" data-lfo-polarity="bipolar" aria-pressed="true">BIPOLAR</button><button class="dynamic-eq-view-toggle" type="button" data-lfo-polarity="unipolar" aria-pressed="false">UNIPOLAR</button></div></div>
+    </div>
+    <button class="dynamic-eq-view-toggle lfo-reset" type="button" data-lfo-reset>RESET PHASE</button>
+  </section>
+</section>
             <section class="mode-placeholder" id="mode-envelope-follower" role="tabpanel" aria-labelledby="mode-tab-envelope-follower" data-mode-panel="envelope-follower" hidden><strong>ENVELOPE FOLLOWER</strong><span>Envelope follower – coming later</span></section>
             <section class="dynamic-eq-panel" id="mode-dynamic-eq" role="tabpanel" aria-labelledby="mode-tab-dynamic-eq" data-mode-panel="dynamic-eq" hidden>
               <section class="dynamic-eq-response" aria-label="Dynamic EQ response">
@@ -601,11 +641,11 @@
         </aside>
       </main>
     </div>
-    <script src="filter-shape.js"></script>
-    <script src="state.js"></script>
-    <script src="filterbank.js"></script>
-    <script src="audio-engine.js"></script>
-    <script src="sample-config.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="filter-shape.js"></script>
+    <script type="module" src="state.js"></script>
+    <script type="module" src="filterbank.js"></script>
+    <script type="module" src="audio-engine.js"></script>
+    <script type="module" src="sample-config.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

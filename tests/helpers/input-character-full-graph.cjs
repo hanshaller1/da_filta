@@ -18,14 +18,17 @@ function browserBundle(origin, worklet = false, { variant = 'p3b4', transformCon
   const rates = architecture.match(/const RATES = .*;/)[0];
   const prefix = `import { LinearTptSvf, OversampledPositiveTptResonator } from '${origin}/tpt-svf.js';
 import { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } from '${origin}/dynamic-eq-core.mjs';
-const deps = { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient };
+import { FilterShape } from '${origin}/filter-shape-core.mjs';
+import { ModulationCore } from '${origin}/modulation-core.mjs';
+import { LfoOscillator, normalizeLfoState } from '${origin}/lfo-core.mjs';
+const deps = { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeLfoState };
 function classesFor(rate) {
   const sampleRate = rate;
   class Stub { constructor() { this.port = { onmessage: null, postMessage() {} }; } }
   const AudioWorkletProcessor = Stub;
   const registered = {};
   const registerProcessor = (name, Class) => { registered[name] = Class; };
-  const { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } = deps;
+  const { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeLfoState } = deps;
   ${bank}
   ${read('output-guard-processor.js')}
   ${read('output-protection-processor.js')}

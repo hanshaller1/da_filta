@@ -1,3 +1,6 @@
+import { MODULATION_TARGETS, isModulationTargetActive } from './modulation-core.mjs';
+import { LFO_WAVEFORMS, rateToSlider, sliderToRate, waveformSample } from './lfo-core.mjs';
+
 const {
   BAND_DEFINITIONS,
   BAND_COUNT,
@@ -15,6 +18,7 @@ const {
 const state = createInitialState();
 let audioEngine = null;
 let dynamicEqTelemetry = null;
+let lfoTelemetry = null;
 let panic = () => {};
 let updateResonatorDiagnostics = () => {};
 // FILTERBANK editor visuals intentionally describe the manual FILTERBANK
@@ -1585,7 +1589,145 @@ const modeTabs = [...document.querySelectorAll('[data-mode]')];
 const modePanels = [...document.querySelectorAll('[data-mode-panel]')];
 const filterbankPowerButton = document.querySelector('[data-module-power="filterbank"]');
 const filterPowerButton = document.querySelector('[data-module-power="filter"]');
+const lfoPowerButton = document.querySelector('[data-module-power="lfo"]');
 const dynamicEqPowerButton = document.querySelector('[data-module-power="dynamic-eq"]');
+const lfoWaveformButtons = [...document.querySelectorAll('[data-lfo-waveform]')];
+const lfoPolarityButtons = [...document.querySelectorAll('[data-lfo-polarity]')];
+const lfoTargetSelect = document.querySelector('[data-lfo-target]');
+const lfoRateInput = document.querySelector('[data-lfo-rate]');
+const lfoAmountInput = document.querySelector('[data-lfo-amount]');
+const lfoPhaseInput = document.querySelector('[data-lfo-phase]');
+const lfoWavePath = document.querySelector('[data-lfo-wave-path]');
+const lfoPhaseLine = document.querySelector('[data-lfo-phase-line]');
+const lfoPhaseDot = document.querySelector('[data-lfo-phase-dot]');
+const lfoPhaseReadout = document.querySelector('[data-lfo-phase-readout]');
+const lfoTargetState = document.querySelector('[data-lfo-target-state]');
+const lfoStatus = document.querySelector('[data-lfo-status]');
+const lfoTargetControl = document.querySelector('.lfo-target-control');
+let lfoAnimationFrame = 0;
+let lfoTelemetryReceivedAt = 0;
+const lfoFormatRate = value => `${Number(value) < 1 ? Number(value).toFixed(2) : Number(value).toFixed(Number(value) < 10 ? 2 : 1)} Hz`;
+const lfoTargetContext = () => ({
+  filterEnabled: state.filterEnabled,
+  filterbankEnabled: state.filterbankEnabled,
+  dynamicEqEnabled: state.dynamicEqEnabled,
+  filterShapeParams: window.FilterShape.shapeParametersFromState(state)
+});
+const populateLfoTargets = () => {
+  if (!lfoTargetSelect) return;
+  lfoTargetSelect.replaceChildren(new Option('NONE', ''));
+  const groups = new Map();
+  for (const target of MODULATION_TARGETS) {
+    if (!groups.has(target.group)) {
+      const group = document.createElement('optgroup');
+      group.label = target.group;
+      groups.set(target.group, group);
+      lfoTargetSelect.append(group);
+    }
+    const option = document.createElement('option');
+    option.value = target.id;
+    option.textContent = target.label;
+    groups.get(target.group).append(option);
+  }
+};
+const getDisplayedLfoPhase = () => {
+  if (!state.lfoEnabled || !lfoTelemetry?.enabled) return 0;
+  const elapsed = Math.min(1 / 30, Math.max(0, performance.now() - lfoTelemetryReceivedAt) / 1000);
+  return (lfoTelemetry.phase + elapsed * lfoTelemetry.rateHz) % 1;
+};
+const lfoTelemetryBipolarValue = () => !lfoTelemetry?.enabled ? 0
+  : state.lfoPolarity === 'unipolar' ? (lfoTelemetry.value * 2) - 1 : lfoTelemetry.value;
+const lfoDisplaySample = phase => {
+  const bipolar = state.lfoEnabled && state.lfoWaveform === 'sample-hold'
+    ? lfoTelemetryBipolarValue()
+    : waveformSample(state.lfoWaveform, phase + state.lfoPhase / 360, 0);
+  return state.lfoPolarity === 'unipolar' ? (bipolar + 1) / 2 : bipolar;
+};
+const renderLfoWaveform = () => {
+  if (!lfoWavePath) return;
+  const count = 128;
+  let path = '';
+  for (let index = 0; index <= count; index += 1) {
+    const phase = index / count;
+    const heldRandom = state.lfoEnabled && state.lfoWaveform === 'sample-hold' ? lfoTelemetryBipolarValue() : 0;
+    const bipolar = waveformSample(state.lfoWaveform, phase + state.lfoPhase / 360, heldRandom);
+    const value = state.lfoPolarity === 'unipolar' ? (bipolar + 1) / 2 : bipolar;
+    const y = state.lfoPolarity === 'unipolar' ? 228 - value * 216 : 120 - value * 108;
+    path += `${index ? 'L' : 'M'}${(phase * 1000).toFixed(2)} ${y.toFixed(2)} `;
+  }
+  lfoWavePath.setAttribute('d', path.trim());
+};
+const renderLfoPhase = () => {
+  if (!lfoPhaseLine || !lfoPhaseDot) return;
+  const phase = getDisplayedLfoPhase();
+  const x = phase * 1000;
+  const sample = lfoDisplaySample(phase);
+  const value = state.lfoPolarity === 'unipolar' ? sample : (sample + 1) / 2;
+  const y = 228 - value * 216;
+  lfoPhaseLine.setAttribute('x1', x.toFixed(2));
+  lfoPhaseLine.setAttribute('x2', x.toFixed(2));
+  lfoPhaseDot.setAttribute('cx', x.toFixed(2));
+  lfoPhaseDot.setAttribute('cy', y.toFixed(2));
+  if (lfoPhaseReadout) lfoPhaseReadout.textContent = `${Math.round(phase * 360)} deg - ${lfoFormatRate(state.lfoRateHz)}`;
+};
+const renderLfoControls = () => {
+  if (!lfoPowerButton) return;
+  lfoPowerButton.setAttribute('aria-pressed', String(state.lfoEnabled));
+  lfoPowerButton.setAttribute('aria-label', state.lfoEnabled ? 'LFO ausschalten' : 'LFO einschalten');
+  lfoWaveformButtons.forEach(button => {
+    const active = LFO_WAVEFORMS.includes(button.dataset.lfoWaveform) && button.dataset.lfoWaveform === state.lfoWaveform;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  lfoPolarityButtons.forEach(button => {
+    const active = button.dataset.lfoPolarity === state.lfoPolarity;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  if (lfoTargetSelect) {
+    const knownTarget = MODULATION_TARGETS.some(target => target.id === state.lfoTargetId);
+    if (state.lfoTargetId && !knownTarget && ![...lfoTargetSelect.options].some(option => option.value === state.lfoTargetId)) {
+      const unavailable = new Option(`UNAVAILABLE - ${state.lfoTargetId}`, state.lfoTargetId, true, true);
+      unavailable.disabled = true;
+      lfoTargetSelect.add(unavailable);
+    }
+    lfoTargetSelect.value = state.lfoTargetId || '';
+  }
+  if (lfoRateInput) lfoRateInput.value = String(rateToSlider(state.lfoRateHz));
+  if (lfoAmountInput) lfoAmountInput.value = String(state.lfoAmount);
+  if (lfoPhaseInput) lfoPhaseInput.value = String(state.lfoPhase);
+  const rateOutput = document.querySelector('[data-lfo-rate-output]');
+  const amountOutput = document.querySelector('[data-lfo-amount-output]');
+  const phaseOutput = document.querySelector('[data-lfo-phase-output]');
+  if (rateOutput) rateOutput.textContent = lfoFormatRate(state.lfoRateHz);
+  if (amountOutput) amountOutput.textContent = `${Math.round(state.lfoAmount)} %`;
+  if (phaseOutput) phaseOutput.textContent = `${Math.round(state.lfoPhase)} deg`;
+  const target = MODULATION_TARGETS.find(item => item.id === state.lfoTargetId);
+  const active = target ? isModulationTargetActive(target.id, lfoTargetContext()) : false;
+  if (lfoTargetState) {
+    lfoTargetState.textContent = !state.lfoTargetId ? 'NO TARGET ASSIGNED'
+      : !target ? 'UNAVAILABLE TARGET - NO MODULATION'
+        : !active ? `INACTIVE - ${target.activeWhen.toUpperCase()}`
+          : state.lfoEnabled ? 'ACTIVE' : 'ASSIGNED - LFO OFF';
+  }
+  lfoTargetControl?.classList.toggle('is-inactive', Boolean(state.lfoTargetId && !active));
+  if (lfoStatus) lfoStatus.textContent = `${state.lfoEnabled ? 'ON' : 'OFF'} - ${!state.lfoTargetId ? 'NO TARGET' : !target ? 'UNAVAILABLE' : !active ? 'INACTIVE' : target.label.toUpperCase()}`;
+  renderLfoWaveform();
+  renderLfoPhase();
+};
+const animateLfoDisplay = () => {
+  lfoAnimationFrame = 0;
+  if (state.selectedWorkspaceMode !== 'lfo' || !state.lfoEnabled || !lfoTelemetry?.enabled
+    || performance.now() - lfoTelemetryReceivedAt > 250) return;
+  renderLfoPhase();
+  lfoAnimationFrame = requestAnimationFrame(animateLfoDisplay);
+};
+const startLfoDisplay = () => {
+  if (!lfoAnimationFrame && state.lfoEnabled && lfoTelemetry?.enabled && state.selectedWorkspaceMode === 'lfo') {
+    lfoAnimationFrame = requestAnimationFrame(animateLfoDisplay);
+  }
+};
+const stopLfoDisplay = () => { if (lfoAnimationFrame) cancelAnimationFrame(lfoAnimationFrame); lfoAnimationFrame = 0; };
 const filterTypeDefinitions = window.FilterShape.FILTER_TYPE_DEFINITIONS;
 const filterControlDefinitions = window.FilterShape.FILTER_CONTROL_DEFINITIONS;
 const filterTypeGroups = document.querySelector('[data-filter-type-groups]');
@@ -1724,6 +1866,7 @@ const updateFilterState = values => {
   Object.assign(state, window.ResonantState.normalizeFilterState({ ...state, ...values }));
   audioEngine?.setFilterState(state);
   renderFilterMode();
+  renderLfoControls();
 };
 filterTypeButtons.forEach(button => button.addEventListener('click', () => {
   updateFilterState({ filterType: button.dataset.filterType });
@@ -2105,6 +2248,52 @@ document.querySelector('[data-dynamic-eq-reset]')?.addEventListener('click', () 
   renderDynamicEqControls();
 });
 renderDynamicEqControls();
+populateLfoTargets();
+renderLfoControls();
+lfoPowerButton?.addEventListener('click', event => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.detail === 0) return;
+  state.lfoEnabled = !state.lfoEnabled;
+  audioEngine?.setModulationState(state);
+  if (!state.lfoEnabled) { lfoTelemetry = null; stopLfoDisplay(); }
+  renderLfoControls();
+  startLfoDisplay();
+});
+lfoWaveformButtons.forEach(button => button.addEventListener('click', () => {
+  state.lfoWaveform = button.dataset.lfoWaveform;
+  audioEngine?.setModulationState(state);
+  renderLfoControls();
+}));
+lfoPolarityButtons.forEach(button => button.addEventListener('click', () => {
+  state.lfoPolarity = button.dataset.lfoPolarity;
+  audioEngine?.setModulationState(state);
+  renderLfoControls();
+}));
+lfoTargetSelect?.addEventListener('change', () => {
+  state.lfoTargetId = lfoTargetSelect.value;
+  audioEngine?.setModulationState(state);
+  renderLfoControls();
+});
+lfoRateInput?.addEventListener('input', () => {
+  state.lfoRateHz = sliderToRate(lfoRateInput.value);
+  audioEngine?.setModulationState(state);
+  renderLfoControls();
+});
+lfoAmountInput?.addEventListener('input', () => {
+  state.lfoAmount = Number(lfoAmountInput.value);
+  audioEngine?.setModulationState(state);
+  renderLfoControls();
+});
+lfoPhaseInput?.addEventListener('input', () => {
+  state.lfoPhase = Number(lfoPhaseInput.value);
+  audioEngine?.setModulationState(state);
+  renderLfoControls();
+});
+document.querySelector('[data-lfo-reset]')?.addEventListener('click', () => {
+  audioEngine?.resetLfoPhase();
+  renderLfoControls();
+});
 window.FilterMode = Object.freeze({
   getState: () => ({
     selectedWorkspaceMode: state.selectedWorkspaceMode,
@@ -2122,6 +2311,14 @@ window.FilterMode = Object.freeze({
   getManualBandState: () => ({ left: [...state.bandGainLeft], right: [...state.bandGainRight], perChannelBands: state.perChannelBands, linked: [...state.bandChannelLinked] }),
   getAudioEngine: () => audioEngine
 });
+window.LfoMode = Object.freeze({
+  getState: () => ({
+    lfoEnabled: state.lfoEnabled, lfoWaveform: state.lfoWaveform, lfoRateHz: state.lfoRateHz,
+    lfoPolarity: state.lfoPolarity, lfoPhase: state.lfoPhase, lfoTargetId: state.lfoTargetId, lfoAmount: state.lfoAmount
+  }),
+  getTelemetry: () => lfoTelemetry ? { ...lfoTelemetry } : null,
+  getAudioEngine: () => audioEngine
+});
 const renderFilterPower = () => {
   if (filterbankPowerButton) {
     filterbankPowerButton.setAttribute('aria-pressed', String(state.filterbankEnabled));
@@ -2136,6 +2333,7 @@ const setFilterbankEnabled = enabled => {
   state.filterbankEnabled = Boolean(enabled);
   audioEngine?.setFilterbankEnabled(state.filterbankEnabled);
   renderFilterPower();
+  renderLfoControls();
   return state.filterbankEnabled;
 };
 const setFilterEnabled = enabled => {
@@ -2143,6 +2341,7 @@ const setFilterEnabled = enabled => {
   audioEngine?.setFilterEnabled(state.filterEnabled);
   renderFilterPower();
   updatePerChannelBands();
+  renderLfoControls();
   return state.filterEnabled;
 };
 renderFilterPower();
@@ -2170,6 +2369,8 @@ const selectMode = mode => {
   modePanels.forEach(panel => { panel.hidden = panel.dataset.modePanel !== mode; });
   updateResonatorDiagnostics();
   if (mode === 'filter') renderFilterMode();
+  if (mode === 'lfo') { renderLfoControls(); startLfoDisplay(); }
+  else stopLfoDisplay();
 };
 modeTabs.forEach((tab, index) => {
   tab.tabIndex = tab.classList.contains('active') ? 0 : -1;
@@ -2843,6 +3044,15 @@ audioEngine = new AudioEngine({
     }
     if (state.selectedWorkspaceMode === 'dynamic-eq') requestAnimationFrame(renderDynamicEqControls);
   },
+  onLfoTelemetry: packet => {
+    lfoTelemetry = packet;
+    lfoTelemetryReceivedAt = performance.now();
+    if (state.selectedWorkspaceMode === 'lfo') {
+      if (state.lfoWaveform === 'sample-hold') renderLfoWaveform();
+      renderLfoPhase();
+      startLfoDisplay();
+    }
+  },
   onOutputProtectionTelemetry: packet => devLabTelemetry.receiveOutputProtection(packet),
   onOutputGuardTelemetry: packet => devLabTelemetry.receiveOutputGuard(packet)
 });
@@ -3078,6 +3288,7 @@ const persistSweetspots = () => {
 const syncUiFromAudioState = snapshot => {
   if (!snapshot) return;
   Object.assign(state, window.ResonantState.normalizeDynamicEqState(snapshot));
+  Object.assign(state, window.ResonantState.normalizeModulationState(snapshot));
   renderDynamicEqControls();
   Object.assign(state, window.ResonantState.normalizeFilterState({
     filterType: snapshot.filterType ?? state.filterType,
@@ -3169,11 +3380,20 @@ const syncUiFromAudioState = snapshot => {
   renderBandSliderValues();
   renderFilterPower();
   renderFilterMode();
+  renderLfoControls();
 };
 // This is the complete, explicit DEV/LAB snapshot contract. Normal app state
 // is intentionally absent: DEV/LAB snapshots are experimental configurations,
 // not production presets.
 const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
+  ['lfoWaveform', value => { state.lfoWaveform = value; audioEngine.setModulationState(state); }],
+  ['lfoRateHz', value => { state.lfoRateHz = value; audioEngine.setModulationState(state); }],
+  ['lfoPolarity', value => { state.lfoPolarity = value; audioEngine.setModulationState(state); }],
+  ['lfoPhase', value => { state.lfoPhase = value; audioEngine.setModulationState(state); }],
+  ['lfoTargetId', value => { state.lfoTargetId = value; audioEngine.setModulationState(state); }],
+  ['lfoAmount', value => { state.lfoAmount = value; audioEngine.setModulationState(state); }],
+  ['lfoSeed', value => { state.lfoSeed = value; audioEngine.setModulationState(state); }],
+  ['lfoEnabled', value => { state.lfoEnabled = value === true; audioEngine.setModulationState(state); }],
   ['inputPreampStage', value => audioEngine.setInputPreampStage(value)],
   ['inputCharacterAmount', value => setInputCharacterAmount(value)],
   ['outputGuardEnabled', value => audioEngine.setOutputGuardEnabled(value)],

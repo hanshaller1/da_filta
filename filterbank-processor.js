@@ -1,8 +1,13 @@
 import { LinearTptSvf, OversampledPositiveTptResonator } from './tpt-svf.js';
 import { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } from './dynamic-eq-core.mjs';
+import { FilterShape } from './filter-shape-core.mjs';
+import { ModulationCore } from './modulation-core.mjs';
+import { LfoOscillator, normalizeLfoState } from './lfo-core.mjs';
 
 const COMMON_BUS_RESONANCE_EPSILON = 1e-12;
 const DIAGNOSTICS_UPDATE_HZ = 15;
+const MODULATION_CONTROL_INTERVAL = 32;
+const LFO_TELEMETRY_HZ = 30;
 const LEARNED_REFERENCE_ADAPTATION_SECONDS = 30;
 const dynamicEqLocalReferenceDb = (levels, band, precomputedWeights) => {
   let weightedLevel = 0;
@@ -28,6 +33,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     super();
 
     const processorOptions = options?.processorOptions || {};
+    this.modulationCore = new ModulationCore();
+    this.lfo = new LfoOscillator();
+    this.dynamicEqEffectiveSettings = {};
+    this.modulationTelemetryCounter = 0;
+    this.modulationTelemetryInterval = Math.max(1, Math.round(sampleRate / LFO_TELEMETRY_HZ));
+    this.modulationTelemetryDirty = false;
     this.bandFrequencies = this.readBandDefinition(processorOptions.bandFrequencies, 'Frequenzen');
     this.bandQs = this.readBandDefinition(processorOptions.bandQs, 'Q-Werte');
     this.bandCount = this.bandFrequencies.length;
@@ -174,6 +185,25 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       left: [...this.deltaGains.left],
       right: [...this.deltaGains.right]
     };
+    const initialModulationState = processorOptions.modulationState || {};
+    this.filterEnabled = initialModulationState.filterEnabled === true;
+    this.filterbankEnabled = initialModulationState.filterbankEnabled !== false;
+    this.baseResonance = this.clampResonance(initialModulationState.baseResonance ?? processorOptions.resonance);
+    this.filterShapeParams = {};
+    this.effectiveFilterShapeParams = {};
+    this.baseFilterShapeGainsDb = new Float64Array(this.bandCount);
+    this.effectiveFilterShapeGainsDb = new Float64Array(this.bandCount);
+    this.modulationDirectBandOffsetsDb = new Float64Array(this.bandCount);
+    this.modulationBandOffsetsDb = new Float64Array(this.bandCount);
+    this.modulationBandOffsetsDbSmoothed = {
+      left: new Float64Array(this.bandCount),
+      right: new Float64Array(this.bandCount)
+    };
+    this.modulationBandGainTargets = { left: new Float64Array(this.bandCount).fill(1), right: new Float64Array(this.bandCount).fill(1) };
+    this.modulationBandGains = { left: new Float64Array(this.bandCount).fill(1), right: new Float64Array(this.bandCount).fill(1) };
+    this.modulationControlCounter = 0;
+    this.modulationGainSmoothingCoefficient = this.smoothingCoefficient(0.004, 0.004);
+    this.setModulationState(initialModulationState);
     this.feedbackGates = {
       left: this.readFeedbackGates(processorOptions.feedbackBandLeft),
       right: this.readFeedbackGates(processorOptions.feedbackBandRight)
@@ -466,6 +496,13 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     return 10 ** (gainDb / 20) - 1;
   }
 
+  controlToGainDb(control) {
+    const normalizedControl = this.clampControl(control) / 100;
+    return normalizedControl >= 0
+      ? this.maxBandBoostDb * normalizedControl
+      : this.maxBandCutDb * normalizedControl;
+  }
+
   getResonatorMagnitudeTarget(localGate) {
     if (localGate <= 1e-12 || this.resonanceTarget <= 0) return 0;
     const resonance = this.resonanceTarget;
@@ -523,6 +560,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       if (!this.initializingDynamicEq) this.dynamicEqTelemetryDirty = true;
     }
     Object.assign(this, settings);
+    Object.assign(this.dynamicEqEffectiveSettings, settings);
     this.dynamicEqCutRangeDb = settings.dynamicEqCutRangeDb;
     this.dynamicEqBoostRangeDb = settings.dynamicEqBoostRangeDb;
     this.dynamicEqAttackCoefficient = timeCoefficient(this.dynamicEqAttackMs, sampleRate);
@@ -577,14 +615,14 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       this.dynamicEqLevelByChannel.left[band] = leftDb;
       this.dynamicEqLevelByChannel.right[band] = rightDb;
       const sensitivity = this.dynamicEqBandSensitivity[band] / 100;
-      const leftTarget = this.dynamicEqEnabled ? targetGainDb(leftDb, this, 100, band,
+      const leftTarget = this.dynamicEqEnabled ? targetGainDb(leftDb, this.dynamicEqEffectiveSettings, 100, band,
         this.stereoDetectorMode === 'DUAL' ? this.dynamicEqLevelByChannel.left : this.dynamicEqLevelDb,
         this.bandFrequencies, this.dynamicEqRelativeWeights) : 0;
       this.dynamicEqTargetByChannel.left[band] = leftTarget;
       this.dynamicEqSmoothedByChannel.left[band] = smoothGain(this.dynamicEqSmoothedByChannel.left[band], leftTarget, this.dynamicEqAttackCoefficient, this.dynamicEqReleaseCoefficient);
       this.dynamicEqGainByChannel.left[band] = sensitivity === 0 ? 0 : this.dynamicEqSmoothedByChannel.left[band] * sensitivity;
       if (channels === 2) {
-        const rightTarget = this.dynamicEqEnabled ? targetGainDb(rightDb, this, 100, band,
+        const rightTarget = this.dynamicEqEnabled ? targetGainDb(rightDb, this.dynamicEqEffectiveSettings, 100, band,
           this.dynamicEqLevelByChannel.right, this.bandFrequencies, this.dynamicEqRelativeWeights) : 0;
         this.dynamicEqTargetByChannel.right[band] = rightTarget;
         this.dynamicEqSmoothedByChannel.right[band] = smoothGain(this.dynamicEqSmoothedByChannel.right[band], rightTarget, this.dynamicEqAttackCoefficient, this.dynamicEqReleaseCoefficient);
@@ -1413,6 +1451,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.bandControls[channel][index] = control;
     this.deltaTargets[channel][index] = deltaGain;
     if (immediate) this.deltaGains[channel][index] = deltaGain;
+    if (this.hasFilterbankBandModulation) {
+      this.updateModulationTargets(this.lfo.enabled ? this.lfo.readSample() : 0);
+    }
   }
 
   setBandFeedback(channel, index, enabled, immediate = false) {
@@ -1432,6 +1473,91 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   setResonance(value, immediate = false) {
     this.resonanceTarget = this.clampResonance(value);
     if (immediate) this.resonance = this.resonanceTarget;
+  }
+
+  setBaseResonance(value, immediate = false) {
+    this.baseResonance = this.clampResonance(value);
+    this.updateModulationTargets(this.lfo?.enabled ? this.lfo.readSample() : 0);
+    if (immediate && !this.modulationCore.assignments.some(item => item.targetId === 'global.resonance')) {
+      this.setEffectiveResonance(this.baseResonance, true);
+    }
+  }
+
+  setEffectiveResonance(value, immediate = false) {
+    this.setResonance(this.filterbankEnabled ? value : 0, immediate);
+  }
+
+  getModulationBandBaseDb(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= this.bandCount) return 0;
+    return (this.controlToGainDb(this.bandControls.left[index])
+      + this.controlToGainDb(this.bandControls.right[index])) / 2;
+  }
+
+  updateModulationTargets(sourceValue) {
+    this.modulationCore.setSourceValue('lfo.1', this.lfo.enabled
+      ? { value: sourceValue, range: this.lfo.polarity }
+      : { value: 0, range: 'bipolar' });
+    this.modulationCore.evaluate(this);
+    if (this.hasFilterParameterModulation) {
+      FilterShape.writeFilterShape(this.filterShapeParams, this.bandFrequencies, this.baseFilterShapeGainsDb);
+      FilterShape.writeFilterShape(this.effectiveFilterShapeParams, this.bandFrequencies, this.effectiveFilterShapeGainsDb);
+      for (let index = 0; index < this.bandCount; index += 1) {
+        this.modulationBandOffsetsDb[index] = this.effectiveFilterShapeGainsDb[index] - this.baseFilterShapeGainsDb[index]
+          + this.modulationDirectBandOffsetsDb[index];
+        this.setModulationBandGainTarget(index);
+      }
+    } else {
+      this.modulationBandOffsetsDb.set(this.modulationDirectBandOffsetsDb);
+      for (let index = 0; index < this.bandCount; index += 1) this.setModulationBandGainTarget(index);
+    }
+  }
+
+  setModulationBandGainTarget(index) {
+    const offsetDb = this.modulationBandOffsetsDb[index];
+    for (const channel of ['left', 'right']) {
+      const baseDb = this.controlToGainDb(this.bandControls[channel][index]);
+      const effectiveDb = Math.min(this.maxBandBoostDb, Math.max(-this.maxBandCutDb, baseDb + offsetDb));
+      this.modulationBandGainTargets[channel][index] = 10 ** ((effectiveDb - baseDb) / 20);
+    }
+  }
+
+  setModulationState(source = {}) {
+    const lfoState = normalizeLfoState(source);
+    if (source.filterShapeParams && typeof source.filterShapeParams === 'object') {
+      Object.assign(this.filterShapeParams, source.filterShapeParams);
+      Object.assign(this.effectiveFilterShapeParams, source.filterShapeParams);
+    }
+    this.filterShapeParams.maxBandBoostDb = this.maxBandBoostDb;
+    this.filterShapeParams.maxBandCutDb = this.maxBandCutDb;
+    this.effectiveFilterShapeParams.maxBandBoostDb = this.maxBandBoostDb;
+    this.effectiveFilterShapeParams.maxBandCutDb = this.maxBandCutDb;
+    if (typeof source.filterEnabled === 'boolean') this.filterEnabled = source.filterEnabled;
+    if (typeof source.filterbankEnabled === 'boolean') this.filterbankEnabled = source.filterbankEnabled;
+    if (Number.isFinite(Number(source.baseResonance))) this.baseResonance = this.clampResonance(source.baseResonance);
+    const wasEnabled = this.lfo.enabled;
+    this.lfo.configure(lfoState);
+    this.modulationCore.removeAssignmentsForSource('lfo.1');
+    const assignments = Array.isArray(source.assignments) ? source.assignments : [];
+    for (const assignment of assignments) this.modulationCore.setAssignment(assignment);
+    if (!assignments.length && lfoState.lfoTargetId) {
+      this.modulationCore.setAssignment({ sourceId: 'lfo.1', targetId: lfoState.lfoTargetId, amount: lfoState.lfoAmount });
+    }
+    this.hasFilterParameterModulation = this.modulationCore.assignments.some(item => item.targetId.startsWith('filter.'));
+    this.hasFilterbankBandModulation = this.modulationCore.assignments.some(item => item.targetId.startsWith('filterbank.band.'));
+    this.updateModulationTargets(this.lfo.enabled ? this.lfo.readSample() : 0);
+    this.modulationControlCounter = 0;
+    this.modulationTelemetryDirty = true;
+    if (!wasEnabled && this.lfo.enabled) this.modulationTelemetryCounter = this.modulationTelemetryInterval;
+  }
+
+  advanceModulationFrame() {
+    if (!this.lfo.enabled) return;
+    const sourceValue = this.lfo.advance(sampleRate);
+    this.modulationControlCounter += 1;
+    if (this.modulationControlCounter >= MODULATION_CONTROL_INTERVAL) {
+      this.modulationControlCounter = 0;
+      this.updateModulationTargets(sourceValue);
+    }
   }
 
   setPositiveResonanceAuditionGain(value, immediate = false) {
@@ -1763,6 +1889,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.negativeResonanceLocal !== undefined) this.setNegativeResonanceLocal(data.negativeResonanceLocal);
     if (data.negativeResonanceMain !== undefined) this.setNegativeResonanceMain(data.negativeResonanceMain);
     if (data.negativeResonancePhase !== undefined) this.setNegativeResonancePhase(data.negativeResonancePhase);
+    if (data.modulationState) this.setModulationState(data.modulationState);
+    else if (Number.isFinite(Number(data.resonance))) this.setBaseResonance(data.resonance, true);
     this.initializeResonatorMagnitudes();
   }
 
@@ -1774,6 +1902,13 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       return;
     }
     if (data.type === 'set-dynamic-eq') { this.setDynamicEq(data); return; }
+    if (data.type === 'set-modulation-state') { this.setModulationState(data); return; }
+    if (data.type === 'reset-lfo-phase') {
+      this.lfo.reset();
+      this.updateModulationTargets(this.lfo.enabled ? this.lfo.readSample() : 0);
+      this.modulationTelemetryDirty = true;
+      return;
+    }
     if (data.type === 'dynamic-eq-learn') {
       this.learnAccumulator.fill(0); this.learnFrames = 0; this.learnActive = true;
       this.learnedReferenceFrozen = false; this.dynamicEqTelemetryDirty = true; return;
@@ -1798,7 +1933,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       return;
     }
     if (data.type === 'set-resonance') {
-      this.setResonance(data.value);
+      this.setBaseResonance(data.value);
       return;
     }
     if (data.type === 'set-positive-resonance-audition-gain') {
@@ -2072,25 +2207,34 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       globalTapSum += bandOutput;
       if (!zdfActive) deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
       const staticGain = 1 + deltaGains[band];
+      const modulationTarget = this.modulationBandGainTargets[channel][band];
+      const modulationGain = modulationTarget + this.modulationGainSmoothingCoefficient
+        * (this.modulationBandGains[channel][band] - modulationTarget);
+      this.modulationBandGains[channel][band] = modulationGain;
+      const modulationOffsetTargetDb = this.modulationBandOffsetsDb[band];
+      const modulationOffsetDb = modulationOffsetTargetDb + this.modulationGainSmoothingCoefficient
+        * (this.modulationBandOffsetsDbSmoothed[channel][band] - modulationOffsetTargetDb);
+      this.modulationBandOffsetsDbSmoothed[channel][band] = modulationOffsetDb;
+      const effectiveStaticGain = staticGain * modulationGain;
       const dynamicDb = this.stereoDetectorMode === 'DUAL' ? this.dynamicEqGainByChannel[channel][band] : this.dynamicEqGainDb[band];
-      let audibleGain = staticGain;
+      let audibleGain = effectiveStaticGain;
       if (dynamicDb !== 0) {
         const preDynamicTarget = this.preDynamicGainDb[channel][band];
         const preDynamicDb = preDynamicTarget + this.bandGainSmoothingCoefficient
           * (this.preDynamicSmoothedDb[channel][band] - preDynamicTarget);
         this.preDynamicSmoothedDb[channel][band] = preDynamicDb;
         audibleGain = Math.pow(10, Math.max(-this.maxBandCutDb, Math.min(this.maxBandBoostDb,
-          preDynamicDb + dynamicDb)) / 20);
+          preDynamicDb + dynamicDb + modulationOffsetDb)) / 20);
       } else this.preDynamicSmoothedDb[channel][band] = this.preDynamicGainDb[channel][band];
       this.appliedBandGain[channel][band] = audibleGain;
-      const mainPostGainWeight = this.mainPostGainFeedbackWeight(staticGain);
+      const mainPostGainWeight = this.mainPostGainFeedbackWeight(effectiveStaticGain);
       if (this.collectResonatorDiagnostics) {
         this.resonatorDiagnostics[channel].mainPostGainFeedbackWeightDb[band] = 20 * Math.log10(mainPostGainWeight);
       }
       if (this.wetModel === 'reference-delta') mainOutput += (audibleGain - 1) * bandOutput;
       else filterbankSum += audibleGain * bandOutput;
       if (commonBusActive && localGate > 1e-12) {
-        commonTapSum += localGate * (this.feedbackTap === 'post-gain' ? staticGain * bandOutput : bandOutput);
+        commonTapSum += localGate * (this.feedbackTap === 'post-gain' ? effectiveStaticGain * bandOutput : bandOutput);
       }
       if (mainCommonBusActive || perBandCoupledMainActive) {
         mainTapSum += feedbackAllGate * (this.feedbackAllSource === 'post-gain-sum'
@@ -2361,6 +2505,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const rightOutput = outputChannels[1];
     const frameCount = Math.max(leftOutput?.length || 0, rightOutput?.length || 0);
     for (let frame = 0; frame < frameCount; frame += 1) {
+      this.advanceModulationFrame();
       const mixTarget = this.spectralCoreMixTarget;
       const nextMix = mixTarget + this.spectralCoreMixCoefficient * (this.spectralCoreMix - mixTarget);
       this.spectralCoreMix = Math.abs(nextMix - mixTarget) < 1e-6 ? mixTarget : nextMix;
@@ -2417,6 +2562,15 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
           ? this.processChannelFrame(source, 'right') : source;
         rightOutput[frame] = this.spectralCoreMix === 1 ? wet
           : this.spectralCoreMix === 0 ? source : source + this.spectralCoreMix * (wet - source);
+      }
+    }
+    if (this.lfo.enabled || this.modulationTelemetryDirty) {
+      this.modulationTelemetryCounter += frameCount;
+      if (this.modulationTelemetryCounter >= this.modulationTelemetryInterval || this.modulationTelemetryDirty) {
+        this.modulationTelemetryCounter %= this.modulationTelemetryInterval;
+        this.port.postMessage({ type: 'lfo-telemetry', enabled: this.lfo.enabled, waveform: this.lfo.waveform,
+          polarity: this.lfo.polarity, rateHz: this.lfo.rateHz, phase: this.lfo.phase, value: this.lfo.sampleValue });
+        this.modulationTelemetryDirty = false;
       }
     }
     if (this.dynamicEqEnabled || this.learnActive || this.learnCompleted || this.dynamicEqTelemetryDirty) {
