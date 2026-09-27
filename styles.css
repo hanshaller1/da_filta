@@ -1638,5 +1638,63 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 @media (min-width: 1200px) and (max-height: 800px) {
   .lfo-controls { gap: 6px; }
   .lfo-parameter-grid .filter-parameter-control { gap: 4px 4px; padding: 5px; }
-  .lfo-target-control { padding-bottom: 5px; }
+.lfo-target-control { padding-bottom: 5px; }
+}
+
+/* V1.5: one compact selected-source editor, with page-size independent slots. */
+.lfo-mode-panel { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; min-width: 0; padding: 8px; }
+.lfo-workspace-header { display: flex; justify-content: space-between; align-items: center; min-width: 0; color: var(--cyan); letter-spacing: .9px; }
+.lfo-workspace-header strong { font-size: 12px; }
+.lfo-workspace-header span { color: var(--secondary-text); font-size: var(--text-micro); }
+.lfo-slot-navigator { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; min-width: 0; }
+.lfo-slot { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 2px 7px; min-width: 0; min-height: 39px; padding: 4px 7px; border: 1px solid var(--output-border); border-radius: 3px; color: var(--secondary-text); background: var(--panel-background); text-align: left; }
+.lfo-slot.active { border-color: var(--cyan); color: var(--strong-text); background: var(--active-background); }
+.lfo-slot-number { grid-row: 1 / 3; align-self: center; color: var(--cyan); font-size: 11px; font-weight: 700; }
+.lfo-slot-state { font-size: 8px; letter-spacing: .5px; }
+.lfo-slot-detail { overflow: hidden; color: var(--secondary-text); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.lfo-slot.is-enabled .lfo-slot-state { color: var(--active-color, #f4d35e); }
+.lfo-page-nav { grid-column: 1 / -1; display: flex; justify-content: center; gap: 4px; padding-top: 2px; }
+.lfo-page-nav button { min-width: 24px; height: 20px; padding: 0 5px; }
+.lfo-editor { position: relative; display: grid; grid-template-columns: minmax(0, 38fr) minmax(0, 62fr); column-gap: 0; min-width: 0; min-height: 0; }
+.lfo-editor::before { position: absolute; z-index: 1; top: 8px; bottom: 8px; left: 38%; width: 1px; background: color-mix(in srgb, var(--panel-border) 26%, transparent); content: ''; pointer-events: none; }
+.lfo-response, .lfo-controls { min-width: 0; min-height: 0; padding: 8px 18px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.lfo-response > header { height: 22px; }
+.lfo-response > header strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.lfo-response > header button { flex: 0 0 auto; min-height: 21px; padding: 2px 6px; font-size: 8px; }
+.lfo-response .lfo-visualizer { height: 100%; min-height: 0; margin: 3px 0; }
+.lfo-controls { grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 10px; overflow: auto; }
+.lfo-wave-control { padding: 0 0 5px; }
+.lfo-wave-buttons { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.lfo-wave-buttons button { height: 25px; padding: 0 4px; font-size: 9px; }
+.lfo-wave-buttons button[aria-pressed=true] { border-color: var(--cyan); color: var(--cyan); background: var(--active-background); }
+.lfo-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; min-width: 0; align-items: end; }
+.lfo-clock-row { grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(92px, 1.2fr); }
+.lfo-inline-control { display: grid; gap: 5px; min-width: 0; color: var(--muted-text); font-size: 9px; letter-spacing: .5px; }
+.lfo-inline-control > div { display: flex; gap: 4px; }
+.lfo-inline-control button, .lfo-row > button { min-height: 26px; padding: 3px 6px; font-size: 9px; }
+.lfo-inline-control select, .lfo-inline-control input { width: 100%; min-width: 0; height: 27px; padding: 3px 6px; border: 1px solid var(--output-border); border-radius: 3px; color: var(--strong-text); background: var(--output-background); font: inherit; font-size: 10px; }
+.lfo-inline-control input { font-variant-numeric: tabular-nums; }
+.lfo-midi-status { overflow: hidden; padding-bottom: 5px; color: var(--secondary-text); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.lfo-parameter-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: minmax(82px, 1fr); column-gap: 14px; border: 0; }
+.lfo-parameter-grid .filter-parameter-control { gap: 8px 6px; padding: 9px; border: 0; background: transparent; font-size: 9px; }
+.lfo-parameter-grid .filter-parameter-control output { min-width: 44px; padding: 2px 4px; font-size: 9px; }
+.lfo-polarity-control { gap: 7px; padding: 9px; border: 0; font-size: 9px; }
+.lfo-polarity-control button { min-height: 26px; font-size: 9px; }
+.lfo-assignment-row { grid-template-columns: minmax(0, 2fr) minmax(72px, .8fr) auto auto; }
+.lfo-target-control { display: grid; grid-template-columns: 1fr; gap: 4px; min-width: 0; padding: 0; border: 0; font-size: 9px; }
+.lfo-target-control select { grid-column: auto; height: 27px; padding: 3px 6px; font-size: 10px; }
+.lfo-target-control small { overflow: hidden; min-height: 9px; color: var(--secondary-text); font-size: 8px; letter-spacing: .2px; text-overflow: ellipsis; white-space: nowrap; }
+.lfo-target-control.is-inactive small { color: var(--active-color, #f4d35e); }
+.lfo-reset { justify-self: end; min-height: 26px; padding: 3px 7px; font-size: 9px; }
+@media (max-width: 1050px) {
+  .lfo-editor { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .lfo-editor::before { display: none; }
+  .lfo-response .lfo-visualizer { height: 110px; min-height: 110px; }
+  .lfo-controls { overflow: visible; }
+}
+@media (max-width: 560px) {
+  .lfo-clock-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lfo-midi-status { align-self: center; }
+  .lfo-parameter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(55px, auto)); }
+  .lfo-assignment-row { grid-template-columns: minmax(0, 1fr) minmax(72px, .6fr); }
 }

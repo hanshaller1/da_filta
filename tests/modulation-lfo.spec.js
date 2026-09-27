@@ -24,15 +24,14 @@ test('worklet modulation keeps base values and evaluates FILTER, resonance, filt
     const { Graph } = await import(bundleUrl);
     URL.revokeObjectURL(bundleUrl);
     const graph = new Graph(48000, options, 'linear', false);
+    const lfoSources = engine.getModulationState().lfoSources.map(source => ({ ...source }));
+    Object.assign(lfoSources[0], { enabled: true, waveform: 'saw-down', rateHz: 1, polarity: 'bipolar', phaseOffsetDeg: 0,
+      targetId: 'filter.frequencyHz', amount: 25 });
     const state = {
       ...engine.getModulationState(),
       lfoEnabled: true,
-      lfoWaveform: 'saw-down',
-      lfoRateHz: 1,
-      lfoPolarity: 'bipolar',
-      lfoPhase: 0,
-      lfoTargetId: 'filter.frequencyHz',
-      lfoAmount: 25,
+      lfoModuleEnabled: true,
+      lfoSources,
       assignments: [
         { sourceId: 'lfo.1', targetId: 'filter.frequencyHz', amount: 25 },
         { sourceId: 'lfo.1', targetId: 'global.resonance', amount: 25 },
@@ -63,7 +62,7 @@ test('worklet modulation keeps base values and evaluates FILTER, resonance, filt
     };
     graph.bank.setModulationState({ ...state, filterbankEnabled: false });
     const feedbackOff = { base: graph.bank.baseResonance, effective: graph.bank.resonanceTarget };
-    graph.bank.setModulationState({ ...state, lfoEnabled: false });
+    graph.bank.setModulationState({ ...state, lfoEnabled: false, lfoModuleEnabled: false });
     const inactive = {
       filterEffective: graph.bank.effectiveFilterShapeParams.frequencyHz,
       resonanceEffective: graph.bank.resonanceTarget,
@@ -144,12 +143,15 @@ test('formant assignments survive inactive FILTER types and become active again'
     URL.revokeObjectURL(bundleUrl);
     const graph = new Graph(48000, options, 'linear', false);
     const assignment = { sourceId: 'lfo.1', targetId: 'filter.formantVowel', amount: 25 };
-    const config = type => ({
-      ...engine.getModulationState(),
-      filterShapeParams: window.FilterShape.shapeParametersFromState({ filterType: type, filterFormantVowel: 2 }),
-      lfoEnabled: true, lfoWaveform: 'saw-down', lfoTargetId: assignment.targetId, lfoAmount: assignment.amount,
-      assignments: [assignment]
-    });
+    const config = type => {
+      const lfoSources = engine.getModulationState().lfoSources.map(source => ({ ...source }));
+      Object.assign(lfoSources[0], { enabled: true, waveform: 'saw-down', targetId: assignment.targetId, amount: assignment.amount });
+      return {
+        ...engine.getModulationState(),
+        filterShapeParams: window.FilterShape.shapeParametersFromState({ filterType: type, filterFormantVowel: 2 }),
+        lfoEnabled: true, lfoModuleEnabled: true, lfoSources, assignments: [assignment]
+      };
+    };
     graph.bank.setModulationState(config('formant'));
     const activeValue = graph.bank.effectiveFilterShapeParams.formantVowel;
     graph.bank.setModulationState(config('lowpass'));
@@ -164,7 +166,60 @@ test('formant assignments survive inactive FILTER types and become active again'
   expect(result.preserved).toEqual([{ sourceId: 'lfo.1', targetId: 'filter.formantVowel', amount: 25 }]);
 });
 
-test('LFO workspace controls stay separate from selection and fit desktop and tablet viewports', async ({ page }) => {
+test('four LFOs concurrently modulate FILTER, stereo band gains, and dry/wet without changing bases', async ({ page }) => {
+  await page.goto('/');
+  const bundle = browserBundle('http://localhost:3000');
+  const result = await page.evaluate(async code => {
+    const engine = new window.AudioEngine({});
+    engine.setFilterEnabled(true);
+    engine.setDryWet(50);
+    const options = engine.getFilterbankState();
+    options.bandFrequencies = [...window.Filterbank.BAND_FREQUENCIES];
+    options.bandQs = [...window.Filterbank.BAND_QS];
+    options.bandGainLeft = Array(10).fill(0); options.bandGainRight = Array(10).fill(0);
+    options.bandGainLeft[2] = 50; options.bandGainRight[2] = -100 / 6;
+    options.maxBandBoostDb = 12; options.maxBandCutDb = 12;
+    const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+    const { Graph } = await import(url); URL.revokeObjectURL(url);
+    const graph = new Graph(48000, options, 'linear', false);
+    const sources = engine.getModulationState().lfoSources.map((source, index) => ({
+      ...source, enabled: true, waveform: index === 3 ? 'square' : 'saw-down', rateHz: 1, rateMode: 'free', polarity: 'bipolar', phaseOffsetDeg: 0,
+      amount: [25, 25, 25, 20][index], invert: index === 2,
+      targetId: ['filter.frequencyHz', 'filterbank.band.2.gainDb', 'filterbank.band.2.gainDb', 'global.dryWet'][index],
+      channel: ['both', 'left', 'right', 'both'][index]
+    }));
+    const assignments = sources.map(source => ({ sourceId: source.id, targetId: source.targetId, amount: source.amount, channel: source.channel }));
+    graph.bank.setModulationState({ ...engine.getModulationState(), lfoModuleEnabled: true, lfoSources: sources, assignments,
+      filterEnabled: true, filterbankEnabled: true, dryWet: 50 });
+    const active = {
+      filterBase: graph.bank.filterShapeParams.frequencyHz,
+      filterEffective: graph.bank.effectiveFilterShapeParams.frequencyHz,
+      leftOffset: graph.bank.modulationDirectBandOffsetsByChannel.left[2],
+      rightOffset: graph.bank.modulationDirectBandOffsetsByChannel.right[2],
+      dryWetBase: graph.bank.dryWet,
+      dryWetEffective: graph.bank.effectiveDryWetTarget,
+      sourceBases: [graph.bank.bandControls.left[2], graph.bank.bandControls.right[2]]
+    };
+    graph.bank.setModulationState({ ...engine.getModulationState(), lfoModuleEnabled: true, lfoSources: sources, assignments,
+      filterEnabled: true, filterbankEnabled: true, dryWet: 50, perChannelBands: true, baseSpread: 0,
+      assignments: [...assignments, { sourceId: 'lfo.4', targetId: 'global.spread', amount: 100 }] });
+    const silence = [new Float32Array(128), new Float32Array(128)];
+    for (let block = 0; block < 100; block += 1) graph.process(silence);
+    return { active, spreadOffset: graph.bank.effectiveSpreadDeltaDb, spreadMode: graph.bank.spreadMode,
+      dryWetControlDelta: graph.bankModOut[0][127] };
+  }, bundle);
+  expect(result.active.filterBase).toBe(777);
+  expect(result.active.filterEffective).toBeGreaterThan(777);
+  expect(result.active.leftOffset).toBeCloseTo(3, 8);
+  expect(result.active.rightOffset).toBeCloseTo(-3, 8);
+  expect(result.active.dryWetBase).toBe(50);
+  expect(result.active.dryWetEffective).toBe(60);
+  expect(result.active.sourceBases).toEqual([50, -100 / 6]);
+  expect(result.spreadOffset).toBe(0);
+  expect(result.dryWetControlDelta).toBeCloseTo(.1, 2);
+});
+
+test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsive', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto('/');
@@ -172,8 +227,9 @@ test('LFO workspace controls stay separate from selection and fit desktop and ta
     await page.setViewportSize(viewport);
     await page.locator('[data-mode="lfo"]').click();
     await expect(page.locator('[data-mode-panel="lfo"]')).toBeVisible();
-    await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-waveform]')).toHaveCount(6);
-    await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-target] option')).toHaveCount(21);
+    await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-waveform]')).toHaveCount(8);
+    await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-target] option')).toHaveCount(28);
+    await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-slot]')).toHaveCount(4);
     await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-rate]')).toBeVisible();
     await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-amount]')).toBeVisible();
     await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-phase]')).toBeVisible();
@@ -182,6 +238,7 @@ test('LFO workspace controls stay separate from selection and fit desktop and ta
       page: document.documentElement.scrollWidth,
       panel: document.querySelector('[data-mode-panel="lfo"]').scrollWidth,
       panelWidth: document.querySelector('[data-mode-panel="lfo"]').clientWidth,
+      graphHeight: document.querySelector('[data-lfo-visualizer]').getBoundingClientRect().height,
       maxScrollLeft: (() => { window.scrollTo(1000, 0); const value = window.scrollX; window.scrollTo(0, 0); return value; })(),
       overflowing: [...document.querySelectorAll('body *')].map(element => ({
         tag: element.tagName, id: element.id, className: typeof element.className === 'string' ? element.className : '',
@@ -191,6 +248,7 @@ test('LFO workspace controls stay separate from selection and fit desktop and ta
     }));
     expect(overflow.page, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.viewport);
     expect(overflow.panel).toBeLessThanOrEqual(overflow.panelWidth);
+    expect(overflow.graphHeight, JSON.stringify(overflow)).toBeLessThanOrEqual(150);
     expect(overflow.maxScrollLeft, JSON.stringify({ viewport, overflow })).toBe(0);
   }
   for (const theme of ['clean-modern', 'warm-studio']) {
@@ -199,35 +257,49 @@ test('LFO workspace controls stay separate from selection and fit desktop and ta
     expect(themedStroke).not.toBe('none');
     expect(themedStroke).not.toBe('');
   }
-  const before = await page.evaluate(() => window.LfoMode.getState().lfoEnabled);
-  expect(before).toBe(false);
+  const before = await page.evaluate(() => window.LfoMode.getState());
+  expect(before.lfoModuleEnabled).toBe(false);
+  await page.locator('[data-lfo-slot="2"]').click();
+  const selected = await page.evaluate(() => window.LfoMode.getState());
+  expect(selected.selectedLfoIndex).toBe(2);
+  expect(selected.lfoModuleEnabled).toBe(false);
+  expect(selected.lfoSources).toEqual(before.lfoSources);
+  await page.locator('[data-lfo-source-enable]').click();
+  expect((await page.evaluate(() => window.LfoMode.getState())).selectedSourceEnabled).toBe(true);
   await page.locator('[data-module-power="lfo"]').click();
-  await page.locator('[data-lfo-waveform="triangle"]').click();
-  await page.locator('[data-lfo-target]').selectOption('filter.frequencyHz');
+  await page.locator('[data-lfo-waveform="noise"]').click();
+  await page.locator('[data-lfo-target]').selectOption('filterbank.band.5.gainDb');
+  await page.locator('[data-lfo-channel]').selectOption('left');
+  await page.locator('[data-lfo-invert]').click();
+  await page.locator('[data-lfo-rate-mode="sync"]').click();
+  await page.locator('[data-lfo-division]').selectOption('1/2');
+  await page.locator('[data-lfo-clock-source]').selectOption('midi');
+  await page.waitForTimeout(50);
+  const unavailableSafe = await page.evaluate(() => window.LfoMode.getState());
+  expect(unavailableSafe.lfoModuleEnabled).toBe(true);
+  expect(unavailableSafe.lfoSources[2]).toMatchObject({ enabled: true, waveform: 'noise', targetId: 'filterbank.band.5.gainDb', channel: 'left', invert: true, rateMode: 'sync', syncDivision: '1/2' });
+  await page.locator('[data-lfo-clock-source]').selectOption('internal');
+  await page.locator('[data-lfo-rate-mode="free"]').click();
   await page.locator('[data-lfo-rate]').evaluate(element => { element.value = '1000'; element.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.locator('[data-lfo-amount]').evaluate(element => { element.value = '60'; element.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.locator('[data-lfo-phase]').evaluate(element => { element.value = '90'; element.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.locator('[data-lfo-polarity="unipolar"]').click();
-  await page.evaluate(() => window.LfoMode.getAudioEngine().onLfoTelemetry({ enabled: true, waveform: 'triangle', polarity: 'bipolar', rateHz: 1, phase: .5, value: .75 }));
-  await page.locator('[data-lfo-waveform="sample-hold"]').click();
-  await page.evaluate(() => {
-    window.__lfoResetCalled = false;
-    window.LfoMode.getAudioEngine().filterbank = { resetLfoPhase() { window.__lfoResetCalled = true; return true; } };
-  });
-  await page.locator('[data-lfo-reset]').click();
+  await page.evaluate(() => window.LfoMode.getAudioEngine().onLfoTelemetry({ sourceId: 'lfo.3', enabled: true, waveform: 'noise', polarity: 'unipolar', rateHz: 20, phase: .5, value: .75 }));
   const ui = await page.evaluate(() => ({
     state: window.LfoMode.getState(),
     x: Number(document.querySelector('[data-lfo-phase-dot]').getAttribute('cx')),
-    y: Number(document.querySelector('[data-lfo-phase-dot]').getAttribute('cy')),
     wave: document.querySelector('[data-lfo-wave-path]').getAttribute('d'),
-    resetCalled: window.__lfoResetCalled
+    graphHeight: document.querySelector('[data-lfo-visualizer]').getBoundingClientRect().height,
+    pageCountForTwenty: window.LfoMode.getSlotPages(20).length,
+    pageSizesForTwenty: window.LfoMode.getSlotPages(20).map(page => page.length)
   }));
-  expect(ui.state).toMatchObject({ lfoEnabled: true, lfoWaveform: 'sample-hold', lfoTargetId: 'filter.frequencyHz', lfoAmount: 60, lfoPhase: 90, lfoPolarity: 'unipolar' });
+  expect(ui.state).toMatchObject({ lfoModuleEnabled: true, selectedLfoIndex: 2, lfoWaveform: 'noise', lfoTargetId: 'filterbank.band.5.gainDb', lfoAmount: 60, lfoPhase: 90, lfoPolarity: 'unipolar' });
   expect(ui.state.lfoRateHz).toBeCloseTo(20, 8);
   expect(ui.x).toBeGreaterThanOrEqual(500);
-  expect(ui.x).toBeLessThan(540);
-  expect(ui.y).toBeCloseTo(66, 0);
-  expect(ui.wave.startsWith('M0.00 66.00')).toBe(true);
-  expect(ui.resetCalled).toBe(true);
+  expect(ui.x).toBeLessThan(560);
+  expect(ui.wave.startsWith('M0.00 ')).toBe(true);
+  expect(ui.graphHeight).toBeLessThanOrEqual(150);
+  expect(ui.pageCountForTwenty).toBe(5);
+  expect(ui.pageSizesForTwenty).toEqual([4, 4, 4, 4, 4]);
   expect(pageErrors).toEqual([]);
 });

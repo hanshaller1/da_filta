@@ -1,4 +1,5 @@
-import { normalizeLfoState } from './lfo-core.mjs';
+import { normalizeModulationState } from './lfo-core.mjs';
+import { normalizeClockState } from './clock-core.mjs';
 
 (function () {
   const BAND_DEFINITIONS = Object.freeze([
@@ -57,7 +58,6 @@ import { normalizeLfoState } from './lfo-core.mjs';
       dynamicEqBandSensitivity: Array.from({ length: BAND_COUNT }, (_, index) => limited(source?.dynamicEqBandSensitivity?.[index], 0, 100, 100))
     };
   };
-  const normalizeModulationState = normalizeLfoState;
   const clampBandGain = value => {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) return BAND_GAIN_NEUTRAL;
@@ -161,6 +161,7 @@ import { normalizeLfoState } from './lfo-core.mjs';
     filterEnabled: false,
     ...normalizeDynamicEqState(),
     ...normalizeModulationState(),
+    lfoClock: normalizeClockState(),
     filterType: 'lowpass',
     filterFrequencyHz: 777,
     filterSlope: 50,

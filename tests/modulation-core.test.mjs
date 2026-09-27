@@ -8,13 +8,16 @@ import {
   mapModulationValue
 } from '../modulation-core.mjs';
 
-test('registry descriptors expose stable metadata and all V1 targets', () => {
-  assert.equal(MODULATION_TARGETS.length, 20);
+test('registry descriptors expose stable metadata and V1.5 continuous targets', () => {
+  assert.equal(MODULATION_TARGETS.length, 27);
   for (const target of MODULATION_TARGETS) {
     assert.ok(target.id && target.label && target.group && target.mapping);
     assert.deepEqual(target.clamp, { min: target.min, max: target.max });
   }
   assert.ok(getModulationTarget('filterbank.band.9.gainDb'));
+  for (const id of ['global.dryWet', 'global.spread', 'filterbank.feedbackAllAmount', 'filter.slope',
+    'filter.bandwidth', 'dynamicEq.attackMs', 'dynamicEq.releaseMs']) assert.ok(getModulationTarget(id));
+  assert.equal(getModulationTarget('filterbank.band.0.feedback'), null);
   assert.equal(getModulationTarget('button.power'), null);
 });
 
@@ -55,19 +58,95 @@ test('assignments preserve base values, add sources and clamp only effective val
 
 test('filterbank target range follows the active cut and boost limits', () => {
   const core = new ModulationCore();
+  const channelOffsets = { left: new Float64Array(10), right: new Float64Array(10) };
   const context = {
     filterbankEnabled: true,
     maxBandCutDb: 36,
     maxBandBoostDb: 18,
     getModulationBandBaseDb: () => 0,
+    setModulationBandOffset: (index, channel, value) => { channelOffsets[channel][index] = value; },
     modulationDirectBandOffsetsDb: new Float64Array(10)
   };
   core.setAssignment({ sourceId: 'lfo.1', targetId: 'filterbank.band.5.gainDb', amount: 100 });
   core.setSourceValue('lfo.1', .5);
   assert.equal(core.getEffectiveValue('filterbank.band.5.gainDb', context), 13.5);
   core.evaluate(context);
-  assert.equal(context.modulationDirectBandOffsetsDb[5], 13.5);
+  assert.equal(channelOffsets.left[5], 13.5);
+  assert.equal(channelOffsets.right[5], 13.5);
   assert.equal(core.getEffectiveValue('filterbank.band.5.gainDb', { ...context, maxBandCutDb: 60, maxBandBoostDb: 24 }), 21);
+});
+
+test('multiple independent sources sum deterministically on one target and preserve base state', () => {
+  const core = new ModulationCore();
+  const context = { filterbankEnabled: true, baseResonance: .2, effectiveResonance: .2,
+    setEffectiveResonance(value) { this.effectiveResonance = value; } };
+  core.setAssignment({ sourceId: 'lfo.1', targetId: 'global.resonance', amount: 25 });
+  core.setAssignment({ sourceId: 'lfo.2', targetId: 'global.resonance', amount: 25 });
+  core.setSourceValue('lfo.1', 1); core.setSourceValue('lfo.2', -.5);
+  core.evaluate(context);
+  assert.equal(context.effectiveResonance, .325);
+  core.evaluate(context);
+  assert.equal(context.effectiveResonance, .325);
+  assert.equal(context.baseResonance, .2);
+});
+
+test('stereo band assignments route independently and invert only the selected contribution', () => {
+  const core = new ModulationCore();
+  const offsets = { left: new Float64Array(10), right: new Float64Array(10) };
+  const context = {
+    filterbankEnabled: true, maxBandCutDb: 12, maxBandBoostDb: 12,
+    getModulationBandBaseDb: (_index, channel) => channel === 'left' ? 6 : -2,
+    setModulationBandOffset: (index, channel, value) => { offsets[channel][index] = value; }
+  };
+  core.setAssignment({ sourceId: 'lfo.1', targetId: 'filterbank.band.4.gainDb', amount: 25, channel: 'left' });
+  core.setAssignment({ sourceId: 'lfo.2', targetId: 'filterbank.band.4.gainDb', amount: 25, channel: 'right', invert: true });
+  core.setSourceValue('lfo.1', 1); core.setSourceValue('lfo.2', 1);
+  core.evaluate(context);
+  assert.equal(offsets.left[4], 3);
+  assert.equal(offsets.right[4], -3);
+  assert.deepEqual(core.getAssignments(), [
+    { sourceId: 'lfo.1', targetId: 'filterbank.band.4.gainDb', amount: 25, channel: 'left' },
+    { sourceId: 'lfo.2', targetId: 'filterbank.band.4.gainDb', amount: 25, channel: 'right', invert: true }
+  ]);
+});
+
+test('dry/wet and spread use effective setters without changing base values', () => {
+  const core = new ModulationCore();
+  const context = {
+    filterbankEnabled: true,
+    dryWet: 50, baseSpread: 0, spreadMaxOffsetDb: 6, spreadMode: 'CLASSIC', perChannelBands: false,
+    dryWetEffective: 50, spreadEffective: 0,
+    setEffectiveDryWet(value) { this.dryWetEffective = value; },
+    setEffectiveSpread(value) { this.spreadEffective = value; }
+  };
+  core.setAssignment({ sourceId: 'lfo.1', targetId: 'global.dryWet', amount: 100 });
+  core.setAssignment({ sourceId: 'lfo.2', targetId: 'global.spread', amount: 100 });
+  core.setSourceValue('lfo.1', .6); core.setSourceValue('lfo.2', 1);
+  core.evaluate(context);
+  assert.equal(context.dryWetEffective, 80);
+  assert.equal(context.spreadEffective, 6);
+  assert.deepEqual([context.dryWet, context.baseSpread], [50, 0]);
+});
+
+test('continuous FB All amount and existing Dynamic EQ attack/release stay effective-only targets', () => {
+  const core = new ModulationCore();
+  const context = {
+    filterbankEnabled: true, baseFeedbackAllAmount: 50, feedbackAllEffective: 50,
+    dynamicEqEnabled: true, dynamicEqAttackMs: 30, dynamicEqReleaseMs: 250,
+    dynamicEqEffectiveSettings: { dynamicEqAttackMs: 30, dynamicEqReleaseMs: 250 },
+    setEffectiveFeedbackAllAmount(value) { this.feedbackAllEffective = value; },
+    setEffectiveDynamicEqTimes(attack, release) { this.effectiveTimes = [attack, release]; }
+  };
+  core.setAssignment({ sourceId: 'lfo.1', targetId: 'filterbank.feedbackAllAmount', amount: 100 });
+  core.setAssignment({ sourceId: 'lfo.2', targetId: 'dynamicEq.attackMs', amount: 100 });
+  core.setAssignment({ sourceId: 'lfo.3', targetId: 'dynamicEq.releaseMs', amount: 100 });
+  core.setSourceValue('lfo.1', .5); core.setSourceValue('lfo.2', -1); core.setSourceValue('lfo.3', 1);
+  core.evaluate(context);
+  assert.equal(context.feedbackAllEffective, 75);
+  assert.equal(context.dynamicEqEffectiveSettings.dynamicEqAttackMs, 1);
+  assert.equal(context.dynamicEqEffectiveSettings.dynamicEqReleaseMs, 1245);
+  assert.deepEqual(context.effectiveTimes, [1, 1245]);
+  assert.deepEqual([context.baseFeedbackAllAmount, context.dynamicEqAttackMs, context.dynamicEqReleaseMs], [50, 30, 250]);
 });
 
 test('inactive targets keep their assignment and return the unmodified base', () => {

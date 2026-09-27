@@ -3,47 +3,68 @@ import assert from 'node:assert/strict';
 import {
   LfoOscillator,
   LFO_WAVEFORMS,
+  createLfoSources,
   normalizeLfoState,
+  normalizeModulationState,
+  paginateLfoSources,
   rateToSlider,
   sliderToRate,
   waveformSample
 } from '../lfo-core.mjs';
+import { ClockCore, SYNC_DIVISION_BEATS } from '../clock-core.mjs';
 
-test('legacy LFO state normalizes to a safe disabled default', () => {
+test('legacy flat state migrates to lfo.1 while additional sources default off and count scales to 20', () => {
+  const legacy = normalizeModulationState({ lfoEnabled: true, lfoWaveform: 'triangle', lfoRateHz: 2.5,
+    lfoPolarity: 'unipolar', lfoPhase: 90, lfoTargetId: 'filter.frequencyHz', lfoAmount: 55, lfoSeed: 123 });
+  assert.equal(legacy.lfoModuleEnabled, true);
+  assert.deepEqual(legacy.lfoSources[0], {
+    id: 'lfo.1', enabled: true, waveform: 'triangle', rateMode: 'free', rateHz: 2.5, syncDivision: '1/4',
+    polarity: 'unipolar', phaseOffsetDeg: 90, amount: 55, targetId: 'filter.frequencyHz', channel: 'both', invert: false, seed: 123
+  });
+  assert.deepEqual(legacy.lfoSources.slice(1).map(source => [source.id, source.enabled]), [['lfo.2', false], ['lfo.3', false], ['lfo.4', false]]);
+  assert.deepEqual(createLfoSources(20).map(source => source.id), Array.from({ length: 20 }, (_, index) => `lfo.${index + 1}`));
+  const sources = normalizeModulationState({ lfoSources: createLfoSources(20) }).lfoSources;
+  assert.equal(sources.length, 20);
+  assert.deepEqual(paginateLfoSources(sources, 4).map(page => page.length), [4, 4, 4, 4, 4]);
+});
+
+test('legacy normalizer and source settings clamp malformed values safely', () => {
   assert.deepEqual(normalizeLfoState({}), {
     lfoEnabled: false, lfoWaveform: 'sine', lfoRateHz: 1, lfoPolarity: 'bipolar',
     lfoPhase: 0, lfoTargetId: '', lfoAmount: 25, lfoSeed: 0x6d2b79f5
   });
-  const malformed = normalizeLfoState({ lfoEnabled: 1, lfoWaveform: 'noise', lfoRateHz: NaN,
+  const malformed = normalizeLfoState({ lfoEnabled: 1, lfoWaveform: 'not-a-wave', lfoRateHz: NaN,
     lfoPolarity: 'mono', lfoPhase: Infinity, lfoTargetId: {}, lfoAmount: -4 });
   assert.deepEqual(malformed, { ...normalizeLfoState({}), lfoAmount: 0 });
 });
 
-test('all six waveform generators stay in the bipolar range and define expected phase points', () => {
-  assert.deepEqual([...LFO_WAVEFORMS], ['sine', 'triangle', 'saw-up', 'saw-down', 'square', 'sample-hold']);
+test('eight waveform generators remain finite and expose distinct expected points', () => {
+  assert.deepEqual([...LFO_WAVEFORMS], ['sine', 'triangle', 'saw-up', 'saw-down', 'square', 'pulse', 'sample-hold', 'noise']);
   assert.ok(Math.abs(waveformSample('sine', .25) - 1) < 1e-12);
   assert.equal(waveformSample('triangle', .5), 1);
   assert.equal(waveformSample('saw-up', 0), -1);
   assert.equal(waveformSample('saw-down', 0), 1);
-  assert.equal(waveformSample('square', .75), -1);
+  assert.equal(waveformSample('square', .25), 1);
+  assert.equal(waveformSample('square', .5), -1);
+  assert.equal(waveformSample('pulse', .24), 1);
+  assert.equal(waveformSample('pulse', .25), -1);
   assert.equal(waveformSample('sample-hold', .7, .37), .37);
+  assert.equal(waveformSample('noise', .5, -1, 1), 0);
   for (const waveform of LFO_WAVEFORMS) {
     for (let index = 0; index <= 1000; index += 1) {
-      const value = waveformSample(waveform, index / 1000, .73);
+      const value = waveformSample(waveform, index / 1000, .73, -.42);
       assert.ok(Number.isFinite(value) && value >= -1 && value <= 1);
     }
   }
 });
 
-test('free-rate slider is logarithmic and spans 0.01 Hz through 20 Hz', () => {
+test('free-rate slider remains logarithmic over 0.01 through 20 Hz', () => {
   assert.equal(sliderToRate(0), .01);
   assert.equal(sliderToRate(1000), 20);
-  for (const rate of [.01, .1, 1, 20]) {
-    assert.ok(Math.abs(sliderToRate(rateToSlider(rate)) / rate - 1) < .005);
-  }
+  for (const rate of [.01, .1, 1, 20]) assert.ok(Math.abs(sliderToRate(rateToSlider(rate)) / rate - 1) < .005);
 });
 
-test('audio-thread phase follows sample count, power/reset start at zero, and offset/rate/wave changes preserve it', () => {
+test('audio-sample free phase, phase offset, reset, and parameter edits remain stable', () => {
   for (const rate of [.01, 1, 20]) {
     const oscillator = new LfoOscillator({ lfoEnabled: true, lfoRateHz: rate, lfoPhase: 0 });
     for (let frame = 0; frame < 48000; frame += 1) oscillator.advance(48000);
@@ -51,7 +72,7 @@ test('audio-thread phase follows sample count, power/reset start at zero, and of
   }
   const oscillator = new LfoOscillator({ lfoEnabled: true, lfoWaveform: 'saw-up', lfoRateHz: 1, lfoPhase: 90 });
   assert.equal(oscillator.phase, 0);
-  assert.equal(oscillator.sampleValue, -0.5);
+  assert.equal(oscillator.sampleValue, -.5);
   oscillator.advance(48000);
   const phase = oscillator.phase;
   oscillator.configure({ lfoWaveform: 'triangle', lfoRateHz: 20, lfoPhase: 180 });
@@ -63,13 +84,63 @@ test('audio-thread phase follows sample count, power/reset start at zero, and of
   assert.equal(oscillator.sampleValue, 1);
 });
 
-test('unipolar is the same waveform remapped to 0..1 and sample-and-hold is seeded', () => {
+test('polarity and invert affect only the sample; per-source random streams stay deterministic and independent', () => {
   const bipolar = new LfoOscillator({ lfoEnabled: true, lfoWaveform: 'triangle', lfoPhase: 180 });
   const unipolar = new LfoOscillator({ lfoEnabled: true, lfoWaveform: 'triangle', lfoPolarity: 'unipolar', lfoPhase: 180 });
-  assert.ok(bipolar.sampleValue >= -1 && bipolar.sampleValue <= 1);
+  const inverted = new LfoOscillator({ lfoEnabled: true, lfoWaveform: 'triangle', lfoPolarity: 'bipolar', lfoPhase: 180, invert: true });
   assert.ok(unipolar.sampleValue >= 0 && unipolar.sampleValue <= 1);
   assert.ok(Math.abs(unipolar.sampleValue - (bipolar.sampleValue + 1) / 2) < 1e-12);
-  const one = new LfoOscillator({ lfoEnabled: true, lfoWaveform: 'sample-hold', lfoRateHz: 20, lfoSeed: 42 });
-  const two = new LfoOscillator({ lfoEnabled: true, lfoWaveform: 'sample-hold', lfoRateHz: 20, lfoSeed: 42 });
-  for (let frame = 0; frame < 12000; frame += 1) assert.equal(one.advance(48000), two.advance(48000));
+  assert.equal(inverted.sampleValue, -bipolar.sampleValue);
+  const one = new LfoOscillator({ enabled: true, waveform: 'sample-hold', rateHz: 20, seed: 42 });
+  const sameSeed = new LfoOscillator({ enabled: true, waveform: 'sample-hold', rateHz: 20, seed: 42 });
+  const otherSeed = new LfoOscillator({ enabled: true, waveform: 'sample-hold', rateHz: 20, seed: 43 });
+  assert.notEqual(one.sampleValue, otherSeed.sampleValue);
+  for (let frame = 0; frame < 12000; frame += 1) assert.equal(one.advance(48000), sameSeed.advance(48000));
+});
+
+test('noise moves continuously and deterministically at the configured oscillator rate', () => {
+  const one = new LfoOscillator({ enabled: true, waveform: 'noise', rateHz: 2, seed: 77 });
+  const two = new LfoOscillator({ enabled: true, waveform: 'noise', rateHz: 2, seed: 77 });
+  const samples = [];
+  for (let frame = 0; frame < 24000; frame += 1) {
+    const a = one.advance(48000); const b = two.advance(48000);
+    assert.equal(a, b);
+    if (frame % 6000 === 0) samples.push(a);
+  }
+  assert.equal(new Set(samples).size, samples.length);
+  assert.ok(samples.every(value => value >= -1 && value <= 1));
+});
+
+test('internal clock produces audio-sample-accurate sync periods for note divisions', () => {
+  const checks = [['1/4', 24000], ['1/2', 48000], ['1/1', 96000]];
+  for (const [division, frames] of checks) {
+    const clock = new ClockCore({ source: 'internal', bpm: 120, running: true });
+    const oscillator = new LfoOscillator({ enabled: true, rateMode: 'sync', syncDivision: division });
+    for (let frame = 0; frame < frames; frame += 1) oscillator.advance(48000, clock.advance(48000), true);
+    assert.ok(Math.abs(oscillator.phase) < 1e-8, `${division} should complete at ${frames} samples`);
+  }
+  assert.deepEqual(Object.keys(SYNC_DIVISION_BEATS), ['1/32', '1/16', '1/8', '1/4', '1/2', '1/1', '2/1', '4/1']);
+});
+
+test('MIDI clock uses 24 PPQN, follows transport, and stop freezes sync phase only', () => {
+  const clock = new ClockCore({ source: 'midi', midiBpm: 120, running: false });
+  clock.start(true);
+  for (let pulse = 0; pulse < 24; pulse += 1) {
+    for (let sample = 0; sample < 1000; sample += 1) clock.advance(48000);
+    clock.midiPulse();
+  }
+  assert.ok(Math.abs(clock.beatPosition - 1) < 1e-8);
+  const phase = clock.beatPosition;
+  clock.stop();
+  for (let sample = 0; sample < 48000; sample += 1) clock.advance(48000);
+  assert.equal(clock.beatPosition, phase);
+  const sync = new LfoOscillator({ enabled: true, rateMode: 'sync', syncDivision: '1/4' });
+  const free = new LfoOscillator({ enabled: true, rateMode: 'free', rateHz: 1 });
+  for (let sample = 0; sample < 24000; sample += 1) {
+    const beat = clock.advance(48000);
+    sync.advance(48000, beat, clock.state.running);
+    free.advance(48000, beat, clock.state.running);
+  }
+  assert.equal(sync.phase, 0);
+  assert.ok(free.phase > 0.49 && free.phase < 0.51);
 });

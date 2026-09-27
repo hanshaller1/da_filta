@@ -99,6 +99,7 @@
       this.feedbackAllResonanceCurve = 'current';
       this.feedbackAllSaturationReturn = 'current';
       this.dryWet = 50;
+      this.lfoClock = { source: 'internal', bpm: 120, midiBpm: 120, running: true, midiAvailable: false, midiStatus: 'UNAVAILABLE' };
       this.volumeDb = -6;
       this.outputGuardEnabled = true;
       this.outputGuardThreshold = 0.8;
@@ -122,6 +123,7 @@
       this.inputPreampNode = null;
       this.dryGainNode = null;
       this.wetGainNode = null;
+      this.modulationDryInvertNode = null;
       this.bypassGainNode = null;
       this.bypass = false;
       // Passive visual-analysis sidechain. It is deliberately not routed back
@@ -196,6 +198,7 @@
       const gains = dryWetGains(this.dryWet);
       this.setSmoothedParam(this.dryGainNode?.gain, gains.dry, smoothingTime);
       this.setSmoothedParam(this.wetGainNode?.gain, gains.wet, smoothingTime);
+      this.syncModulationState();
     }
 
     panic() {
@@ -348,11 +351,11 @@
     setReferenceLevel(value) { this.referenceLevel = [1, 0.75, 0.5, 0.25, 0].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setReferenceLevel(this.referenceLevel); return this.referenceLevel; }
     setBandBoostDb(value) { this.maxBandBoostDb = [12, 18, 24].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandBoostDb(this.maxBandBoostDb); this.rebuildFilterModeBandControls(); this.applyEffectiveBandGains(); return this.maxBandBoostDb; }
     setBandCutDb(value) { this.maxBandCutDb = [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandCutDb(this.maxBandCutDb); this.rebuildFilterModeBandControls(); this.applyEffectiveBandGains(); return this.maxBandCutDb; }
-    setSpread(value) { this.spread = clampSpread(value, this.spreadMaxOffsetDb); return this.spread; }
-    setPerChannelBands(value) { this.perChannelBands = Boolean(value); this.applyEffectiveBandGains(); return this.perChannelBands; }
-    setSpreadMode(value) { this.spreadMode = value === 'FB_CH_SELECT' ? 'FB_CH_SELECT' : 'CLASSIC'; this.applyEffectiveBandGains(); return this.spreadMode; }
+    setSpread(value) { this.spread = clampSpread(value, this.spreadMaxOffsetDb); this.syncModulationState(); return this.spread; }
+    setPerChannelBands(value) { this.perChannelBands = Boolean(value); this.applyEffectiveBandGains(); this.syncModulationState(); return this.perChannelBands; }
+    setSpreadMode(value) { this.spreadMode = value === 'FB_CH_SELECT' ? 'FB_CH_SELECT' : 'CLASSIC'; this.applyEffectiveBandGains(); this.syncModulationState(); return this.spreadMode; }
     setSpreadCurve(value) { this.spreadCurve = normalizeSpreadCurve(value); this.applyEffectiveBandGains(); return this.spreadCurve; }
-    setSpreadMaxOffsetDb(value) { this.spreadMaxOffsetDb = normalizeSpreadMaxOffsetDb(value); this.spread = clampSpread(this.spread, this.spreadMaxOffsetDb); return this.spreadMaxOffsetDb; }
+    setSpreadMaxOffsetDb(value) { this.spreadMaxOffsetDb = normalizeSpreadMaxOffsetDb(value); this.spread = clampSpread(this.spread, this.spreadMaxOffsetDb); this.syncModulationState(); return this.spreadMaxOffsetDb; }
     setPositiveResonanceEngine(value) { this.positiveResonanceEngine = value === 'phase2' ? value : 'tpt'; this.filterbank?.setPositiveResonanceEngine(this.positiveResonanceEngine); return this.positiveResonanceEngine; }
     setFeedbackTopology(value) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt'; this.filterbank?.setFeedbackTopology(this.feedbackTopology); return this.feedbackTopology; }
     setFeedbackCore(value) { this.feedbackCore = value === 'zdf-per-band' ? 'zdf-per-band' : value === 'zdf' ? 'zdf' : 'current'; this.filterbank?.setFeedbackCore(this.feedbackCore); return this.feedbackCore; }
@@ -430,6 +433,10 @@
 
     getModulationState() {
       const lfo = window.ResonantState.normalizeModulationState(this);
+      const assignments = lfo.lfoSources.filter(item => item.targetId).map(item => ({
+        sourceId: item.id, targetId: item.targetId, amount: item.amount,
+        ...(item.channel && item.channel !== 'both' ? { channel: item.channel } : {})
+      }));
       return {
         ...lfo,
         filterEnabled: this.filterEnabled,
@@ -440,20 +447,47 @@
         dynamicEqThresholdDb: this.dynamicEqThresholdDb,
         dynamicEqRangeDb: this.dynamicEqRangeDb,
         dynamicEqStrength: this.dynamicEqStrength,
-        assignments: lfo.lfoTargetId ? [{ sourceId: 'lfo.1', targetId: lfo.lfoTargetId, amount: lfo.lfoAmount }] : []
+        dynamicEqAttackMs: this.dynamicEqAttackMs,
+        dynamicEqReleaseMs: this.dynamicEqReleaseMs,
+        dryWet: this.dryWet,
+        baseSpread: this.spread,
+        spreadMaxOffsetDb: this.spreadMaxOffsetDb,
+        spreadMode: this.spreadMode,
+        perChannelBands: this.perChannelBands,
+        feedbackAllAmount: this.feedbackAllAmount,
+        clock: { ...this.lfoClock },
+        assignments
       };
     }
 
     setModulationState(source = {}) {
       Object.assign(this, window.ResonantState.normalizeModulationState(source));
+      if (source.clock) this.setLfoClockState(source.clock);
+      else if (source.lfoClock && Object.keys(source.lfoClock).some(key => source.lfoClock[key] !== this.lfoClock?.[key])) {
+        this.setLfoClockState(source.lfoClock);
+      }
       this.syncModulationState();
       return window.ResonantState.normalizeModulationState(this);
     }
 
-    resetLfoPhase() {
+    resetLfoPhase(sourceId) {
       if (!this.filterbank) return false;
-      this.filterbank.resetLfoPhase();
+      this.filterbank.resetLfoPhase(sourceId);
       return true;
+    }
+
+    setLfoClockState(clock) {
+      this.lfoClock = { ...this.lfoClock, ...(clock || {}) };
+      this.filterbank?.setClockState?.(clock);
+      return { ...this.lfoClock };
+    }
+
+    sendMidiClockPulse(bpm) {
+      this.filterbank?.sendMidiClockPulse?.(bpm);
+    }
+
+    sendLfoClockMessage(action) {
+      this.filterbank?.sendClockTransport?.(action);
     }
 
     syncModulationState() {
@@ -646,6 +680,7 @@
         spreadMode: this.spreadMode,
         spreadCurve: this.spreadCurve,
         spreadMaxOffsetDb: this.spreadMaxOffsetDb,
+        lfoClock: { ...this.lfoClock },
         filterbankEnabled: this.filterbankEnabled,
         filterEnabled: this.filterEnabled,
         ...window.ResonantState.normalizeDynamicEqState(this),
@@ -920,6 +955,8 @@
         });
         this.dryGainNode = this.context.createGain();
         this.wetGainNode = this.context.createGain();
+        this.modulationDryInvertNode = this.context.createGain();
+        this.modulationDryInvertNode.gain.value = -1;
         this.bypassGainNode = this.context.createGain();
         if (typeof this.context.createChannelSplitter === 'function' && typeof this.context.createAnalyser === 'function') {
           this.spectrumSplitterNode = this.context.createChannelSplitter(2);
@@ -979,6 +1016,11 @@
         this.inputPreampNode.connect(this.filterbank.input);
         this.dryGainNode.connect(this.mixBus);
         this.filterbank.output.connect(this.wetGainNode);
+        if (this.filterbank.modulationOutput) {
+          this.filterbank.modulationOutput.connect(this.wetGainNode.gain);
+          this.filterbank.modulationOutput.connect(this.modulationDryInvertNode);
+          this.modulationDryInvertNode.connect(this.dryGainNode.gain);
+        }
         // Tap the actual stereo Filterbank output before dry/wet and master
         // volume. The splitter/analyser branch has no connection to audio out.
         if (this.spectrumSplitterNode && this.spectrumAnalyserLeft && this.spectrumAnalyserRight) {
@@ -1021,7 +1063,7 @@
     async cleanup() {
       this.stopInputNodes({ immediate: true });
       if (this.filterbank) { this.filterbank.dispose(); this.filterbank = null; }
-      [this.sourceBus, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.bypassGainNode, this.inputSpectrumSplitterNode, this.inputSpectrumAnalyserLeft, this.inputSpectrumAnalyserRight, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode, this.outputGuardNode, this.outputProtectionNode].forEach(node => this.disconnectNode(node));
+      [this.sourceBus, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.modulationDryInvertNode, this.bypassGainNode, this.inputSpectrumSplitterNode, this.inputSpectrumAnalyserLeft, this.inputSpectrumAnalyserRight, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode, this.outputGuardNode, this.outputProtectionNode].forEach(node => this.disconnectNode(node));
       this.source = null;
       this.sourceBus = null;
       this.activeInputGate = null;
@@ -1030,6 +1072,7 @@
       this.inputPreampNode = null;
       this.dryGainNode = null;
       this.wetGainNode = null;
+      this.modulationDryInvertNode = null;
       this.bypassGainNode = null;
       this.inputSpectrumSplitterNode = null;
       this.inputSpectrumAnalyserLeft = null;

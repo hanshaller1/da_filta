@@ -509,45 +509,49 @@
             </section>
             <section class="mode-placeholder" id="mode-clock-mod" role="tabpanel" aria-labelledby="mode-tab-clock-mod" data-mode-panel="clock-mod" hidden><strong>CLOCK MOD</strong><span>Clock modulation – coming later</span></section>
             <section class="filter-mode-panel lfo-mode-panel" id="mode-lfo" role="tabpanel" aria-labelledby="mode-tab-lfo" data-mode-panel="lfo" hidden>
-  <section class="filter-response lfo-response" aria-label="LFO waveform display">
-    <header><strong>LFO WAVEFORM</strong><span data-lfo-status>OFF - NO TARGET</span></header>
-    <div class="filter-response-chart lfo-visualizer" data-lfo-visualizer>
-      <svg viewBox="0 0 1000 240" preserveAspectRatio="none" role="img" aria-label="LFO wave shape and current DSP phase">
-        <line class="lfo-grid-line" x1="0" y1="12" x2="1000" y2="12"></line>
-        <line class="lfo-grid-line" x1="0" y1="120" x2="1000" y2="120"></line>
-        <line class="lfo-grid-line" x1="0" y1="228" x2="1000" y2="228"></line>
-        <path class="lfo-wave-path" data-lfo-wave-path></path>
-        <line class="lfo-phase-line" data-lfo-phase-line x1="0" y1="12" x2="0" y2="228"></line>
-        <circle class="lfo-phase-dot" data-lfo-phase-dot cx="0" cy="120" r="5"></circle>
-      </svg>
-      <output class="lfo-visual-readout" data-lfo-phase-readout>0 deg - 1.00 Hz</output>
-    </div>
-  </section>
-  <section class="filter-controls lfo-controls" aria-label="LFO controls">
-    <div class="filter-type-control lfo-wave-control">
-      <span>WAVEFORM</span>
-      <div class="filter-type-options lfo-wave-buttons" role="group" aria-label="LFO waveform">
-        <button type="button" data-lfo-waveform="sine" aria-pressed="true">SINE</button>
-        <button type="button" data-lfo-waveform="triangle" aria-pressed="false">TRIANGLE</button>
-        <button type="button" data-lfo-waveform="saw-up" aria-pressed="false">SAW UP</button>
-        <button type="button" data-lfo-waveform="saw-down" aria-pressed="false">SAW DOWN</button>
-        <button type="button" data-lfo-waveform="square" aria-pressed="false">SQUARE</button>
-        <button type="button" data-lfo-waveform="sample-hold" aria-pressed="false">S&amp;H</button>
-      </div>
-    </div>
-    <div class="lfo-target-control">
-      <label for="lfo-target">TARGET</label>
-      <select id="lfo-target" data-lfo-target aria-label="LFO target"><option value="">NONE</option></select>
-      <span data-lfo-target-state>NO TARGET ASSIGNED</span>
-    </div>
-    <div class="lfo-parameter-grid">
-      <label class="filter-parameter-control lfo-rate-control"><span>FREE RATE</span><output data-lfo-rate-output>1.00 Hz</output><input class="filter-style-slider" type="range" min="0" max="1000" step="1" value="434" data-lfo-rate aria-label="LFO rate"></label>
-      <label class="filter-parameter-control"><span>AMOUNT</span><output data-lfo-amount-output>25 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="25" data-lfo-amount aria-label="LFO amount"></label>
-      <label class="filter-parameter-control"><span>PHASE</span><output data-lfo-phase-output>0 deg</output><input class="filter-style-slider" type="range" min="0" max="360" step="1" value="0" data-lfo-phase aria-label="LFO phase offset"></label>
-      <div class="lfo-polarity-control"><span>POLARITY</span><div role="group" aria-label="LFO polarity"><button class="dynamic-eq-view-toggle active" type="button" data-lfo-polarity="bipolar" aria-pressed="true">BIPOLAR</button><button class="dynamic-eq-view-toggle" type="button" data-lfo-polarity="unipolar" aria-pressed="false">UNIPOLAR</button></div></div>
-    </div>
-    <button class="dynamic-eq-view-toggle lfo-reset" type="button" data-lfo-reset>RESET PHASE</button>
-  </section>
+              <header class="lfo-workspace-header"><strong>LFO MODULATION</strong><span data-lfo-status>MODULE OFF</span></header>
+              <nav class="lfo-slot-navigator" data-lfo-slots aria-label="LFO slots"></nav>
+              <div class="lfo-editor">
+                <section class="filter-response lfo-response" aria-label="Selected LFO waveform">
+                  <header><strong data-lfo-title>LFO 1 · SINE</strong><button class="dynamic-eq-view-toggle" type="button" data-lfo-source-enable aria-pressed="false">SOURCE OFF</button></header>
+                  <div class="filter-response-chart lfo-visualizer" data-lfo-visualizer>
+                    <svg viewBox="0 0 1000 120" preserveAspectRatio="none" role="img" aria-label="Selected LFO waveform and audio-thread phase">
+                      <line class="lfo-grid-line" x1="0" y1="6" x2="1000" y2="6"></line>
+                      <line class="lfo-grid-line" x1="0" y1="60" x2="1000" y2="60"></line>
+                      <line class="lfo-grid-line" x1="0" y1="114" x2="1000" y2="114"></line>
+                      <path class="lfo-wave-path" data-lfo-wave-path></path>
+                      <line class="lfo-phase-line" data-lfo-phase-line x1="0" y1="6" x2="0" y2="114"></line>
+                      <circle class="lfo-phase-dot" data-lfo-phase-dot cx="0" cy="60" r="4"></circle>
+                    </svg>
+                    <output class="lfo-visual-readout" data-lfo-phase-readout>0 deg · 1 Hz</output>
+                  </div>
+                </section>
+                <section class="filter-controls lfo-controls" aria-label="Selected LFO controls">
+                  <div class="filter-type-control lfo-wave-control"><span>WAVEFORM</span><div class="filter-type-options lfo-wave-buttons" role="group" aria-label="LFO waveform">
+                    <button type="button" data-lfo-waveform="sine">SINE</button><button type="button" data-lfo-waveform="triangle">TRIANGLE</button><button type="button" data-lfo-waveform="saw-up">SAW UP</button><button type="button" data-lfo-waveform="saw-down">SAW DOWN</button><button type="button" data-lfo-waveform="square">SQUARE</button><button type="button" data-lfo-waveform="pulse">PULSE</button><button type="button" data-lfo-waveform="sample-hold">RND</button><button type="button" data-lfo-waveform="noise">NOISE</button>
+                  </div></div>
+                  <div class="lfo-row lfo-clock-row">
+                    <div class="lfo-inline-control"><span>RATE MODE</span><div role="group" aria-label="LFO rate mode"><button class="dynamic-eq-view-toggle active" type="button" data-lfo-rate-mode="free">FREE</button><button class="dynamic-eq-view-toggle" type="button" data-lfo-rate-mode="sync">SYNC</button></div></div>
+                    <label class="lfo-inline-control"><span>CLOCK SOURCE</span><select data-lfo-clock-source aria-label="LFO clock source"><option value="internal">INTERNAL</option><option value="midi">MIDI</option></select></label>
+                    <label class="lfo-inline-control" data-lfo-bpm-control><span>INTERNAL BPM</span><input data-lfo-bpm type="number" min="30" max="300" step="1" value="120" aria-label="Internal clock tempo"></label>
+                    <label class="lfo-inline-control" data-lfo-division-control><span>DIVISION</span><select data-lfo-division aria-label="LFO clock division"><option>1/32</option><option>1/16</option><option>1/8</option><option>1/4</option><option>1/2</option><option>1/1</option><option>2/1</option><option>4/1</option></select></label>
+                    <span class="lfo-midi-status" data-lfo-midi-status>INTERNAL · 120 BPM</span>
+                  </div>
+                  <div class="lfo-parameter-grid">
+                    <label class="filter-parameter-control lfo-rate-control"><span>FREE RATE</span><output data-lfo-rate-output>1.00 Hz</output><input class="filter-style-slider" type="range" min="0" max="1000" step="1" value="434" data-lfo-rate aria-label="LFO free rate"></label>
+                    <label class="filter-parameter-control"><span>AMOUNT</span><output data-lfo-amount-output>25 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="25" data-lfo-amount aria-label="LFO amount"></label>
+                    <label class="filter-parameter-control"><span>PHASE</span><output data-lfo-phase-output>0 deg</output><input class="filter-style-slider" type="range" min="0" max="360" step="1" value="0" data-lfo-phase aria-label="LFO phase offset"></label>
+                    <div class="lfo-polarity-control"><span>POLARITY</span><div role="group" aria-label="LFO polarity"><button class="dynamic-eq-view-toggle active" type="button" data-lfo-polarity="bipolar">BIPOLAR</button><button class="dynamic-eq-view-toggle" type="button" data-lfo-polarity="unipolar">UNIPOLAR</button></div></div>
+                  </div>
+                  <div class="lfo-row lfo-assignment-row">
+                    <label class="lfo-target-control"><span>TARGET</span><select data-lfo-target aria-label="LFO target"><option value="">NONE</option></select><small data-lfo-target-state>NO TARGET</small></label>
+                    <label class="lfo-inline-control"><span>CHANNEL</span><select data-lfo-channel aria-label="LFO channel assignment"><option value="both">BOTH</option><option value="left">LEFT</option><option value="right">RIGHT</option></select></label>
+                    <button class="dynamic-eq-view-toggle" type="button" data-lfo-invert aria-pressed="false">INVERT OFF</button>
+                    <button class="dynamic-eq-view-toggle" type="button" data-lfo-reset>RESET PHASE</button>
+                  </div>
+                </section>
+              </div>
+            </section>
 </section>
             <section class="mode-placeholder" id="mode-envelope-follower" role="tabpanel" aria-labelledby="mode-tab-envelope-follower" data-mode-panel="envelope-follower" hidden><strong>ENVELOPE FOLLOWER</strong><span>Envelope follower – coming later</span></section>
             <section class="dynamic-eq-panel" id="mode-dynamic-eq" role="tabpanel" aria-labelledby="mode-tab-dynamic-eq" data-mode-panel="dynamic-eq" hidden>

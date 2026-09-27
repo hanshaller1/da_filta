@@ -20,15 +20,16 @@ function browserBundle(origin, worklet = false, { variant = 'p3b4', transformCon
 import { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } from '${origin}/dynamic-eq-core.mjs';
 import { FilterShape } from '${origin}/filter-shape-core.mjs';
 import { ModulationCore } from '${origin}/modulation-core.mjs';
-import { LfoOscillator, normalizeLfoState } from '${origin}/lfo-core.mjs';
-const deps = { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeLfoState };
+import { LfoOscillator, normalizeModulationState } from '${origin}/lfo-core.mjs';
+import { ClockCore } from '${origin}/clock-core.mjs';
+const deps = { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeModulationState, ClockCore };
 function classesFor(rate) {
   const sampleRate = rate;
   class Stub { constructor() { this.port = { onmessage: null, postMessage() {} }; } }
   const AudioWorkletProcessor = Stub;
   const registered = {};
   const registerProcessor = (name, Class) => { registered[name] = Class; };
-  const { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeLfoState } = deps;
+  const { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeModulationState, ClockCore } = deps;
   ${bank}
   ${read('output-guard-processor.js')}
   ${read('output-protection-processor.js')}
@@ -58,10 +59,11 @@ export class Graph {
     this.guard = new registry['da-filta-output-guard']({ processorOptions: { enabled: true, threshold: .8, attackMs: 2, releaseMs: 250, telemetryEnabled: false } });
     this.safety = new registry['da-filta-output-protection']({ processorOptions: { enabled: true, threshold: .8, softness: 1, telemetryEnabled: false } });
     this.bankOut = [new Float32Array(128), new Float32Array(128)];
+    this.bankModOut = [new Float32Array(128)];
     this.mix = [new Float32Array(128), new Float32Array(128)];
     this.guardOut = [new Float32Array(128), new Float32Array(128)];
     this.final = [new Float32Array(128), new Float32Array(128)];
-    this.bankInWrapper = [null]; this.bankOutWrapper = [this.bankOut];
+    this.bankInWrapper = [null]; this.bankOutWrapper = [this.bankOut, this.bankModOut];
     this.mixWrapper = [this.mix]; this.guardWrapper = [this.guardOut]; this.finalWrapper = [this.final];
     this.telemetry = 0;
     this.bank.port.postMessage = message => { this.telemetry++; if (this.onTelemetry) this.onTelemetry(message); };

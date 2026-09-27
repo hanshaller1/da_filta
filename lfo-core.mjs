@@ -1,11 +1,68 @@
-export const LFO_WAVEFORMS = Object.freeze(['sine', 'triangle', 'saw-up', 'saw-down', 'square', 'sample-hold']);
+export const LFO_WAVEFORMS = Object.freeze(['sine', 'triangle', 'saw-up', 'saw-down', 'square', 'pulse', 'sample-hold', 'noise']);
 export const LFO_MIN_RATE_HZ = 0.01;
 export const LFO_MAX_RATE_HZ = 20;
+export const LFO_DEFAULT_COUNT = 4;
+export const LFO_SYNC_DIVISIONS = Object.freeze(['1/32', '1/16', '1/8', '1/4', '1/2', '1/1', '2/1', '4/1']);
+
 const clamp = (value, minimum, maximum, fallback) => {
   const number = Number(value);
   return Number.isFinite(number) ? Math.min(maximum, Math.max(minimum, number)) : fallback;
 };
+const normalizeSeed = value => Number.isInteger(Number(value)) ? (Number(value) >>> 0) || 1 : 0x6d2b79f5;
+const legacyFields = Object.freeze({
+  enabled: 'lfoEnabled', waveform: 'lfoWaveform', rateHz: 'lfoRateHz', polarity: 'lfoPolarity',
+  phase: 'lfoPhase', targetId: 'lfoTargetId', amount: 'lfoAmount', seed: 'lfoSeed'
+});
 
+export function normalizeLfoSourceState(source = {}, index = 0, legacy = false) {
+  const waveform = source.waveform ?? (legacy ? source.lfoWaveform : undefined);
+  const rate = source.rateHz ?? (legacy ? source.lfoRateHz : undefined);
+  const phase = source.phaseOffsetDeg ?? source.phaseDegrees ?? (legacy ? source.lfoPhase : undefined);
+  const targetId = source.targetId ?? (legacy ? source.lfoTargetId : undefined);
+  const enabled = source.enabled ?? (legacy ? source.lfoEnabled : undefined);
+  const amount = source.amount ?? (legacy ? source.lfoAmount : undefined);
+  const seed = source.seed ?? (legacy ? source.lfoSeed : undefined);
+  return {
+    id: `lfo.${index + 1}`,
+    enabled: enabled === true,
+    waveform: LFO_WAVEFORMS.includes(waveform) ? waveform : 'sine',
+    rateMode: source.rateMode === 'sync' ? 'sync' : 'free',
+    rateHz: clamp(rate, LFO_MIN_RATE_HZ, LFO_MAX_RATE_HZ, 1),
+    syncDivision: LFO_SYNC_DIVISIONS.includes(source.syncDivision) ? source.syncDivision : '1/4',
+    polarity: source.polarity === 'unipolar' || (legacy && source.lfoPolarity === 'unipolar') ? 'unipolar' : 'bipolar',
+    phaseOffsetDeg: clamp(phase, 0, 360, 0),
+    amount: clamp(amount, 0, 100, 25),
+    targetId: typeof targetId === 'string' ? targetId.trim() : '',
+    channel: ['left', 'right'].includes(source.channel) ? source.channel : 'both',
+    invert: source.invert === true,
+    seed: normalizeSeed(seed)
+  };
+}
+
+export function createLfoSources(count = LFO_DEFAULT_COUNT, initialSource = {}) {
+  const safeCount = Math.max(0, Math.floor(clamp(count, 0, 256, LFO_DEFAULT_COUNT)));
+  return Array.from({ length: safeCount }, (_, index) => normalizeLfoSourceState(
+    index === 0 ? initialSource : {}, index, index === 0 && Object.keys(initialSource).some(key => key.startsWith('lfo'))
+  ));
+}
+
+export function normalizeLfoSources(source = {}, requestedCount) {
+  const supplied = Array.isArray(source.lfoSources) ? source.lfoSources : null;
+  const count = Math.max(1, Math.floor(clamp(requestedCount ?? source.lfoCount ?? supplied?.length ?? LFO_DEFAULT_COUNT, 1, 256, LFO_DEFAULT_COUNT)));
+  return Array.from({ length: count }, (_, index) => supplied
+    ? normalizeLfoSourceState(supplied[index] || {}, index)
+    : normalizeLfoSourceState(source, index, index === 0));
+}
+
+export function paginateLfoSources(sources = [], pageSize = 4) {
+  const list = Array.isArray(sources) ? sources : [];
+  const size = Math.max(1, Math.floor(clamp(pageSize, 1, 256, 4)));
+  return Array.from({ length: Math.ceil(list.length / size) }, (_, page) =>
+    list.slice(page * size, (page + 1) * size));
+}
+
+// Flat V1 fields remain part of the public state shape for snapshot and API
+// compatibility. New code owns source-specific settings in lfoSources.
 export function normalizeLfoState(source = {}) {
   const target = typeof source.lfoTargetId === 'string' ? source.lfoTargetId.trim() : '';
   return {
@@ -16,17 +73,43 @@ export function normalizeLfoState(source = {}) {
     lfoPhase: clamp(source.lfoPhase, 0, 360, 0),
     lfoTargetId: target,
     lfoAmount: clamp(source.lfoAmount, 0, 100, 25),
-    lfoSeed: Number.isInteger(Number(source.lfoSeed)) ? (Number(source.lfoSeed) >>> 0) || 1 : 0x6d2b79f5
+    lfoSeed: normalizeSeed(source.lfoSeed)
   };
 }
 
-export function waveformSample(waveform, phase, heldRandom = 0) {
+export function normalizeModulationState(source = {}) {
+  const lfoSources = normalizeLfoSources(source);
+  const first = lfoSources[0] || normalizeLfoSourceState({}, 0);
+  const moduleEnabled = source.lfoModuleEnabled === undefined ? source.lfoEnabled === true : source.lfoModuleEnabled === true;
+  return {
+    ...normalizeLfoState({
+      lfoEnabled: moduleEnabled,
+      lfoWaveform: first.waveform,
+      lfoRateHz: first.rateHz,
+      lfoPolarity: first.polarity,
+      lfoPhase: first.phaseOffsetDeg,
+      lfoTargetId: first.targetId,
+      lfoAmount: first.amount,
+      lfoSeed: first.seed
+    }),
+    lfoModuleEnabled: moduleEnabled,
+    lfoCount: lfoSources.length,
+    lfoSources
+  };
+}
+
+export function waveformSample(waveform, phase, heldRandom = 0, nextNoise = heldRandom) {
   const cycle = ((Number.isFinite(phase) ? phase : 0) % 1 + 1) % 1;
   if (waveform === 'triangle') return 1 - 4 * Math.abs(cycle - 0.5);
   if (waveform === 'saw-up') return cycle * 2 - 1;
   if (waveform === 'saw-down') return 1 - cycle * 2;
   if (waveform === 'square') return cycle < 0.5 ? 1 : -1;
+  if (waveform === 'pulse') return cycle < 0.25 ? 1 : -1;
   if (waveform === 'sample-hold') return clamp(heldRandom, -1, 1, 0);
+  if (waveform === 'noise') {
+    const t = cycle * cycle * (3 - 2 * cycle);
+    return clamp(heldRandom, -1, 1, 0) + (clamp(nextNoise, -1, 1, 0) - clamp(heldRandom, -1, 1, 0)) * t;
+  }
   return Math.sin(cycle * Math.PI * 2);
 }
 
@@ -43,8 +126,12 @@ export function sliderToRate(value) {
 export class LfoOscillator {
   constructor(source = {}) {
     this.enabled = false;
+    this.moduleEnabled = true;
     this.waveform = 'sine';
     this.polarity = 'bipolar';
+    this.invert = false;
+    this.rateMode = 'free';
+    this.syncDivision = '1/4';
     this.rateHz = 1;
     this.phaseDegrees = 0;
     this.phaseOffset = 0;
@@ -53,9 +140,11 @@ export class LfoOscillator {
     this.phaseFrameCounter = 0;
     this.phaseSampleRate = 0;
     this.currentCycleIndex = 0;
+    this.syncResetBeat = 0;
     this.seed = 0x6d2b79f5;
     this.randomState = this.seed;
     this.heldRandom = 0;
+    this.nextNoise = 0;
     this.sampleValue = 0;
     this.configure(source);
   }
@@ -69,82 +158,112 @@ export class LfoOscillator {
     return (this.randomState / 0xffffffff) * 2 - 1;
   }
 
-  reset() {
+  reset(clockBeat = 0) {
     this.phase = 0;
     this.phaseOrigin = this.phase;
     this.phaseFrameCounter = 0;
     this.phaseSampleRate = 0;
-    this.currentCycleIndex = Math.floor(this.phase + this.phaseOffset);
+    this.syncResetBeat = Number.isFinite(clockBeat) ? clockBeat : 0;
+    this.currentCycleIndex = Math.floor(this.phase);
     this.randomState = this.seed;
     this.heldRandom = this.nextRandomBipolar();
+    this.nextNoise = this.nextRandomBipolar();
     this.sampleValue = this.readSample();
     return this.phase;
   }
 
   configure(source = {}) {
-    const next = normalizeLfoState({
-      lfoEnabled: this.enabled,
-      lfoWaveform: this.waveform,
-      lfoRateHz: this.rateHz,
-      lfoPolarity: this.polarity,
-      lfoPhase: this.phaseDegrees,
-      lfoSeed: this.seed,
-      ...source
-    });
+    const legacy = Object.keys(source).some(key => key.startsWith('lfo'));
+    const previous = {
+      enabled: this.enabled, waveform: this.waveform, rateHz: this.rateHz, rateMode: this.rateMode,
+      syncDivision: this.syncDivision, polarity: this.polarity, phaseOffsetDeg: this.phaseDegrees,
+      amount: 25, targetId: '', channel: 'both', invert: this.invert, seed: this.seed
+    };
+    const merged = legacy ? {
+      ...previous,
+      ...source,
+      enabled: source.enabled ?? source.lfoEnabled ?? previous.enabled,
+      waveform: source.waveform ?? source.lfoWaveform ?? previous.waveform,
+      rateHz: source.rateHz ?? source.lfoRateHz ?? previous.rateHz,
+      polarity: source.polarity ?? source.lfoPolarity ?? previous.polarity,
+      phaseOffsetDeg: source.phaseOffsetDeg ?? source.lfoPhase ?? previous.phaseOffsetDeg,
+      targetId: source.targetId ?? source.lfoTargetId ?? previous.targetId,
+      amount: source.amount ?? source.lfoAmount ?? previous.amount,
+      seed: source.seed ?? source.lfoSeed ?? previous.seed
+    } : { ...previous, ...source };
+    const next = normalizeLfoSourceState(merged);
+    const moduleEnabled = source.lfoModuleEnabled ?? source.moduleEnabled;
     const wasEnabled = this.enabled;
-    const phaseChanged = next.lfoPhase !== this.phaseDegrees;
-    const rateChanged = next.lfoRateHz !== this.rateHz;
-    this.waveform = next.lfoWaveform;
-    this.rateHz = next.lfoRateHz;
-    this.polarity = next.lfoPolarity;
-    this.phaseDegrees = next.lfoPhase;
-    this.phaseOffset = next.lfoPhase / 360;
-    this.seed = next.lfoSeed;
-    if (!wasEnabled && next.lfoEnabled) {
-      this.enabled = true;
-      this.reset();
-    } else {
-      this.enabled = next.lfoEnabled;
-      if (phaseChanged && this.enabled) {
-        this.currentCycleIndex = Math.floor(this.phase + this.phaseOffset);
-      }
+    const phaseChanged = next.phaseOffsetDeg !== this.phaseDegrees;
+    const rateChanged = next.rateHz !== this.rateHz || next.rateMode !== this.rateMode || next.syncDivision !== this.syncDivision;
+    this.waveform = next.waveform;
+    this.rateHz = next.rateHz;
+    this.rateMode = next.rateMode;
+    this.syncDivision = next.syncDivision;
+    this.polarity = next.polarity;
+    this.invert = next.invert;
+    this.phaseDegrees = next.phaseOffsetDeg;
+    this.phaseOffset = next.phaseOffsetDeg / 360;
+    this.seed = next.seed;
+    if (moduleEnabled !== undefined) this.moduleEnabled = moduleEnabled === true;
+    this.enabled = next.enabled;
+    if (!wasEnabled && this.enabled) this.reset();
+    else {
+      if (phaseChanged && this.enabled) this.currentCycleIndex = Math.floor(this.phase);
       if (rateChanged && this.enabled) {
         this.phaseOrigin = this.phase;
         this.phaseFrameCounter = 0;
         this.phaseSampleRate = 0;
-        this.currentCycleIndex = Math.floor(this.phase + this.phaseOffset);
+        this.currentCycleIndex = Math.floor(this.phaseOrigin);
       }
-      if (!this.enabled) this.sampleValue = 0;
+      if (!this.enabled || !this.moduleEnabled) this.sampleValue = 0;
     }
     return next;
   }
 
-  readSample() {
-    const bipolar = waveformSample(this.waveform, this.phase + this.phaseOffset, this.heldRandom);
-    return this.polarity === 'unipolar' ? (bipolar + 1) / 2 : bipolar;
+  readSample(phase = this.phase) {
+    const raw = waveformSample(this.waveform, phase + this.phaseOffset, this.heldRandom, this.nextNoise);
+    const polarityValue = this.polarity === 'unipolar' ? (raw + 1) / 2 : raw;
+    return this.invert ? -polarityValue : polarityValue;
   }
 
-  advance(sampleRate) {
-    if (!this.enabled) {
-      this.sampleValue = 0;
-      return 0;
-    }
+  advance(sampleRate, clockBeat = 0, clockRunning = true) {
+    if (!this.enabled || !this.moduleEnabled) { this.sampleValue = 0; return 0; }
     const safeRate = Number.isFinite(sampleRate) && sampleRate > 0 ? sampleRate : 48000;
+    if (this.rateMode === 'sync') {
+      if (!clockRunning) return this.sampleValue;
+      const beatCount = Number.isFinite(clockBeat) ? clockBeat : 0;
+      const beatsPerCycle = { '1/32': 0.125, '1/16': 0.25, '1/8': 0.5, '1/4': 1, '1/2': 2, '1/1': 4, '2/1': 8, '4/1': 16 }[this.syncDivision] || 1;
+      const unwrapped = (beatCount - this.syncResetBeat) / beatsPerCycle;
+      const cycleIndex = Math.floor(unwrapped);
+      this.phase = ((unwrapped - cycleIndex) % 1 + 1) % 1;
+      if (cycleIndex !== this.currentCycleIndex) this.onCycleChange(cycleIndex);
+      this.currentCycleIndex = cycleIndex;
+      this.sampleValue = this.readSample();
+      return this.sampleValue;
+    }
     if (this.phaseSampleRate !== safeRate) {
       this.phaseOrigin = this.phase;
       this.phaseFrameCounter = 0;
       this.phaseSampleRate = safeRate;
-      this.currentCycleIndex = Math.floor(this.phaseOrigin + this.phaseOffset);
+      this.currentCycleIndex = Math.floor(this.phaseOrigin);
     }
     this.phaseFrameCounter += 1;
     const unwrappedPhase = this.phaseOrigin + this.phaseFrameCounter * this.rateHz / safeRate;
-    const cycleIndex = Math.floor(unwrappedPhase + this.phaseOffset);
+    const cycleIndex = Math.floor(unwrappedPhase);
     this.phase = unwrappedPhase - cycleIndex;
-    if (cycleIndex !== this.currentCycleIndex) {
-      if (this.waveform === 'sample-hold') this.heldRandom = this.nextRandomBipolar();
-      this.currentCycleIndex = cycleIndex;
-    }
+    if (cycleIndex !== this.currentCycleIndex) this.onCycleChange(cycleIndex);
+    this.currentCycleIndex = cycleIndex;
     this.sampleValue = this.readSample();
     return this.sampleValue;
+  }
+
+  onCycleChange(cycleIndex) {
+    if (this.waveform === 'sample-hold') this.heldRandom = this.nextRandomBipolar();
+    if (this.waveform === 'noise') {
+      this.heldRandom = this.nextNoise;
+      this.nextNoise = this.nextRandomBipolar();
+    }
+    this.currentCycleIndex = cycleIndex;
   }
 }

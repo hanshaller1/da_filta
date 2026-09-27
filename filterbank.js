@@ -182,12 +182,14 @@
       this.preDynamicGainDbRight = [...(initialState?.preDynamicGainDbRight || Array(BAND_COUNT).fill(0))];
       this.inputNode = audioContext.createGain();
       this.outputNode = audioContext.createGain();
+      this.modulationOutputNode = audioContext.createGain();
+      this.modulationOutput = this.modulationOutputNode;
       this.inputNode.gain.value = 1;
       this.outputNode.gain.value = 1;
       this.workletNode = new AudioWorkletNode(audioContext, PROCESSOR_NAME, {
         numberOfInputs: 1,
-        numberOfOutputs: 1,
-        outputChannelCount: [2],
+        numberOfOutputs: 2,
+        outputChannelCount: [2, 1],
         channelCount: 2,
         channelCountMode: 'explicit',
         channelInterpretation: 'discrete',
@@ -241,7 +243,8 @@
         if (event.data?.type === 'lfo-telemetry') this.onLfoTelemetry?.(event.data);
       };
       this.inputNode.connect(this.workletNode);
-      this.workletNode.connect(this.outputNode);
+      this.workletNode.connect(this.outputNode, 0, 0);
+      this.workletNode.connect(this.modulationOutputNode, 1, 0);
     }
 
     get input() {
@@ -299,9 +302,27 @@
       return this.modulationState;
     }
 
-    resetLfoPhase() {
+    resetLfoPhase(sourceId) {
       if (this.disposed) return false;
-      this.workletNode.port.postMessage({ type: 'reset-lfo-phase' });
+      this.workletNode.port.postMessage({ type: 'reset-lfo-phase', sourceId });
+      return true;
+    }
+
+    setClockState(clock) {
+      if (this.disposed) return false;
+      this.workletNode.port.postMessage({ type: 'set-clock-state', clock });
+      return true;
+    }
+
+    sendMidiClockPulse(bpm) {
+      if (this.disposed) return false;
+      this.workletNode.port.postMessage({ type: 'midi-clock-pulse', bpm });
+      return true;
+    }
+
+    sendClockTransport(action) {
+      if (this.disposed || !['start', 'continue', 'stop'].includes(action)) return false;
+      this.workletNode.port.postMessage({ type: `midi-clock-${action}` });
       return true;
     }
 
@@ -525,6 +546,7 @@
       this.inputNode.disconnect();
       this.workletNode.disconnect();
       this.outputNode.disconnect();
+      this.modulationOutputNode.disconnect();
     }
   }
 
