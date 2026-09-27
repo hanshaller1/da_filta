@@ -1680,10 +1680,11 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .lfo-parameter-grid .filter-parameter-control output { min-width: 44px; padding: 2px 4px; font-size: 9px; }
 .lfo-polarity-control { gap: 7px; padding: 9px; border: 0; font-size: 9px; }
 .lfo-polarity-control button { min-height: 26px; font-size: 9px; }
-.lfo-assignment-row { grid-template-columns: minmax(0, 2fr) minmax(72px, .8fr) auto auto; }
-.lfo-target-control { display: grid; grid-template-columns: 1fr; gap: 4px; min-width: 0; padding: 0; border: 0; font-size: 9px; }
-.lfo-target-control select { grid-column: auto; height: 27px; padding: 3px 6px; font-size: 10px; }
-.lfo-target-control small { overflow: hidden; min-height: 9px; color: var(--secondary-text); font-size: 8px; letter-spacing: .2px; text-overflow: ellipsis; white-space: nowrap; }
+.lfo-assignment-row { position: relative; grid-template-columns: minmax(0, 2fr) minmax(72px, .8fr) auto auto; align-items: end; padding-bottom: 12px; }
+.lfo-assignment-row > button { display: inline-flex; align-items: center; justify-content: center; align-self: end; box-sizing: border-box; height: 27px; min-height: 27px; }
+.lfo-target-control { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 27px; gap: 5px; align-self: end; min-width: 0; padding: 0; border: 0; font-size: 9px; }
+.lfo-target-control select { grid-column: auto; box-sizing: border-box; height: 27px; padding: 3px 6px; font-size: 10px; line-height: normal; }
+.lfo-target-control small { position: absolute; right: 0; bottom: -12px; left: 0; overflow: hidden; height: 9px; min-height: 9px; color: var(--secondary-text); font-size: 8px; letter-spacing: .2px; line-height: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .lfo-target-control.is-inactive small { color: var(--active-color, #f4d35e); }
 .lfo-reset { justify-self: end; min-height: 26px; padding: 3px 7px; font-size: 9px; }
 @media (max-width: 1050px) {

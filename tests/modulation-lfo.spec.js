@@ -219,6 +219,56 @@ test('four LFOs concurrently modulate FILTER, stereo band gains, and dry/wet wit
   expect(result.dryWetControlDelta).toBeCloseTo(.1, 2);
 });
 
+test('MIDI transport START resets sync LFOs, CONTINUE preserves beat, and STOP freezes only sync', async ({ page }) => {
+  await page.goto('/');
+  const bundle = browserBundle('http://localhost:3000');
+  const result = await page.evaluate(async code => {
+    const engine = new window.AudioEngine({});
+    const options = engine.getFilterbankState();
+    options.bandFrequencies = [...window.Filterbank.BAND_FREQUENCIES];
+    options.bandQs = [...window.Filterbank.BAND_QS];
+    options.bandGainLeft = Array(10).fill(0); options.bandGainRight = Array(10).fill(0);
+    const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+    const { Graph } = await import(url); URL.revokeObjectURL(url);
+    const graph = new Graph(48000, options, 'linear', false);
+    const sources = engine.getModulationState().lfoSources.map((source, index) => ({
+      ...source, enabled: index < 2, waveform: index === 0 ? 'sample-hold' : 'sine', seed: 9876,
+      rateMode: index === 0 ? 'sync' : 'free', syncDivision: '1/4', rateHz: 1, targetId: '', amount: 0
+    }));
+    graph.bank.setModulationState({ ...engine.getModulationState(), lfoModuleEnabled: true, lfoSources: sources,
+      assignments: [], clock: { source: 'midi', midiBpm: 120, running: true } });
+    const silence = [new Float32Array(128), new Float32Array(128)];
+    graph.bank.handleMessage({ type: 'midi-clock-start' });
+    const initialStartSample = graph.bank.lfoSources[0].sampleValue;
+    for (let block = 0; block < 188; block += 1) graph.process(silence);
+    const beforeStop = { beat: graph.bank.clockCore.beatPosition, syncPhase: graph.bank.lfoSources[0].phase, freePhase: graph.bank.lfoSources[1].phase };
+    graph.bank.handleMessage({ type: 'midi-clock-stop' });
+    for (let block = 0; block < 94; block += 1) graph.process(silence);
+    const stopped = { beat: graph.bank.clockCore.beatPosition, syncPhase: graph.bank.lfoSources[0].phase, freePhase: graph.bank.lfoSources[1].phase };
+    graph.bank.handleMessage({ type: 'midi-clock-continue' });
+    const continuedBeat = graph.bank.clockCore.beatPosition;
+    for (let block = 0; block < 47; block += 1) graph.process(silence);
+    const continued = { beat: graph.bank.clockCore.beatPosition, syncPhase: graph.bank.lfoSources[0].phase, freePhase: graph.bank.lfoSources[1].phase };
+    graph.bank.handleMessage({ type: 'midi-clock-start' });
+    const restarted = { beat: graph.bank.clockCore.beatPosition, pulseCount: graph.bank.clockCore.midiPulseCount,
+      syncPhase: graph.bank.lfoSources[0].phase, syncSample: graph.bank.lfoSources[0].sampleValue,
+      freePhase: graph.bank.lfoSources[1].phase };
+    return { initialStartSample, beforeStop, stopped, continuedBeat, continued, restarted };
+  }, bundle);
+  expect(result.beforeStop.beat).toBeGreaterThan(.45);
+  expect(result.stopped.beat).toBe(result.beforeStop.beat);
+  expect(result.stopped.syncPhase).toBe(result.beforeStop.syncPhase);
+  expect(result.stopped.freePhase).not.toBe(result.beforeStop.freePhase);
+  expect(result.continuedBeat).toBe(result.stopped.beat);
+  expect(result.continued.beat).toBeGreaterThan(result.continuedBeat);
+  expect(result.continued.syncPhase).not.toBe(result.stopped.syncPhase);
+  expect(result.restarted.beat).toBe(0);
+  expect(result.restarted.pulseCount).toBe(0);
+  expect(result.restarted.syncPhase).toBe(0);
+  expect(result.restarted.syncSample).toBe(result.initialStartSample);
+  expect(result.restarted.freePhase).toBe(result.continued.freePhase);
+});
+
 test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsive', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -239,6 +289,11 @@ test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsi
       panel: document.querySelector('[data-mode-panel="lfo"]').scrollWidth,
       panelWidth: document.querySelector('[data-mode-panel="lfo"]').clientWidth,
       graphHeight: document.querySelector('[data-lfo-visualizer]').getBoundingClientRect().height,
+      separator: getComputedStyle(document.querySelector('.lfo-editor'), '::before').display,
+      assignmentControls: ['[data-lfo-target]', '[data-lfo-channel]', '[data-lfo-invert]', '[data-lfo-reset]'].map(selector => {
+        const rect = document.querySelector(selector).getBoundingClientRect();
+        return { top: rect.top, height: rect.height };
+      }),
       maxScrollLeft: (() => { window.scrollTo(1000, 0); const value = window.scrollX; window.scrollTo(0, 0); return value; })(),
       overflowing: [...document.querySelectorAll('body *')].map(element => ({
         tag: element.tagName, id: element.id, className: typeof element.className === 'string' ? element.className : '',
@@ -248,7 +303,13 @@ test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsi
     }));
     expect(overflow.page, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.viewport);
     expect(overflow.panel).toBeLessThanOrEqual(overflow.panelWidth);
-    expect(overflow.graphHeight, JSON.stringify(overflow)).toBeLessThanOrEqual(150);
+    expect(overflow.graphHeight, JSON.stringify(overflow)).toBeGreaterThanOrEqual(110);
+    expect(overflow.separator).toBe(viewport.width > 1050 ? 'block' : 'none');
+    for (const control of overflow.assignmentControls) {
+      expect(Math.abs(control.height - 27), JSON.stringify({ viewport, overflow })).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(control.top - overflow.assignmentControls[0].top), JSON.stringify({ viewport, overflow })).toBeLessThanOrEqual(0.5);
+    }
+    if (viewport.width > 1050) expect(overflow.graphHeight, JSON.stringify(overflow)).toBeGreaterThan(150);
     expect(overflow.maxScrollLeft, JSON.stringify({ viewport, overflow })).toBe(0);
   }
   for (const theme of ['clean-modern', 'warm-studio']) {
@@ -298,8 +359,138 @@ test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsi
   expect(ui.x).toBeGreaterThanOrEqual(500);
   expect(ui.x).toBeLessThan(560);
   expect(ui.wave.startsWith('M0.00 ')).toBe(true);
-  expect(ui.graphHeight).toBeLessThanOrEqual(150);
+  expect(ui.graphHeight).toBeGreaterThan(100);
   expect(ui.pageCountForTwenty).toBe(5);
   expect(ui.pageSizesForTwenty).toEqual([4, 4, 4, 4, 4]);
   expect(pageErrors).toEqual([]);
+});
+
+test('LFO live marker and readout use the final worklet sample for every waveform', async ({ page }) => {
+  await page.setViewportSize({ width: 1914, height: 907 });
+  await page.goto('/');
+  await page.locator('[data-mode="lfo"]').click();
+  await page.locator('[data-lfo-source-enable]').click();
+  await page.locator('[data-module-power="lfo"]').click();
+  const emit = sample => page.evaluate(value => window.LfoMode.getAudioEngine().onLfoTelemetry({
+    sourceId: 'lfo.1', enabled: true, phase: .25, rateHz: 1, value
+  }), sample);
+  const marker = () => page.evaluate(() => ({
+    y: Number(document.querySelector('[data-lfo-phase-dot]').getAttribute('cy')),
+    readout: document.querySelector('[data-lfo-phase-readout]').textContent,
+    path: document.querySelector('[data-lfo-wave-path]').getAttribute('d')
+  }));
+
+  for (const waveform of ['sample-hold', 'noise']) {
+    await page.locator(`[data-lfo-waveform="${waveform}"]`).click();
+    await emit(.6);
+    const positive = await marker();
+    expect(positive.y).toBeCloseTo(31.2, 1);
+    expect(positive.readout).toContain('+0.60');
+    expect(positive.path).toMatch(/^M0\.00 /);
+    await page.locator('[data-lfo-invert]').click();
+    await emit(-.6);
+    const negative = await marker();
+    expect(negative.y).toBeCloseTo(88.8, 1);
+    expect(negative.readout).toContain('-0.60');
+    await emit(-.4);
+    const changedLiveValue = await marker();
+    expect(changedLiveValue.y).toBeCloseTo(79.2, 1);
+    expect(changedLiveValue.readout).toContain('-0.40');
+    expect(changedLiveValue.path).toBe(negative.path);
+    await page.locator('[data-lfo-invert]').click();
+  }
+
+  for (const waveform of ['sine', 'triangle', 'saw-up', 'saw-down', 'square', 'pulse']) {
+    await page.locator(`[data-lfo-waveform="${waveform}"]`).click();
+    await emit(.25);
+    expect((await marker()).y).toBeCloseTo(48, 1);
+    await page.locator('[data-lfo-invert]').click();
+    await emit(-.25);
+    expect((await marker()).y).toBeCloseTo(72, 1);
+    await page.locator('[data-lfo-invert]').click();
+    await page.locator('[data-lfo-polarity="unipolar"]').click();
+    await emit(.75);
+    expect((await marker()).y).toBeCloseTo(37.5, 1);
+    await page.locator('[data-lfo-invert]').click();
+    await emit(-.75);
+    expect((await marker()).y).toBeCloseTo(96, 1);
+    await page.locator('[data-lfo-invert]').click();
+    await page.locator('[data-lfo-polarity="bipolar"]').click();
+  }
+});
+
+test('Web MIDI UI reports availability and routes START, CLOCK, STOP, and CONTINUE', async ({ browser }) => {
+  const unavailablePage = await browser.newPage();
+  await unavailablePage.setViewportSize({ width: 1914, height: 907 });
+  await unavailablePage.addInitScript(() => Object.defineProperty(navigator, 'requestMIDIAccess', { configurable: true, value: undefined }));
+  await unavailablePage.goto('http://localhost:3000');
+  await unavailablePage.locator('[data-mode="lfo"]').click();
+  await unavailablePage.locator('[data-lfo-rate-mode="sync"]').click();
+  await unavailablePage.locator('[data-lfo-clock-source]').selectOption('midi');
+  await expect(unavailablePage.locator('[data-lfo-midi-status]')).toHaveText('UNAVAILABLE');
+  await unavailablePage.close();
+
+  const noInputPage = await browser.newPage();
+  await noInputPage.setViewportSize({ width: 1914, height: 907 });
+  await noInputPage.addInitScript(() => {
+    const access = { inputs: new Map(), onstatechange: null };
+    window.__mockMidiAccess = access;
+    Object.defineProperty(navigator, 'requestMIDIAccess', { configurable: true, value: async () => access });
+  });
+  await noInputPage.goto('http://localhost:3000');
+  await noInputPage.locator('[data-mode="lfo"]').click();
+  await noInputPage.locator('[data-lfo-rate-mode="sync"]').click();
+  await noInputPage.locator('[data-lfo-clock-source]').selectOption('midi');
+  await expect(noInputPage.locator('[data-lfo-midi-status]')).toHaveText('NO INPUT');
+  await noInputPage.close();
+
+  const page = await browser.newPage();
+  await page.setViewportSize({ width: 1914, height: 907 });
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    const input = { state: 'connected', onmidimessage: null };
+    const access = { inputs: new Map([['mock-input', input]]), onstatechange: null };
+    window.__mockMidiInput = input;
+    Object.defineProperty(navigator, 'requestMIDIAccess', { configurable: true, value: async () => access });
+  });
+  await page.goto('http://localhost:3000');
+  await page.locator('[data-mode="lfo"]').click();
+  await page.locator('[data-lfo-rate-mode="sync"]').click();
+  await page.evaluate(() => {
+    const engine = window.LfoMode.getAudioEngine();
+    window.__clockMessages = [];
+    engine.sendLfoClockMessage = action => window.__clockMessages.push(action);
+    engine.sendMidiClockPulse = bpm => window.__clockMessages.push({ pulse: true, bpm });
+  });
+  await page.locator('[data-lfo-clock-source]').selectOption('midi');
+  await expect(page.locator('[data-lfo-midi-status]')).toHaveText('NO CLOCK');
+  await page.evaluate(() => {
+    let timestamp = performance.now();
+    const send = status => window.__mockMidiInput.onmidimessage({ data: [status], timeStamp: timestamp });
+    send(0xfa);
+    for (let pulse = 0; pulse < 24; pulse += 1) {
+      timestamp += [20.7, 21.1, 20.5, 21.0][pulse % 4];
+      send(0xf8);
+    }
+  });
+  await expect(page.locator('[data-lfo-midi-status]')).toContainText('LOCKED');
+  const locked = await page.evaluate(() => window.LfoMode.getState().lfoClock);
+  expect(locked.source).toBe('midi');
+  expect(locked.running).toBe(true);
+  expect(locked.midiBpm).toBeGreaterThan(110);
+  expect(locked.midiBpm).toBeLessThan(130);
+  await page.evaluate(() => window.__mockMidiInput.onmidimessage({ data: [0xfc], timeStamp: performance.now() }));
+  expect((await page.evaluate(() => window.LfoMode.getState().lfoClock)).running).toBe(false);
+  await expect(page.locator('[data-lfo-midi-status]')).toHaveText('STOPPED');
+  await page.evaluate(() => window.__mockMidiInput.onmidimessage({ data: [0xfb], timeStamp: performance.now() }));
+  expect((await page.evaluate(() => window.LfoMode.getState().lfoClock)).running).toBe(true);
+  await expect(page.locator('[data-lfo-midi-status]')).toHaveText('WAITING FOR CLOCK');
+  const messages = await page.evaluate(() => window.__clockMessages);
+  expect(messages[0]).toBe('start');
+  expect(messages.filter(item => typeof item === 'object' && item.pulse)).toHaveLength(24);
+  expect(messages).toContain('stop');
+  expect(messages).toContain('continue');
+  expect(pageErrors).toEqual([]);
+  await page.close();
 });

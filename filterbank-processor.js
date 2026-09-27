@@ -1992,7 +1992,15 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-dynamic-eq') { this.setDynamicEq(data); return; }
     if (data.type === 'set-modulation-state') { this.setModulationState(data); return; }
     if (data.type === 'set-clock-state') { this.clockCore.configure(data.clock || data); return; }
-    if (data.type === 'midi-clock-start') { this.clockCore.start(true); return; }
+    if (data.type === 'midi-clock-start') {
+      this.clockCore.start(true);
+      for (const oscillator of this.lfoSources) {
+        if (oscillator.rateMode === 'sync') oscillator.reset(0);
+      }
+      this.updateModulationTargets();
+      this.modulationTelemetryDirty = true;
+      return;
+    }
     if (data.type === 'midi-clock-continue') { this.clockCore.continue(); return; }
     if (data.type === 'midi-clock-stop') { this.clockCore.stop(); return; }
     if (data.type === 'midi-clock-pulse') {

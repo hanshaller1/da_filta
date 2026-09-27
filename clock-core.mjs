@@ -58,7 +58,9 @@ export class ClockCore {
   midiPulse() {
     if (!this.state.running || this.state.source !== 'midi') return false;
     this.midiPulseCount += 1;
-    this.beatPosition = Math.floor(this.beatPosition) + (this.midiPulseCount % 24) / 24;
+    // Pulses are absolute quarter-note subdivisions since MIDI Start. Modulo
+    // 24 loses the beat rollover and can re-anchor 0.99 back to 0.0 on pulse 24.
+    this.beatPosition = this.midiPulseCount / 24;
     return true;
   }
 

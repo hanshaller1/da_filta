@@ -111,6 +111,21 @@ test('noise moves continuously and deterministically at the configured oscillato
   assert.ok(samples.every(value => value >= -1 && value <= 1));
 });
 
+test('inverted sample-hold and noise are exact sign reversals after polarity mapping', () => {
+  for (const waveform of ['sample-hold', 'noise']) {
+    for (const polarity of ['bipolar', 'unipolar']) {
+      const base = new LfoOscillator({ enabled: true, waveform, polarity, rateHz: 1, seed: 12345 });
+      const inverted = new LfoOscillator({ enabled: true, waveform, polarity, rateHz: 1, seed: 12345, invert: true });
+      for (let frame = 0; frame <= 48000; frame += 1) {
+        const baseValue = base.advance(48000);
+        const invertedValue = inverted.advance(48000);
+        assert.ok(Number.isFinite(baseValue) && Number.isFinite(invertedValue));
+        assert.ok(Math.abs(invertedValue + baseValue) < 1e-12, `${waveform} ${polarity} invert must negate the final DSP sample`);
+      }
+    }
+  }
+});
+
 test('internal clock produces audio-sample-accurate sync periods for note divisions', () => {
   const checks = [['1/4', 24000], ['1/2', 48000], ['1/1', 96000]];
   for (const [division, frames] of checks) {
@@ -143,4 +158,63 @@ test('MIDI clock uses 24 PPQN, follows transport, and stop freezes sync phase on
   }
   assert.equal(sync.phase, 0);
   assert.ok(free.phase > 0.49 && free.phase < 0.51);
+});
+
+test('MIDI clock anchors absolute PPQN pulses across beat rollover', () => {
+  const clock = new ClockCore({ source: 'midi', midiBpm: 120, running: false });
+  clock.start(true);
+  for (let pulse = 1; pulse <= 23; pulse += 1) clock.midiPulse();
+  assert.equal(clock.beatPosition, 23 / 24);
+
+  // Simulate sample interpolation just before the next pulse. Pulse 24 must
+  // anchor at beat 1 instead of wrapping to beat 0.
+  clock.beatPosition = 0.99;
+  clock.midiPulse();
+  assert.equal(clock.beatPosition, 1);
+  clock.midiPulse();
+  assert.equal(clock.beatPosition, 25 / 24);
+  for (let pulse = 26; pulse <= 48; pulse += 1) clock.midiPulse();
+  assert.equal(clock.beatPosition, 2);
+});
+
+test('MIDI clock stays finite and correctly anchored through jitter and a tempo change', () => {
+  const clock = new ClockCore({ source: 'midi', midiBpm: 120, running: false });
+  clock.start(true);
+  const jitteredSamples = [994, 1013, 984, 1008, 997, 1004, 1011, 989];
+  for (let pulse = 1; pulse <= 48; pulse += 1) {
+    for (let sample = 0; sample < jitteredSamples[(pulse - 1) % jitteredSamples.length]; sample += 1) clock.advance(48000);
+    const beforePulse = clock.beatPosition;
+    clock.midiPulse();
+    assert.equal(clock.beatPosition, pulse / 24);
+    assert.ok(Math.abs(beforePulse - pulse / 24) < 0.001, `pulse ${pulse} re-anchored by more than expected jitter`);
+    assert.ok(Number.isFinite(clock.beatPosition));
+  }
+  assert.equal(clock.beatPosition, 2);
+
+  clock.setMidiTempo(126);
+  const changedTempoSamples = [950, 955, 952, 953, 951, 954];
+  for (let pulse = 49; pulse <= 72; pulse += 1) {
+    for (let sample = 0; sample < changedTempoSamples[(pulse - 49) % changedTempoSamples.length]; sample += 1) clock.advance(48000);
+    const beforePulse = clock.beatPosition;
+    clock.midiPulse();
+    assert.equal(clock.beatPosition, pulse / 24);
+    assert.ok(clock.beatPosition > beforePulse - 0.001);
+    assert.ok(Number.isFinite(clock.beatPosition) && clock.beatPosition >= 0);
+  }
+  assert.equal(clock.beatPosition, 3);
+
+  const anchored = clock.beatPosition;
+  const pulseCount = clock.midiPulseCount;
+  clock.stop();
+  for (let sample = 0; sample < 24000; sample += 1) clock.advance(48000);
+  assert.equal(clock.beatPosition, anchored);
+  clock.continue();
+  clock.advance(48000);
+  clock.midiPulse();
+  assert.equal(clock.midiPulseCount, pulseCount + 1);
+  assert.equal(clock.beatPosition, (pulseCount + 1) / 24);
+
+  clock.start(true);
+  assert.equal(clock.midiPulseCount, 0);
+  assert.equal(clock.beatPosition, 0);
 });

@@ -1697,17 +1697,24 @@ const receiveMidiClockMessage = event => {
   const status = event.data?.[0];
   const timestamp = Number.isFinite(event.timeStamp) ? event.timeStamp : performance.now();
   if (status === 0xfa) {
+    if (midiClockStatusTimer) clearTimeout(midiClockStatusTimer);
+    midiClockStatusTimer = 0;
     midiTransportRunning = true;
     midiLastClockTimestamp = null;
     setClockState({ running: true, midiStatus: 'WAITING FOR CLOCK' }, 'start');
     return;
   }
   if (status === 0xfb) {
+    if (midiClockStatusTimer) clearTimeout(midiClockStatusTimer);
+    midiClockStatusTimer = 0;
     midiTransportRunning = true;
+    midiLastClockTimestamp = null;
     setClockState({ running: true, midiStatus: 'WAITING FOR CLOCK' }, 'continue');
     return;
   }
   if (status === 0xfc) {
+    if (midiClockStatusTimer) clearTimeout(midiClockStatusTimer);
+    midiClockStatusTimer = 0;
     midiTransportRunning = false;
     setClockState({ running: false, midiStatus: 'STOPPED' }, 'stop');
     return;
@@ -1772,37 +1779,33 @@ const getDisplayedLfoPhase = () => {
   }
   return (telemetry.phase + elapsed * source.rateHz) % 1;
 };
-const lfoTelemetryBipolarValue = (source, telemetry) => {
-  if (!telemetry?.enabled) return 0;
-  return source.polarity === 'unipolar'
-    ? source.invert ? (-telemetry.value * 2) - 1 : (telemetry.value * 2) - 1
-    : source.invert ? -telemetry.value : telemetry.value;
-};
+// Worklet telemetry is already the final oscillator sample after polarity and
+// invert. Keep it authoritative for the live marker; never transform it again.
+const lfoTelemetrySampleValue = telemetry => telemetry?.enabled && Number.isFinite(telemetry.value)
+  ? telemetry.value : null;
 const getLfoPreviewRandom = (source, phase) => {
   const seed = (source.seed + Math.floor(phase * 4) * 0x9e3779b9) >>> 0;
   let value = seed || 1;
   value ^= value << 13; value ^= value >>> 17; value ^= value << 5;
   return ((value >>> 0) / 0xffffffff) * 2 - 1;
 };
-const lfoDisplaySample = (source, telemetry, phase) => {
-  const raw = source.waveform === 'sample-hold' && telemetry?.enabled
-    ? lfoTelemetryBipolarValue(source, telemetry)
-    : waveformSample(source.waveform, phase + source.phaseOffsetDeg / 360,
-    source.waveform === 'noise' ? getLfoPreviewRandom(source, phase) : lfoTelemetryBipolarValue(source, telemetry),
-    getLfoPreviewRandom(source, phase + .25));
-  const sample = source.polarity === 'unipolar' ? (raw + 1) / 2 : raw;
-  return source.invert ? -sample : sample;
+const lfoDisplaySample = (source, phase) => {
+  // This is a seeded preview only. Random preview values are not represented as
+  // live samples; renderLfoPhase uses the actual worklet value when available.
+  const raw = waveformSample(source.waveform, phase + source.phaseOffsetDeg / 360,
+    getLfoPreviewRandom(source, phase), getLfoPreviewRandom(source, phase + .25));
+  const polarityValue = source.polarity === 'unipolar' ? (raw + 1) / 2 : raw;
+  return source.invert ? -polarityValue : polarityValue;
 };
 const renderLfoWaveform = () => {
   if (!lfoWavePath) return;
   const source = getSelectedLfo();
   if (!source) return;
-  const telemetry = getSourceLfoTelemetry(source);
   const count = 128;
   let path = '';
   for (let index = 0; index <= count; index += 1) {
     const phase = index / count;
-    const value = lfoDisplaySample(source, telemetry, phase);
+    const value = lfoDisplaySample(source, phase);
     const unipolarView = source.polarity === 'unipolar' && !source.invert;
     const y = unipolarView ? 114 - value * 102 : 60 - value * 48;
     path += `${index ? 'L' : 'M'}${(phase * 1000).toFixed(2)} ${y.toFixed(2)} `;
@@ -1816,7 +1819,8 @@ const renderLfoPhase = () => {
   const telemetry = getSourceLfoTelemetry(source);
   const phase = getDisplayedLfoPhase();
   const x = phase * 1000;
-  const sample = lfoDisplaySample(source, telemetry, phase);
+  const telemetrySample = lfoTelemetrySampleValue(telemetry);
+  const sample = telemetrySample ?? lfoDisplaySample(source, phase);
   const unipolarView = source.polarity === 'unipolar' && !source.invert;
   const y = unipolarView ? 114 - sample * 102 : 60 - sample * 48;
   lfoPhaseLine.setAttribute('x1', x.toFixed(2));
@@ -1824,7 +1828,8 @@ const renderLfoPhase = () => {
   lfoPhaseDot.setAttribute('cx', x.toFixed(2));
   lfoPhaseDot.setAttribute('cy', y.toFixed(2));
   const clockRate = source.rateMode === 'sync' ? `${source.syncDivision} · ${getMidiStatusText()}` : lfoFormatRate(source.rateHz);
-  if (lfoPhaseReadout) lfoPhaseReadout.textContent = `${Math.round(phase * 360)}° · ${clockRate}`;
+  const sampleReadout = telemetrySample === null ? '' : ` · ${telemetrySample > 0 ? '+' : ''}${telemetrySample.toFixed(2)}`;
+  if (lfoPhaseReadout) lfoPhaseReadout.textContent = `${Math.round(phase * 360)}° · ${clockRate}${sampleReadout}`;
 };
 const renderLfoSlots = () => {
   if (!lfoSlots) return;
