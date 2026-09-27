@@ -331,7 +331,7 @@ test('LEARN and FREEZE travel through the real UI, AudioEngine, Filterbank, Work
   await expect.poll(() => page.evaluate(() => window.__dynamicEqLearnE2e.packets.some(packet => packet.progress > 0))).toBeTruthy();
   await expect(page.locator('[data-dynamic-eq-learn-status]')).toContainText('LEARNING');
   await expect.poll(() => page.evaluate(() => window.FilterMode.getAudioEngine().getState().learnedReferenceValid)).toBe(true);
-  await expect(page.locator('[data-dynamic-eq-learn-status]')).toHaveText('PROFILE READY');
+  await expect(page.locator('[data-dynamic-eq-learn-status]')).toHaveText('PROFILE LIVE');
   const learnedProfile = await page.evaluate(() => window.FilterMode.getAudioEngine().getState().learnedReferenceDb);
   expect(learnedProfile).toHaveLength(10);
   expect(learnedProfile.every(Number.isFinite)).toBe(true);
@@ -346,14 +346,64 @@ test('LEARN and FREEZE travel through the real UI, AudioEngine, Filterbank, Work
   await page.locator('[data-dynamic-eq-learn]').click();
   await expect.poll(() => page.evaluate(() => window.__dynamicEqLearnE2e.learnMessages)).toBe(2);
   await expect.poll(() => page.evaluate(() => window.__dynamicEqLearnE2e.packets.some(packet => packet.progress > 0 && !packet.frozen))).toBeTruthy();
+  const relearnRetainedProfile = await page.evaluate(() => window.FilterMode.getAudioEngine().getState().learnedReferenceDb);
   await page.locator('[data-dynamic-eq-freeze]').click();
   await expect.poll(() => page.evaluate(() => {
     const engine = window.FilterMode.getAudioEngine();
     return engine.learnProgress === 0 && engine.learnedReferenceFrozen;
   })).toBe(true);
-  expect(await page.evaluate(() => window.FilterMode.getAudioEngine().getState().learnedReferenceDb)).toEqual(learnedProfile);
+  expect(await page.evaluate(() => window.FilterMode.getAudioEngine().getState().learnedReferenceDb)).toEqual(relearnRetainedProfile);
   await expect(page.locator('[data-dynamic-eq-learn-status]')).toHaveText('FROZEN PROFILE');
   await page.locator('[data-audio-stop]').click();
+});
+
+test('learned profile adapts slowly while live, stops while frozen, and resumes on unfreeze', async ({ page }) => {
+  await page.goto('/');
+  const bundle = browserBundle('http://localhost:3000');
+  const result = await page.evaluate(async code => {
+    const engine = new window.AudioEngine({});
+    engine.setDynamicEq({ dynamicEqEnabled: true, dynamicEqMode: 'cut', dynamicEqThresholdDb: -60,
+      dynamicEqWindowDb: 0, detectorReferenceMode: 'REL' });
+    const options = engine.getFilterbankState();
+    options.bandFrequencies = [...window.Filterbank.BAND_FREQUENCIES];
+    options.bandQs = [...window.Filterbank.BAND_QS];
+    const bundleUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+    const { Graph } = await import(bundleUrl);
+    URL.revokeObjectURL(bundleUrl);
+    const graph = new Graph(48000, options, 'linear', false);
+    const processor = graph.bank;
+    processor.learnDurationFrames = 128;
+    const render = amplitude => {
+      for (let block = 0; block < 100; block += 1) {
+        const input = [0, 1].map(() => Float32Array.from({ length: 128 }, (_, frame) =>
+          amplitude * Math.sin(2 * Math.PI * 777 * (block * 128 + frame) / 48000)));
+        graph.process(input);
+      }
+    };
+    render(.02);
+    processor.handleMessage({ type: 'dynamic-eq-learn' });
+    render(.02);
+    const initial = [...processor.learnedReferenceDb];
+    const accumulator = [...processor.learnAccumulator];
+    render(.2);
+    const live = [...processor.learnedReferenceDb];
+    const accumulatorAfterLive = [...processor.learnAccumulator];
+    processor.learnedReferenceFrozen = true;
+    render(.5);
+    const frozen = [...processor.learnedReferenceDb];
+    const gainWhileFrozen = [...processor.dynamicEqGainDb];
+    processor.learnedReferenceFrozen = false;
+    render(.5);
+    const resumed = [...processor.learnedReferenceDb];
+    return { initial, live, frozen, resumed, accumulator, accumulatorAfterLive,
+      gainWhileFrozen };
+  }, bundle);
+  expect(result.initial.some((value, i) => Math.abs(value - result.live[i]) > .01)).toBe(true);
+  expect(result.accumulatorAfterLive).toEqual(result.accumulator);
+  expect(result.frozen).toEqual(result.live);
+  expect(result.resumed.some((value, i) => Math.abs(value - result.frozen[i]) > .01)).toBe(true);
+  expect(result.gainWhileFrozen.every(Number.isFinite)).toBe(true);
+  expect(result.gainWhileFrozen.some(value => Math.abs(value) > .1)).toBe(true);
 });
 
 test('reference graph hides invalid SVG profiles and shows only the current REF semantics', async ({ page }) => {
@@ -519,6 +569,49 @@ test('dynamic EQ graph and controls fit the existing desktop workspace', async (
   }
 });
 
+test('compact Dynamic EQ axis and two-row controls stay aligned at desktop and tablet widths', async ({ page }) => {
+  for (const width of [1914, 1440, 1200, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    await page.locator('[data-mode="dynamic-eq"]').click();
+    const layout = await page.evaluate(() => {
+      const rect = selector => document.querySelector(selector).getBoundingClientRect();
+      const buttons = row => [...row.querySelectorAll('button')].map(button => button.getBoundingClientRect());
+      const rows = [...document.querySelectorAll('.dynamic-eq-button-row')];
+      const axis = document.querySelector('.dynamic-eq-y-axis');
+      return {
+        axisLabels: [...axis.children].map(label => label.textContent),
+        axisLeft: axis.getBoundingClientRect().left,
+        graphLeft: rect('.dynamic-eq-plot').left,
+        axisFont: getComputedStyle(axis).fontSize,
+        gainFont: getComputedStyle(document.querySelector('.dynamic-eq-gain-scale')).fontSize,
+        controlsText: document.querySelector('.dynamic-eq-controls').innerText,
+        controls: rect('.dynamic-eq-controls'),
+        controlsOverflow: document.querySelector('.dynamic-eq-controls').scrollWidth - document.querySelector('.dynamic-eq-controls').clientWidth,
+        scrollHeight: document.querySelector('.dynamic-eq-controls').scrollHeight,
+        rowButtons: rows.map(buttons),
+        rowGroups: rows.map(row => [...row.children].map(group => group.getBoundingClientRect())),
+        rowLabels: rows.map(row => [...row.children].map(group => group.querySelector('.dynamic-eq-mode-heading > span, .dynamic-eq-mode > span').textContent.trim())),
+        freezeDisabled: document.querySelector('[data-dynamic-eq-freeze]').disabled,
+        freezeOpacity: getComputedStyle(document.querySelector('[data-dynamic-eq-freeze]')).opacity,
+        freezeCursor: getComputedStyle(document.querySelector('[data-dynamic-eq-freeze]')).cursor
+      };
+    });
+    expect(layout.axisLabels).toEqual(['0', '−12', '−24', '−36', '−48', '−60']);
+    expect(layout.axisLeft).toBeCloseTo(layout.graphLeft, 0);
+    expect(layout.axisFont).toBe(layout.gainFont);
+    expect(layout.controlsText).not.toContain('CONTROLS');
+    expect(layout.scrollHeight - layout.controls.height).toBeLessThan(2);
+    expect(layout.rowLabels).toEqual([['DETECTOR', 'DETECTOR REFERENCE'], ['STEREO', 'REFERENCE PROFILE']]);
+    expect(layout.rowButtons.map(row => row.map(button => button.height))).toEqual([[26, 26, 26, 26], [26, 26, 26, 26]]);
+    for (const groups of layout.rowGroups) expect(Math.abs(groups[0].width - groups[1].width)).toBeLessThan(1);
+    expect(layout.freezeDisabled).toBe(true);
+    expect(Number(layout.freezeOpacity)).toBeLessThan(1);
+    expect(layout.freezeCursor).toBe('not-allowed');
+    expect(layout.controlsOverflow).toBeLessThan(2);
+  }
+});
+
 test('dynamic EQ plot starts at the graph edge and sliders share exact band centers at varied widths', async ({ page }) => {
   for (const width of [1914, 1440, 1200, 1024]) {
     await page.setViewportSize({ width, height: 900 });
@@ -587,7 +680,7 @@ test('dynamic EQ axes, guide values and detector colors remain visible across th
   await page.goto('/');
   await page.locator('[data-mode="dynamic-eq"]').click();
   await page.locator('[data-module-power="dynamic-eq"]').click();
-  await expect(page.locator('.dynamic-eq-y-axis span')).toHaveText(['0 dBFS', '−12 dBFS', '−24 dBFS', '−36 dBFS', '−48 dBFS', '−60 dBFS']);
+  await expect(page.locator('.dynamic-eq-y-axis span')).toHaveText(['0', '−12', '−24', '−36', '−48', '−60']);
   await expect(page.locator('.dynamic-eq-x-axis span')).toHaveText(['29', '61', '115', '218', '411', '777', '1.5k', '2.8k', '5.2k', '11k']);
   await expect(page.locator('.dynamic-eq-column')).toHaveCount(10);
   await expect(page.locator('.dynamic-eq-profile-learned')).toBeHidden();
@@ -609,6 +702,7 @@ test('dynamic EQ axes, guide values and detector colors remain visible across th
   expect(visible.cut).toBeGreaterThan(0);
   expect(visible.boost).toBeGreaterThan(0);
   expect(visible.zero).toBe('dotted');
+  await expect(page.locator('.dynamic-eq-gain-zero span')).toHaveCount(0);
   const zoneBackgrounds = await page.locator('.dynamic-eq-column').evaluateAll(columns => columns.map(column => getComputedStyle(column).backgroundColor));
   expect(zoneBackgrounds).toHaveLength(10);
   expect(zoneBackgrounds.every(color => color !== 'rgba(0, 0, 0, 0)')).toBeTruthy();
@@ -635,10 +729,31 @@ test('dynamic EQ guide lines and bipolar gain bars follow telemetry', async ({ p
   await page.locator('[data-mode="dynamic-eq"]').click();
   await page.locator('[data-module-power="dynamic-eq"]').click();
   await page.evaluate(() => window.FilterMode.getAudioEngine().onDynamicEqTelemetry({
-    levels: Array(10).fill(-24), gains: [-4, 3, 0, 0, 0, 0, 0, 0, 0, 0]
+    levels: Array(10).fill(-24), gains: [-4, 3, 0, 0, 0, 0, 0, 0, 0, 0],
+    leftAppliedBandGainDb: [-4, 3, 0, 0, 0, 0, 0, 0, 0, 0],
+    rightAppliedBandGainDb: [-4, 3, 0, 0, 0, 0, 0, 0, 0, 0]
   }));
   await expect(page.locator('.dynamic-eq-gain-value').first()).toHaveText('-4.0 dB');
   await expect(page.locator('.dynamic-eq-gain-value').nth(1)).toHaveText('+3.0 dB');
+  const zeroGeometry = await page.evaluate(() => {
+    const bounds = selector => document.querySelector(selector).getBoundingClientRect();
+    const zero = bounds('.dynamic-eq-gain-zero');
+    const plot = bounds('.dynamic-eq-plot');
+    return { zeroY: zero.top, centerY: plot.top + plot.height / 2,
+      cutGainTop: bounds('.dynamic-eq-column:nth-child(1) .dynamic-eq-gain').top,
+      boostGainBottom: bounds('.dynamic-eq-column:nth-child(2) .dynamic-eq-gain').bottom,
+      cutOutTop: bounds('.dynamic-eq-column:nth-child(1) .dynamic-eq-out-left').top,
+      boostOutBottom: bounds('.dynamic-eq-column:nth-child(2) .dynamic-eq-out-left').bottom };
+  });
+  expect(zeroGeometry.zeroY).toBeCloseTo(zeroGeometry.centerY, 0);
+  expect(zeroGeometry.cutGainTop).toBeCloseTo(zeroGeometry.zeroY, 0);
+  expect(zeroGeometry.boostGainBottom).toBeCloseTo(zeroGeometry.zeroY, 0);
+  expect(zeroGeometry.cutOutTop).toBeCloseTo(zeroGeometry.zeroY, 0);
+  expect(zeroGeometry.boostOutBottom).toBeCloseTo(zeroGeometry.zeroY, 0);
+  await expect(page.locator('[data-dynamic-eq-gain-scale-positive]')).toHaveText('+12 dB');
+  await expect(page.locator('[data-dynamic-eq-gain-scale-mid-positive]')).toHaveText('+6 dB');
+  await expect(page.locator('[data-dynamic-eq-gain-scale-mid-negative]')).toHaveText('−6 dB');
+  await expect(page.locator('[data-dynamic-eq-gain-scale-negative]')).toHaveText('−12 dB');
   const before = await page.locator('[data-dynamic-eq-threshold]').evaluate(element => element.style.bottom);
   await page.locator('.dynamic-eq-control input[aria-label="Threshold"]').fill('-18');
   const after = await page.locator('[data-dynamic-eq-threshold]').evaluate(element => element.style.bottom);

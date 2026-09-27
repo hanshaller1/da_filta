@@ -3,6 +3,7 @@ import { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } from '.
 
 const COMMON_BUS_RESONANCE_EPSILON = 1e-12;
 const DIAGNOSTICS_UPDATE_HZ = 15;
+const LEARNED_REFERENCE_ADAPTATION_SECONDS = 30;
 const dynamicEqLocalReferenceDb = (levels, band, precomputedWeights) => {
   let weightedLevel = 0;
   let totalWeight = 0;
@@ -45,6 +46,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.learnCompleted = false;
     this.dynamicEqTelemetryDirty = false;
     this.learnDurationFrames = Math.round(sampleRate * 3);
+    this.learnedReferenceAdaptationCoefficient = 1 - Math.exp(-1 / (sampleRate * LEARNED_REFERENCE_ADAPTATION_SECONDS));
     this.dynamicEqRelativeWeights = Array.from({ length: this.bandCount }, (_, band) => {
       const weights = new Float64Array(this.bandCount);
       for (let neighbor = Math.max(0, band - 2); neighbor <= Math.min(this.bandCount - 1, band + 2); neighbor += 1) {
@@ -596,7 +598,14 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       this.dynamicEqTargetDb[band] = sensitivity === 0 ? 0 : this.dynamicEqTargetByChannel.left[band] * sensitivity;
       this.dynamicEqSmoothedDb[band] = this.dynamicEqSmoothedByChannel.left[band];
       this.dynamicEqGainDb[band] = this.dynamicEqGainByChannel.left[band];
-      if (this.learnFrames < this.learnDurationFrames) this.learnAccumulator[band] += levelDb;
+      if (this.learnActive && this.learnFrames < this.learnDurationFrames) {
+        this.learnAccumulator[band] += levelDb;
+      }
+      else if (this.learnedReferenceValid && !this.learnedReferenceFrozen) {
+        const boundedLevelDb = Math.max(-120, Math.min(12, levelDb));
+        const adapted = this.learnedReferenceDb[band] + this.learnedReferenceAdaptationCoefficient * (boundedLevelDb - this.learnedReferenceDb[band]);
+        this.learnedReferenceDb[band] = Math.max(-120, Math.min(12, adapted));
+      }
     }
     if (this.learnFrames < this.learnDurationFrames && this.learnActive) {
       this.learnFrames += 1;

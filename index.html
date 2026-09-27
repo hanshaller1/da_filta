@@ -524,10 +524,10 @@
                   </div>
                 </header>
                 <div class="dynamic-eq-graph" data-dynamic-eq-graph>
-                  <div class="dynamic-eq-y-axis" aria-label="Detector level axis"><span>0 dBFS</span><span>−12 dBFS</span><span>−24 dBFS</span><span>−36 dBFS</span><span>−48 dBFS</span><span>−60 dBFS</span></div>
+                  <div class="dynamic-eq-y-axis" aria-label="Detector level axis"><span>0</span><span>−12</span><span>−24</span><span>−36</span><span>−48</span><span>−60</span></div>
                   <div class="dynamic-eq-plot">
                     <div class="dynamic-eq-window-zone" data-dynamic-eq-window-zone></div>
-                    <div class="dynamic-eq-gain-zero"><span>GAIN 0 dB</span></div>
+                    <div class="dynamic-eq-gain-zero"></div>
                     <div class="dynamic-eq-gain-scale" aria-label="Shared gain and applied gain dB scale">
                       <span class="dynamic-eq-gain-scale-tick" data-dynamic-eq-gain-scale-positive>+12 dB</span>
                       <span class="dynamic-eq-gain-scale-tick" data-dynamic-eq-gain-scale-mid-positive data-dynamic-eq-out-axis-positive>+6 dB</span>
@@ -549,14 +549,16 @@
                 <div class="dynamic-eq-legend"><span>INPUT · dBFS</span><span data-dynamic-eq-gain-scale>GAIN / OUT · SHARED SCALE ±12 dB</span><span data-dynamic-eq-out-scale>OUT · APPLIED GAIN L/R</span></div>
                 <div class="dynamic-eq-sensitivity"><div class="dynamic-eq-sensitivity-heading"><strong>SENSITIVITY</strong><button type="button" data-dynamic-eq-reset>RESET 100 %</button></div><div class="dynamic-eq-sensitivity-grid" data-dynamic-eq-sensitivity></div></div>
               </section>
-              <section class="dynamic-eq-controls" aria-label="Dynamic EQ controls"><strong>CONTROLS</strong>
+              <section class="dynamic-eq-controls" aria-label="Dynamic EQ controls">
                 <div class="dynamic-eq-mode"><span>MODE</span><div role="group" aria-label="Dynamic EQ mode"><button type="button" data-dynamic-eq-mode="cut">CUT</button><button type="button" data-dynamic-eq-mode="boost">BOOST</button><button type="button" data-dynamic-eq-mode="balance">BALANCE</button></div></div>
                 <div class="dynamic-eq-control-grid" data-dynamic-eq-controls></div>
-                <div class="dynamic-eq-mode"><span>DETECTOR</span><div role="group" aria-label="Dynamic EQ detector"><button type="button" data-dynamic-eq-detector="peak">PEAK</button><button type="button" data-dynamic-eq-detector="rms">RMS</button></div></div>
-                <div class="dynamic-eq-v2-modes">
+                <div class="dynamic-eq-button-row">
+                  <div class="dynamic-eq-mode"><span>DETECTOR</span><div role="group" aria-label="Dynamic EQ detector"><button type="button" data-dynamic-eq-detector="peak">PEAK</button><button type="button" data-dynamic-eq-detector="rms">RMS</button></div></div>
                   <div class="dynamic-eq-mode"><span>DETECTOR REFERENCE</span><div role="group" aria-label="Detector reference"><button type="button" data-dynamic-eq-reference="ABS">ABS</button><button type="button" data-dynamic-eq-reference="REL">REL</button></div></div>
+                </div>
+                <div class="dynamic-eq-button-row">
                   <div class="dynamic-eq-mode"><span>STEREO</span><div role="group" aria-label="Stereo detector"><button type="button" data-dynamic-eq-stereo="LINKED">LINKED</button><button type="button" data-dynamic-eq-stereo="DUAL">DUAL</button></div></div>
-                  <div class="dynamic-eq-mode"><span>REFERENCE PROFILE</span><div role="group" aria-label="Learn and freeze reference"><button type="button" data-dynamic-eq-learn>LEARN</button><button type="button" data-dynamic-eq-freeze>FREEZE</button></div><output data-dynamic-eq-learn-status>NO PROFILE</output></div>
+                  <div class="dynamic-eq-mode dynamic-eq-profile-mode"><div class="dynamic-eq-mode-heading"><span>REFERENCE PROFILE</span><output data-dynamic-eq-learn-status>NO PROFILE</output></div><div role="group" aria-label="Learn and freeze reference"><button type="button" data-dynamic-eq-learn>LEARN</button><button type="button" data-dynamic-eq-freeze>FREEZE</button></div></div>
                 </div>
               </section>
             </section>

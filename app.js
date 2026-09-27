@@ -2038,7 +2038,7 @@ const renderDynamicEqControls = () => {
   const profileStatus = document.querySelector('[data-dynamic-eq-learn-status]');
   if (profileStatus) profileStatus.textContent = dynamicEqTelemetry?.learnProgress > 0
     ? `LEARNING ${Math.round(dynamicEqTelemetry.learnProgress * 100)} %`
-    : hasValidLearnedReference() ? (state.learnedReferenceFrozen ? 'FROZEN PROFILE' : 'PROFILE READY') : 'NO PROFILE';
+    : hasValidLearnedReference() ? (state.learnedReferenceFrozen ? 'FROZEN PROFILE' : 'PROFILE LIVE') : 'NO PROFILE';
   const freezeButton = document.querySelector('[data-dynamic-eq-freeze]');
   freezeButton?.classList.toggle('active', hasValidLearnedReference() && state.learnedReferenceFrozen);
   freezeButton?.setAttribute('aria-pressed', String(hasValidLearnedReference() && state.learnedReferenceFrozen));
@@ -2049,7 +2049,7 @@ const renderDynamicEqControls = () => {
     statusParts.push(`SPREAD ${state.spread >= 0 ? '+' : ''}${Number(state.spread).toFixed(1)} dB`);
   }
   if (dynamicEqTelemetry?.learnProgress > 0) statusParts.push('LEARNING');
-  else if (hasValidLearnedReference()) statusParts.push(state.learnedReferenceFrozen ? 'FROZEN' : 'LEARNED');
+  else if (hasValidLearnedReference()) statusParts.push(state.learnedReferenceFrozen ? 'FROZEN' : 'LIVE');
   document.querySelector('[data-dynamic-eq-status]').textContent = statusParts.join(' | ');
   dynamicEqDefinitions.forEach(([, field, , , , unit], index) => {
     const control = dynamicEqControls.children[index];
