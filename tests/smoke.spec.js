@@ -697,15 +697,16 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   expect(await page.evaluate(() => window.__audioTestState.gains[1].value)).toBeCloseTo(10 ** (6 / 20), 5);
   expect(await page.evaluate(() => window.__audioTestState.gains[2].value)).toBe(1);
   expect(await page.evaluate(() => window.__audioTestState.gains[3].value)).toBe(0);
-  expect(await page.evaluate(() => window.__audioTestState.gains[4].value)).toBe(0);
-  expect(await page.evaluate(() => window.__audioTestState.gains[6].value)).toBeCloseTo(10 ** (-12 / 20), 5);
+  // Gain 4 is the modulation polarity node; bypass and output volume follow it.
+  expect(await page.evaluate(() => window.__audioTestState.gains[5].value)).toBe(0);
+  expect(await page.evaluate(() => window.__audioTestState.gains[7].value)).toBeCloseTo(10 ** (-12 / 20), 5);
   await page.locator('[data-audio-bypass]').click();
   await expect(page.locator('[data-audio-bypass]')).toHaveAttribute('aria-pressed', 'true');
-  expect(await page.evaluate(() => window.__audioTestState.gains[4].value)).toBe(1);
-  expect(await page.evaluate(() => window.__audioTestState.gains[6].value)).toBe(0);
+  expect(await page.evaluate(() => window.__audioTestState.gains[5].value)).toBe(1);
+  expect(await page.evaluate(() => window.__audioTestState.gains[7].value)).toBe(0);
   await page.locator('[data-audio-bypass]').click();
-  expect(await page.evaluate(() => window.__audioTestState.gains[4].value)).toBe(0);
-  expect(await page.evaluate(() => window.__audioTestState.gains[6].value)).toBeCloseTo(10 ** (-12 / 20), 5);
+  expect(await page.evaluate(() => window.__audioTestState.gains[5].value)).toBe(0);
+  expect(await page.evaluate(() => window.__audioTestState.gains[7].value)).toBeCloseTo(10 ** (-12 / 20), 5);
   const workletModules = await page.evaluate(() => window.__audioTestState.workletModules.map(url => new URL(url).pathname));
   const workletNames = await page.evaluate(() => window.__audioTestState.workletNodes.map(node => node.name));
   for (const module of ['/filterbank-processor.js', '/input-preamp-processor.js', '/output-guard-processor.js', '/output-protection-processor.js']) {
@@ -715,7 +716,7 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
     expect(workletNames).toContain(processor);
   }
   const filterbankOptions = () => page.evaluate(() => window.__audioTestState.workletNodes.find(node => node.name === 'da-filta-processor').options);
-  expect((await filterbankOptions()).outputChannelCount).toEqual([2]);
+  expect((await filterbankOptions()).outputChannelCount).toEqual([2, 1]);
   expect((await filterbankOptions()).processorOptions.bandGainLeft[0]).toBeCloseTo(40, 5);
   expect((await filterbankOptions()).processorOptions.bandGainRight[0]).toBeCloseTo(40, 5);
   expect((await filterbankOptions()).processorOptions.smoothingTime).toBe(0.015);
@@ -782,8 +783,8 @@ test('audio I/O controls build and stop a mocked stereo pass-through', async ({ 
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 1].value, restartGainOffset)).toBeCloseTo(10 ** (6 / 20), 5);
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 2].value, restartGainOffset)).toBe(0.5);
   expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 3].value, restartGainOffset)).toBe(0.5);
-  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 4].value, restartGainOffset)).toBe(0);
-  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 6].value, restartGainOffset)).toBeCloseTo(10 ** (-12 / 20), 5);
+  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 5].value, restartGainOffset)).toBe(0);
+  expect(await page.evaluate(offset => window.__audioTestState.gains[offset + 7].value, restartGainOffset)).toBeCloseTo(10 ** (-12 / 20), 5);
   const restartedWorklets = await page.evaluate(() => window.__audioTestState.workletNodes.slice(-4).map(node => node.name));
   for (const processor of ['da-filta-processor', 'resonant-input-preamp-processor', 'da-filta-output-guard', 'da-filta-output-protection']) {
     expect(restartedWorklets).toContain(processor);

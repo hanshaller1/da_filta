@@ -14,10 +14,19 @@ const qs = frequencies.map((frequency, index) => {
 });
 
 function loadProcessor(source) {
-  const tptSource = fs.readFileSync(path.join(root, 'tpt-svf.js'), 'utf8')
-    .replaceAll('export class ', 'class ');
-  const dynamicEqSource = fs.readFileSync(path.join(root, 'dynamic-eq-core.mjs'), 'utf8')
-    .replace(/^export /gm, '');
+  const moduleSource = (file, bindings, stripExportList = false) => {
+    let source = fs.readFileSync(path.join(root, file), 'utf8').replace(/^export /gm, '');
+    if (stripExportList) source = source.replace(/^export\s+\{[^}]+\};?\s*$/gm, '');
+    return `(() => {\n${source}\nObject.assign(globalThis, { ${bindings.join(', ')} });\n})();`;
+  };
+  const dependencies = [
+    moduleSource('tpt-svf.js', ['LinearTptSvf', 'OversampledPositiveTptResonator']),
+    moduleSource('dynamic-eq-core.mjs', ['normalizeDynamicEq', 'targetGainDb', 'smoothGain', 'timeCoefficient']),
+    moduleSource('filter-shape-core.mjs', ['FilterShape'], true),
+    moduleSource('modulation-core.mjs', ['ModulationCore']),
+    moduleSource('lfo-core.mjs', ['LfoOscillator', 'normalizeModulationState']),
+    moduleSource('clock-core.mjs', ['ClockCore'])
+  ].join('\n');
   const processorSource = source
     .replace(/^import .*?;\s*$/gm, '')
     .replace(/registerProcessor\('da-filta-processor', DaFiltaProcessor\);/, 'globalThis.DaFiltaProcessor = DaFiltaProcessor;');
@@ -28,7 +37,7 @@ function loadProcessor(source) {
     }
   };
   context.globalThis = context;
-  vm.runInNewContext(`${tptSource}\n${dynamicEqSource}\n${processorSource}`, context, { filename: 'filterbank-processor.js' });
+  vm.runInNewContext(`${dependencies}\n${processorSource}`, context, { filename: 'filterbank-processor.js' });
   return context.DaFiltaProcessor;
 }
 

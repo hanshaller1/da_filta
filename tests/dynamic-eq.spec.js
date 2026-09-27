@@ -546,6 +546,37 @@ test('dynamic EQ workspace, power and state survive tab changes', async ({ page 
   await expect(page.locator('.dynamic-eq-sensitivity-item output').first()).toHaveText('100');
 });
 
+test('mode panels stay together in the workspace and Dynamic EQ keeps its desktop split', async ({ page }) => {
+  await page.setViewportSize({ width: 1914, height: 907 });
+  await page.goto('/');
+  await page.locator('[data-mode="dynamic-eq"]').click();
+
+  const layout = await page.evaluate(() => {
+    const workspace = document.querySelector('.mode-workspace');
+    const dynamicEq = document.querySelector('#mode-dynamic-eq');
+    const response = dynamicEq.querySelector('.dynamic-eq-response').getBoundingClientRect();
+    const controls = dynamicEq.querySelector('.dynamic-eq-controls').getBoundingClientRect();
+    const workspaceRect = workspace.getBoundingClientRect();
+    const panelRect = dynamicEq.getBoundingClientRect();
+    return {
+      workspaceInModeContent: workspace.parentElement.matches('.mode-content'),
+      allPanelsInWorkspace: [...document.querySelectorAll('[data-mode-panel]')]
+        .every(panel => panel.parentElement === workspace),
+      workspaceWidth: workspaceRect.width,
+      panelWidth: panelRect.width,
+      response: { left: response.left, right: response.right, width: response.width },
+      controls: { left: controls.left, right: controls.right, width: controls.width }
+    };
+  });
+
+  expect(layout.workspaceInModeContent).toBe(true);
+  expect(layout.allPanelsInWorkspace).toBe(true);
+  expect(layout.panelWidth).toBeGreaterThan(layout.workspaceWidth * 0.9);
+  expect(layout.response.width).toBeGreaterThan(0);
+  expect(layout.controls.width).toBeGreaterThan(0);
+  expect(layout.response.right).toBeLessThanOrEqual(layout.controls.left);
+});
+
 test('dynamic EQ graph and controls fit the existing desktop workspace', async ({ page }) => {
   for (const [width, height] of [[1914, 907], [1440, 900], [1914, 768]]) {
     await page.setViewportSize({ width, height });

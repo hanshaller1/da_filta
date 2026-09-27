@@ -202,7 +202,8 @@ test('workspace selection and module power remain independent pointer interactio
 
   await page.locator('[data-mode="filterbank"]').click();
   expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: false });
-  await expect(page.locator('.mode-power:disabled')).toHaveCount(4);
+  // Only CLOCK MOD, ENVELOPE FOLLOWER and MAKROS remain unavailable; LFO is routable.
+  await expect(page.locator('.mode-power:disabled')).toHaveCount(3);
   await expect(page.locator('[data-mode="filterbank"]').locator('xpath=..').locator('[data-module-power="filterbank"]')).toHaveCount(1);
   await expect(page.locator('[data-mode="presets"]').locator('xpath=..').locator('.mode-power-slot')).toHaveCount(1);
 });
@@ -829,7 +830,8 @@ test('gain controls follow DEV boost and cut limits without changing panel geome
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.locator('[data-mode="filter"]').click();
-  const before = await page.locator('.filter-controls').boundingBox();
+  const filterControls = page.locator('#mode-filter .filter-controls');
+  const before = await filterControls.boundingBox();
   await selectFilterType(page, 'bell');
   await page.locator('[data-band-boost-db]').evaluate(select => { select.value = '24'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.locator('[data-band-cut-db]').evaluate(select => { select.value = '36'; select.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -838,7 +840,7 @@ test('gain controls follow DEV boost and cut limits without changing panel geome
   await expect(page.locator('[data-filter-control="gain"]')).toHaveAttribute('step', '0.1');
   await selectFilterType(page, 'formant');
   await selectFilterType(page, 'baxandall');
-  const after = await page.locator('.filter-controls').boundingBox();
+  const after = await filterControls.boundingBox();
   expect(after).toEqual(before);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1440);
 });
