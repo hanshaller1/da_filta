@@ -43,6 +43,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.dynamicEqLevelByChannel = { left: new Float64Array(this.bandCount).fill(-120), right: new Float64Array(this.bandCount).fill(-120) };
     this.learnFrames = 0;
     this.learnCompleted = false;
+    this.dynamicEqTelemetryDirty = false;
     this.learnDurationFrames = Math.round(sampleRate * 3);
     this.dynamicEqRelativeWeights = Array.from({ length: this.bandCount }, (_, band) => {
       const weights = new Float64Array(this.bandCount);
@@ -52,7 +53,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       }
       return weights;
     });
+    this.initializingDynamicEq = true;
     this.setDynamicEq(processorOptions);
+    this.initializingDynamicEq = false;
     // Dedicated source-only filters keep detection before gain and feedback.
     this.dynamicEqDetectorFilters = { left: this.createFilters(), right: this.createFilters() };
     this.dynamicEqPeak = new Float64Array(this.bandCount);
@@ -503,6 +506,20 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   setDynamicEq(source) {
     const settings = normalizeDynamicEq(source, this.bandCount);
+    if (this.learnedReferenceFrozen && settings.learnedReferenceFrozen && this.learnedReferenceValid) {
+      settings.learnedReferenceDb = [...this.learnedReferenceDb];
+      settings.learnedReferenceValid = true;
+    }
+    if (settings.learnedReferenceFrozen && this.learnActive && this.learnedReferenceValid) {
+      this.learnActive = false;
+      this.learnFrames = 0;
+      this.learnAccumulator.fill(0);
+    }
+    if (settings.learnedReferenceFrozen !== this.learnedReferenceFrozen
+      || settings.learnedReferenceValid !== this.learnedReferenceValid
+      || settings.learnedReferenceDb.some((value, index) => value !== this.learnedReferenceDb?.[index])) {
+      if (!this.initializingDynamicEq) this.dynamicEqTelemetryDirty = true;
+    }
     Object.assign(this, settings);
     this.dynamicEqCutRangeDb = settings.dynamicEqCutRangeDb;
     this.dynamicEqBoostRangeDb = settings.dynamicEqBoostRangeDb;
@@ -1750,7 +1767,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-dynamic-eq') { this.setDynamicEq(data); return; }
     if (data.type === 'dynamic-eq-learn') {
       this.learnAccumulator.fill(0); this.learnFrames = 0; this.learnActive = true;
-      this.learnedReferenceFrozen = false; return;
+      this.learnedReferenceFrozen = false; this.dynamicEqTelemetryDirty = true; return;
     }
     if (data.type === 'set-pre-dynamic-gain-db') {
       if (Number.isInteger(data.index) && data.index >= 0 && data.index < this.bandCount) {
@@ -2393,9 +2410,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
           : this.spectralCoreMix === 0 ? source : source + this.spectralCoreMix * (wet - source);
       }
     }
-    if (this.dynamicEqEnabled || this.learnActive || this.learnCompleted) {
+    if (this.dynamicEqEnabled || this.learnActive || this.learnCompleted || this.dynamicEqTelemetryDirty) {
       this.dynamicEqTelemetryCounter += frameCount;
-      if (this.dynamicEqTelemetryCounter >= this.dynamicEqTelemetryInterval) {
+      if (this.dynamicEqTelemetryCounter >= this.dynamicEqTelemetryInterval || this.dynamicEqTelemetryDirty) {
         this.dynamicEqTelemetryCounter %= this.dynamicEqTelemetryInterval;
         const leftRelativeReferences = Array.from({ length: this.bandCount }, (_, band) =>
           dynamicEqLocalReferenceDb(this.dynamicEqLevelByChannel.left, band, this.dynamicEqRelativeWeights));
@@ -2411,6 +2428,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
           leftGains: Array.from(this.dynamicEqGainByChannel.left), rightGains: Array.from(this.dynamicEqGainByChannel.right),
           leftAppliedBandGainDb: Array.from(this.appliedBandGain.left, gain => 20 * Math.log10(Math.max(1e-12, gain))),
           rightAppliedBandGainDb: Array.from(this.appliedBandGain.right, gain => 20 * Math.log10(Math.max(1e-12, gain))) });
+        this.dynamicEqTelemetryDirty = false;
         this.learnCompleted = false;
       }
     }

@@ -418,6 +418,32 @@
       this.applySpectralCoreRequired();
     }
 
+    learnDynamicEq() {
+      const started = this.filterbank?.learnDynamicEq?.() === true;
+      if (started) this.learnedReferenceFrozen = false;
+      return started;
+    }
+
+    setDynamicEqFrozen(frozen) {
+      if (!this.learnedReferenceValid) return false;
+      this.learnedReferenceFrozen = Boolean(frozen);
+      this.filterbank?.setDynamicEq?.(this);
+      return this.learnedReferenceFrozen;
+    }
+
+    receiveDynamicEqTelemetry(packet) {
+      if (Array.isArray(packet?.learnedReferenceDb)) {
+        this.learnedReferenceDb = [...packet.learnedReferenceDb];
+        this.learnedReferenceValid = packet.learnedReferenceValid === true
+          && packet.learnedReferenceDb.length === BAND_COUNT
+          && packet.learnedReferenceDb.every(Number.isFinite);
+        this.learnedReferenceFrozen = this.learnedReferenceValid && packet.learnedReferenceFrozen === true;
+      }
+      this.learnProgress = Number.isFinite(packet?.learnProgress)
+        ? Math.max(0, Math.min(1, packet.learnProgress)) : 0;
+      this.onDynamicEqTelemetry?.(packet);
+    }
+
     get spectralCoreRequired() {
       return this.filterbankEnabled || this.filterEnabled || this.dynamicEqEnabled;
     }
@@ -561,7 +587,7 @@
         , perChannelBands: this.perChannelBands
         , negativeResonanceMode: this.negativeResonanceMode, negativeResonanceCurve: this.negativeResonanceCurve, negativeResonanceAmount: this.negativeResonanceAmount, negativeResonanceLocal: this.negativeResonanceLocal, negativeResonanceMain: this.negativeResonanceMain, negativeResonancePhase: this.negativeResonancePhase
         , onDiagnostics: this.onDiagnostics
-        , onDynamicEqTelemetry: this.onDynamicEqTelemetry
+        , onDynamicEqTelemetry: packet => this.receiveDynamicEqTelemetry(packet)
         , ...window.ResonantState.normalizeDynamicEqState(this)
       };
     }

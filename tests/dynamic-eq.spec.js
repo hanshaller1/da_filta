@@ -297,6 +297,105 @@ test('LEARN creates a stable ten-band profile and FREEZE persists it', async ({ 
   expect(result.restored.learnedReferenceDb).toEqual(result.learned);
 });
 
+test('LEARN and FREEZE travel through the real UI, AudioEngine, Filterbank, Worklet and telemetry path', async ({ page }) => {
+  test.setTimeout(25000);
+  await page.goto('/');
+  await page.locator('[data-mode="dynamic-eq"]').click();
+  await page.locator('[data-module-power="dynamic-eq"]').click();
+  await page.locator('[data-audio-source="sample"]').click();
+  await page.locator('[data-audio-start]').click();
+  await expect(page.locator('[data-audio-status]')).toHaveText('ON');
+  await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    const port = engine.filterbank.workletNode.port;
+    const originalPostMessage = port.postMessage.bind(port);
+    window.__dynamicEqLearnE2e = { learnMessages: 0, packets: [] };
+    port.postMessage = message => {
+      if (message?.type === 'dynamic-eq-learn') window.__dynamicEqLearnE2e.learnMessages += 1;
+      return originalPostMessage(message);
+    };
+    const receive = engine.onDynamicEqTelemetry;
+    engine.onDynamicEqTelemetry = packet => {
+      window.__dynamicEqLearnE2e.packets.push({
+        progress: packet.learnProgress,
+        valid: packet.learnedReferenceValid,
+        frozen: packet.learnedReferenceFrozen,
+        profile: [...packet.learnedReferenceDb]
+      });
+      receive(packet);
+    };
+  });
+  await expect(page.locator('[data-dynamic-eq-freeze]')).toBeDisabled();
+  await page.locator('[data-dynamic-eq-learn]').click();
+  await expect.poll(() => page.evaluate(() => window.__dynamicEqLearnE2e.learnMessages)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__dynamicEqLearnE2e.packets.some(packet => packet.progress > 0))).toBeTruthy();
+  await expect(page.locator('[data-dynamic-eq-learn-status]')).toContainText('LEARNING');
+  await expect.poll(() => page.evaluate(() => window.FilterMode.getAudioEngine().getState().learnedReferenceValid)).toBe(true);
+  await expect(page.locator('[data-dynamic-eq-learn-status]')).toHaveText('PROFILE READY');
+  const learnedProfile = await page.evaluate(() => window.FilterMode.getAudioEngine().getState().learnedReferenceDb);
+  expect(learnedProfile).toHaveLength(10);
+  expect(learnedProfile.every(Number.isFinite)).toBe(true);
+  expect(learnedProfile.some(value => value > -90)).toBe(true);
+  await expect(page.locator('[data-dynamic-eq-freeze]')).toBeEnabled();
+  await page.locator('[data-dynamic-eq-freeze]').click();
+  await expect.poll(() => page.evaluate(() => window.FilterMode.getAudioEngine().getState().learnedReferenceFrozen)).toBe(true);
+  await expect(page.locator('[data-dynamic-eq-learn-status]')).toHaveText('FROZEN PROFILE');
+  await expect(page.locator('[data-dynamic-eq-freeze]')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.evaluate(() => window.__dynamicEqLearnE2e.packets.some(packet => packet.valid && packet.frozen))).toBeTruthy();
+
+  await page.locator('[data-dynamic-eq-learn]').click();
+  await expect.poll(() => page.evaluate(() => window.__dynamicEqLearnE2e.learnMessages)).toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__dynamicEqLearnE2e.packets.some(packet => packet.progress > 0 && !packet.frozen))).toBeTruthy();
+  await page.locator('[data-dynamic-eq-freeze]').click();
+  await expect.poll(() => page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    return engine.learnProgress === 0 && engine.learnedReferenceFrozen;
+  })).toBe(true);
+  expect(await page.evaluate(() => window.FilterMode.getAudioEngine().getState().learnedReferenceDb)).toEqual(learnedProfile);
+  await expect(page.locator('[data-dynamic-eq-learn-status]')).toHaveText('FROZEN PROFILE');
+  await page.locator('[data-audio-stop]').click();
+});
+
+test('reference graph hides invalid SVG profiles and shows only the current REF semantics', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="dynamic-eq"]').click();
+  await expect(page.locator('.dynamic-eq-profile-learned')).toBeHidden();
+  await expect(page.locator('.dynamic-eq-profile-relative-left')).toBeHidden();
+  await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    engine.receiveDynamicEqTelemetry({
+      levels: Array(10).fill(-24), leftLevels: Array(10).fill(-24), rightLevels: Array(10).fill(-24),
+      gains: Array(10).fill(0), leftGains: Array(10).fill(0), rightGains: Array(10).fill(0),
+      relativeReferences: Array.from({ length: 10 }, (_, index) => -36 + index),
+      leftRelativeReferences: Array.from({ length: 10 }, (_, index) => -34 + index),
+      rightRelativeReferences: Array.from({ length: 10 }, (_, index) => -40 + index), learnedReferenceDb: Array(10).fill(-120),
+      learnedReferenceValid: false, learnedReferenceFrozen: false, learnProgress: 0
+    });
+  });
+  await page.locator('[data-dynamic-eq-reference="REL"]').click();
+  await expect(page.locator('.dynamic-eq-profile-relative-left')).not.toBeHidden();
+  await expect(page.locator('.dynamic-eq-profile-learned')).toBeHidden();
+  const learnedProfile = [-48, -44, -40, -36, -32, -28, -24, -20, -18, -16];
+  await page.evaluate(profile => window.FilterMode.getAudioEngine().receiveDynamicEqTelemetry({
+    levels: Array(10).fill(-24), leftLevels: Array(10).fill(-24), rightLevels: Array(10).fill(-24),
+    gains: Array(10).fill(0), leftGains: Array(10).fill(0), rightGains: Array(10).fill(0),
+    relativeReferences: Array.from({ length: 10 }, (_, index) => -36 + index),
+    leftRelativeReferences: Array.from({ length: 10 }, (_, index) => -34 + index),
+    rightRelativeReferences: Array.from({ length: 10 }, (_, index) => -40 + index), learnedReferenceDb: profile,
+    learnedReferenceValid: true, learnedReferenceFrozen: false, learnProgress: 0
+  }), learnedProfile);
+  await expect(page.locator('.dynamic-eq-profile-learned')).not.toBeHidden();
+  await expect(page.locator('.dynamic-eq-profile-learned')).toHaveAttribute('points', /,/);
+  await expect(page.locator('.dynamic-eq-profile-relative-left')).toBeHidden();
+  await page.locator('[data-dynamic-eq-view="reference"]').click();
+  await expect(page.locator('.dynamic-eq-profile-learned')).toBeHidden();
+  await page.locator('[data-dynamic-eq-view="reference"]').click();
+  await expect(page.locator('.dynamic-eq-profile-learned')).not.toBeHidden();
+  await page.locator('[data-dynamic-eq-reference="ABS"]').click();
+  await expect(page.locator('.dynamic-eq-profile-learned')).toBeHidden();
+  await expect(page.locator('.dynamic-eq-profile-relative-left')).toBeHidden();
+});
+
 test('legacy state defaults and independent FILTERBANK, FILTER and dynamic layers', async ({ page }) => {
   await page.goto('/');
   const result = await page.evaluate(() => {

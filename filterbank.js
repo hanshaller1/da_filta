@@ -290,7 +290,10 @@
     }
 
     learnDynamicEq() {
-      if (!this.disposed) this.workletNode.port.postMessage({ type: 'dynamic-eq-learn' });
+      if (this.disposed) return false;
+      this.dynamicEqState = { ...this.dynamicEqState, learnedReferenceFrozen: false };
+      this.workletNode.port.postMessage({ type: 'dynamic-eq-learn' });
+      return true;
     }
 
     setPreDynamicGainDb(index, left, right) {

@@ -1761,6 +1761,10 @@ const clampUnit = value => Math.max(0, Math.min(1, value));
 const levelDbFsToY = db => clampUnit((db + 60) / 60);
 const levelPosition = db => levelDbFsToY(db) * 100;
 const gainDbToY = (db, rangeDb) => 0.5 + 0.5 * Math.max(-1, Math.min(1, db / rangeDb));
+const hasValidLearnedReference = () => state.learnedReferenceValid === true
+  && Array.isArray(state.learnedReferenceDb)
+  && state.learnedReferenceDb.length === BAND_DEFINITIONS.length
+  && state.learnedReferenceDb.every(Number.isFinite);
 const getAppliedGainRanges = () => {
   const boost = Number(audioEngine?.maxBandBoostDb ?? bandBoostSelect?.value ?? 12);
   const cut = Number(audioEngine?.maxBandCutDb ?? bandCutSelect?.value ?? 12);
@@ -1849,6 +1853,7 @@ const renderDynamicEqGraph = () => {
   });
   dynamicEqGraphElement.closest('.dynamic-eq-response').dataset.showState = String(dynamicEqGraphView.state);
   const relativeMode = state.detectorReferenceMode === 'REL';
+  const learnedProfileValid = hasValidLearnedReference();
   const threshold = relativeMode ? 0 : state.dynamicEqThresholdDb;
   const upper = threshold + state.dynamicEqWindowDb / 2;
   const lower = threshold - state.dynamicEqWindowDb / 2;
@@ -1916,7 +1921,7 @@ const renderDynamicEqGraph = () => {
       : '—';
     column.querySelector('.dynamic-eq-out-left').title = Number.isFinite(leftOut) ? `L APPLIED BAND GAIN ${formatDynamicGain(leftOut)}` : 'L APPLIED BAND GAIN unavailable';
     column.querySelector('.dynamic-eq-out-right').title = Number.isFinite(rightOut) ? `R APPLIED BAND GAIN ${formatDynamicGain(rightOut)}` : 'R APPLIED BAND GAIN unavailable';
-    const profileValid = state.learnedReferenceValid && Array.isArray(state.learnedReferenceDb);
+    const profileValid = learnedProfileValid;
     const referenceValues = dual
       ? [dynamicEqTelemetry?.leftRelativeReferences?.[index], dynamicEqTelemetry?.rightRelativeReferences?.[index]]
       : [dynamicEqTelemetry?.relativeReferences?.[index]];
@@ -1992,9 +1997,10 @@ const renderDynamicEqGraph = () => {
     const points = profilePoints(values);
     const polyline = dynamicEqProfileSvg.querySelector(selector);
     polyline.setAttribute('points', points.filter(Boolean).join(' '));
-    polyline.hidden = !visible || points.filter(Boolean).length < 2;
+    if (!visible || points.filter(Boolean).length < 2) polyline.setAttribute('hidden', '');
+    else polyline.removeAttribute('hidden');
   };
-  const validProfile = state.learnedReferenceValid && Array.isArray(state.learnedReferenceDb);
+  const validProfile = learnedProfileValid;
   setProfile('.dynamic-eq-profile-learned', state.learnedReferenceDb || [], dynamicEqGraphView.reference && relativeMode && validProfile);
   setProfile('.dynamic-eq-profile-relative-left', state.stereoDetectorMode === 'DUAL'
     ? (dynamicEqTelemetry?.leftRelativeReferences || []) : (dynamicEqTelemetry?.relativeReferences || []),
@@ -2032,17 +2038,18 @@ const renderDynamicEqControls = () => {
   const profileStatus = document.querySelector('[data-dynamic-eq-learn-status]');
   if (profileStatus) profileStatus.textContent = dynamicEqTelemetry?.learnProgress > 0
     ? `LEARNING ${Math.round(dynamicEqTelemetry.learnProgress * 100)} %`
-    : state.learnedReferenceValid ? (state.learnedReferenceFrozen ? 'FROZEN PROFILE' : 'PROFILE READY') : 'NO PROFILE';
+    : hasValidLearnedReference() ? (state.learnedReferenceFrozen ? 'FROZEN PROFILE' : 'PROFILE READY') : 'NO PROFILE';
   const freezeButton = document.querySelector('[data-dynamic-eq-freeze]');
-  freezeButton?.classList.toggle('active', state.learnedReferenceFrozen);
-  if (freezeButton) freezeButton.disabled = !state.learnedReferenceValid;
+  freezeButton?.classList.toggle('active', hasValidLearnedReference() && state.learnedReferenceFrozen);
+  freezeButton?.setAttribute('aria-pressed', String(hasValidLearnedReference() && state.learnedReferenceFrozen));
+  if (freezeButton) freezeButton.disabled = !hasValidLearnedReference();
   const statusParts = [`DYNAMIC EQ ${state.dynamicEqEnabled ? 'ON' : 'OFF'}`, state.dynamicEqMode.toUpperCase(), state.detectorReferenceMode,
     state.dynamicEqDetectorMode.toUpperCase(), state.stereoDetectorMode, 'PRE', state.perChannelBands ? 'P/CH' : 'CLASSIC'];
   if (!state.perChannelBands && Math.abs(Number(state.spread) || 0) >= 0.05) {
     statusParts.push(`SPREAD ${state.spread >= 0 ? '+' : ''}${Number(state.spread).toFixed(1)} dB`);
   }
   if (dynamicEqTelemetry?.learnProgress > 0) statusParts.push('LEARNING');
-  else if (state.learnedReferenceValid) statusParts.push(state.learnedReferenceFrozen ? 'FROZEN' : 'LEARNED');
+  else if (hasValidLearnedReference()) statusParts.push(state.learnedReferenceFrozen ? 'FROZEN' : 'LEARNED');
   document.querySelector('[data-dynamic-eq-status]').textContent = statusParts.join(' | ');
   dynamicEqDefinitions.forEach(([, field, , , , unit], index) => {
     const control = dynamicEqControls.children[index];
@@ -2089,8 +2096,8 @@ document.querySelectorAll('[data-dynamic-eq-stereo]').forEach(button => button.a
 }));
 document.querySelector('[data-dynamic-eq-learn]')?.addEventListener('click', () => { audioEngine?.learnDynamicEq(); });
 document.querySelector('[data-dynamic-eq-freeze]')?.addEventListener('click', () => {
-  state.learnedReferenceFrozen = !state.learnedReferenceFrozen;
-  audioEngine?.setDynamicEq(state); renderDynamicEqControls();
+  if (!hasValidLearnedReference()) return;
+  audioEngine?.setDynamicEqFrozen(!state.learnedReferenceFrozen);
 });
 document.querySelector('[data-dynamic-eq-reset]')?.addEventListener('click', () => {
   state.dynamicEqBandSensitivity.fill(100);
@@ -2827,10 +2834,12 @@ audioEngine = new AudioEngine({
   onDiagnostics: packet => { devLabTelemetry.receive(packet); scheduleAnalyzerRender(); },
   onDynamicEqTelemetry: packet => {
     dynamicEqTelemetry = packet;
-    if (packet.learnedReferenceValid && Array.isArray(packet.learnedReferenceDb)) {
-      state.learnedReferenceDb = packet.learnedReferenceDb;
-      state.learnedReferenceValid = true;
-      state.learnedReferenceFrozen = packet.learnedReferenceFrozen === true;
+    if (Array.isArray(packet.learnedReferenceDb)) {
+      state.learnedReferenceDb = [...packet.learnedReferenceDb];
+      state.learnedReferenceValid = packet.learnedReferenceValid === true
+        && packet.learnedReferenceDb.length === BAND_DEFINITIONS.length
+        && packet.learnedReferenceDb.every(Number.isFinite);
+      state.learnedReferenceFrozen = state.learnedReferenceValid && packet.learnedReferenceFrozen === true;
     }
     if (state.selectedWorkspaceMode === 'dynamic-eq') requestAnimationFrame(renderDynamicEqControls);
   },
