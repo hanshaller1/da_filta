@@ -1,6 +1,6 @@
 import { timeCoefficient } from './dynamic-eq-core.mjs';
 
-export const ENVELOPE_DEFAULT_COUNT = 1;
+export const ENVELOPE_DEFAULT_COUNT = 4;
 export const ENVELOPE_DETECTOR_MODES = Object.freeze(['peak', 'rms']);
 export const ENVELOPE_MIN_ATTACK_MS = 1;
 export const ENVELOPE_MAX_ATTACK_MS = 500;
@@ -11,6 +11,8 @@ export const ENVELOPE_MAX_SENSITIVITY = 400;
 export const ENVELOPE_MIN_THRESHOLD_DB = -60;
 export const ENVELOPE_MAX_THRESHOLD_DB = 0;
 export const ENVELOPE_DEFAULT_THRESHOLD_DB = -48;
+export const ENVELOPE_MIN_DELAY_MS = 0;
+export const ENVELOPE_MAX_DELAY_MS = 2000;
 
 const clamp = (value, minimum, maximum, fallback) => {
   const number = Number(value);
@@ -24,6 +26,7 @@ export function normalizeEnvelopeSourceState(source = {}, index = 0) {
     detectorMode: ENVELOPE_DETECTOR_MODES.includes(source.detectorMode) ? source.detectorMode : 'peak',
     attack: clamp(source.attack, ENVELOPE_MIN_ATTACK_MS, ENVELOPE_MAX_ATTACK_MS, 20),
     release: clamp(source.release, ENVELOPE_MIN_RELEASE_MS, ENVELOPE_MAX_RELEASE_MS, 250),
+    delay: clamp(source.delay, ENVELOPE_MIN_DELAY_MS, ENVELOPE_MAX_DELAY_MS, 0),
     sensitivity: clamp(source.sensitivity, ENVELOPE_MIN_SENSITIVITY, ENVELOPE_MAX_SENSITIVITY, 100),
     thresholdDb: clamp(source.thresholdDb, ENVELOPE_MIN_THRESHOLD_DB, ENVELOPE_MAX_THRESHOLD_DB, ENVELOPE_DEFAULT_THRESHOLD_DB),
     amount: clamp(source.amount, 0, 100, 50),
@@ -35,9 +38,7 @@ export function normalizeEnvelopeSourceState(source = {}, index = 0) {
 
 export function normalizeEnvelopeSources(source = {}, requestedCount) {
   const supplied = Array.isArray(source.envelopeSources) ? source.envelopeSources : null;
-  const rawCount = requestedCount ?? source.envelopeCount ?? supplied?.length ?? ENVELOPE_DEFAULT_COUNT;
-  const count = Math.max(1, Math.floor(clamp(rawCount, 1, 256, ENVELOPE_DEFAULT_COUNT)));
-  return Array.from({ length: count }, (_, index) => normalizeEnvelopeSourceState(supplied?.[index] || {}, index));
+  return Array.from({ length: ENVELOPE_DEFAULT_COUNT }, (_, index) => normalizeEnvelopeSourceState(supplied?.[index] || {}, index));
 }
 
 export function normalizeEnvelopeState(source = {}) {
@@ -52,6 +53,12 @@ export class EnvelopeFollower {
     this.detectorMode = 'peak';
     this.attack = 20;
     this.release = 250;
+    this.delay = 0;
+    this.delaySamples = 0;
+    this.delayRemainingSamples = 0;
+    this.delayWaiting = false;
+    this.delayActive = false;
+    this.coefficientDelayMs = -1;
     this.sensitivity = 100;
     this.thresholdDb = ENVELOPE_DEFAULT_THRESHOLD_DB;
     this.thresholdLevel = 10 ** (this.thresholdDb / 20);
@@ -77,25 +84,34 @@ export class EnvelopeFollower {
     this.sourceId = typeof source.id === 'string' && /^envelope\.\d+$/.test(source.id) ? source.id : this.sourceId;
     const detectorChanged = state.detectorMode !== this.detectorMode;
     const disabled = this.enabled && !state.enabled;
+    const delayChanged = state.delay !== this.delay;
     this.enabled = state.enabled;
     this.detectorMode = state.detectorMode;
     this.attack = state.attack;
     this.release = state.release;
+    this.delay = state.delay;
     this.sensitivity = state.sensitivity;
     this.thresholdDb = state.thresholdDb;
     this.thresholdLevel = 10 ** (this.thresholdDb / 20);
+    if (this.sampleRate > 0) this.updateTimeConstants(this.sampleRate);
     if (detectorChanged || disabled) this.reset();
+    else if (delayChanged) this.resetDelay();
     return this;
   }
 
   updateTimeConstants(sampleRate) {
     if (!Number.isFinite(sampleRate) || sampleRate <= 0) return;
-    if (sampleRate !== this.sampleRate || this.attack !== this.coefficientAttackMs || this.release !== this.coefficientReleaseMs) {
+    const sampleRateChanged = sampleRate !== this.sampleRate;
+    if (sampleRateChanged || this.attack !== this.coefficientAttackMs || this.release !== this.coefficientReleaseMs) {
       this.sampleRate = sampleRate;
       this.coefficientAttackMs = this.attack;
       this.coefficientReleaseMs = this.release;
       this.attackCoefficient = timeCoefficient(this.attack, sampleRate);
       this.releaseCoefficient = timeCoefficient(this.release, sampleRate);
+    }
+    if (sampleRateChanged || this.delay !== this.coefficientDelayMs) {
+      this.coefficientDelayMs = this.delay;
+      this.delaySamples = Math.max(0, Math.round(this.delay * sampleRate / 1000));
     }
     if (this.detectorMode === 'rms' && sampleRate !== this.rmsSampleRate) {
       this.rmsSampleRate = sampleRate;
@@ -123,7 +139,26 @@ export class EnvelopeFollower {
     // Sensitivity retains its original meaning: gain is applied to the
     // detector result first. Threshold compares that normalized result.
     this.rawLevel = Math.min(1, Math.max(0, detector * this.sensitivity / 100));
-    const target = this.rawLevel >= this.thresholdLevel ? this.rawLevel : 0;
+    let target = 0;
+    if (this.rawLevel >= this.thresholdLevel) {
+      if (this.delayActive) target = this.rawLevel;
+      else if (this.delayWaiting) {
+        if (this.delayRemainingSamples <= 1) {
+          this.delayWaiting = false;
+          this.delayRemainingSamples = 0;
+          this.delayActive = true;
+          target = this.rawLevel;
+        } else this.delayRemainingSamples -= 1;
+      } else if (this.delaySamples === 0) {
+        this.delayActive = true;
+        target = this.rawLevel;
+      } else {
+        this.delayWaiting = true;
+        this.delayRemainingSamples = this.delaySamples;
+      }
+    } else {
+      if (this.delayWaiting || this.delayActive) this.resetDelay();
+    }
     const coefficient = target > this.value ? this.attackCoefficient : this.releaseCoefficient;
     const next = target + coefficient * (this.value - target);
     this.value = Number.isFinite(next) ? Math.min(1, Math.max(0, next)) : 0;
@@ -133,9 +168,16 @@ export class EnvelopeFollower {
   reset() {
     this.value = 0;
     this.rawLevel = 0;
+    this.resetDelay();
     this.rmsWindow.fill(0);
     this.rmsWindowIndex = 0;
     this.rmsSamplesSeen = 0;
     this.rmsEnergy = 0;
+  }
+
+  resetDelay() {
+    this.delayRemainingSamples = 0;
+    this.delayWaiting = false;
+    this.delayActive = false;
   }
 }

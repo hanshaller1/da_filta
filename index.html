@@ -577,6 +577,12 @@
             </section>
             <section class="filter-mode-panel lfo-mode-panel envelope-mode-panel" id="mode-envelope-follower" role="tabpanel" aria-labelledby="mode-tab-envelope-follower" data-mode-panel="envelope-follower" hidden>
               <header class="lfo-workspace-header"><strong>ENVELOPE FOLLOWER</strong><span data-envelope-status>INPUT / PRE-FILTERBANK</span></header>
+              <nav class="lfo-slot-navigator envelope-slot-navigator" aria-label="Envelope follower sources">
+                <button class="lfo-slot active" type="button" data-envelope-slot="0" aria-label="Select ENV 1" aria-pressed="true"><span class="lfo-slot-number">ENV 1</span><span class="lfo-slot-state">OFF</span><span class="lfo-slot-detail">PEAK · NO TARGET</span></button>
+                <button class="lfo-slot" type="button" data-envelope-slot="1" aria-label="Select ENV 2" aria-pressed="false"><span class="lfo-slot-number">ENV 2</span><span class="lfo-slot-state">OFF</span><span class="lfo-slot-detail">PEAK · NO TARGET</span></button>
+                <button class="lfo-slot" type="button" data-envelope-slot="2" aria-label="Select ENV 3" aria-pressed="false"><span class="lfo-slot-number">ENV 3</span><span class="lfo-slot-state">OFF</span><span class="lfo-slot-detail">PEAK · NO TARGET</span></button>
+                <button class="lfo-slot" type="button" data-envelope-slot="3" aria-label="Select ENV 4" aria-pressed="false"><span class="lfo-slot-number">ENV 4</span><span class="lfo-slot-state">OFF</span><span class="lfo-slot-detail">PEAK · NO TARGET</span></button>
+              </nav>
               <div class="lfo-editor envelope-editor">
                 <section class="filter-response lfo-response envelope-response" aria-label="Envelope level graph">
                   <header><strong>RAW LEVEL · ENVELOPE</strong><button class="dynamic-eq-view-toggle" type="button" data-envelope-enable aria-pressed="false">SOURCE OFF</button></header>
@@ -602,6 +608,7 @@
                   <div class="lfo-parameter-grid envelope-parameter-grid">
                     <label class="filter-parameter-control"><span>ATTACK</span><output data-envelope-attack-output>20 ms</output><input class="filter-style-slider" type="range" min="1" max="500" step="1" value="20" data-envelope-attack aria-label="Envelope attack time"></label>
                     <label class="filter-parameter-control"><span>RELEASE</span><output data-envelope-release-output>250 ms</output><input class="filter-style-slider" type="range" min="10" max="3000" step="1" value="250" data-envelope-release aria-label="Envelope release time"></label>
+                    <label class="filter-parameter-control"><span>DELAY</span><output data-envelope-delay-output>0 ms</output><input class="filter-style-slider" type="range" min="0" max="2000" step="1" value="0" data-envelope-delay aria-label="Envelope delay time"></label>
                     <label class="filter-parameter-control"><span>SENSITIVITY</span><output data-envelope-sensitivity-output>100 %</output><input class="filter-style-slider" type="range" min="0" max="400" step="1" value="100" data-envelope-sensitivity aria-label="Envelope sensitivity gain"></label>
                     <label class="filter-parameter-control"><span>AMOUNT</span><output data-envelope-amount-output>50 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="50" data-envelope-amount aria-label="Envelope modulation amount"></label>
                     <label class="filter-parameter-control"><span>THRESHOLD</span><output data-envelope-threshold-output>−48 dB</output><input class="filter-style-slider" type="range" min="-60" max="0" step="1" value="-48" data-envelope-threshold aria-label="Envelope threshold in decibels"></label>

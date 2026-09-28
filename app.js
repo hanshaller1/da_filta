@@ -22,8 +22,9 @@ let audioEngine = null;
 let dynamicEqTelemetry = null;
 const lfoTelemetry = new Map();
 const envelopeTelemetry = new Map();
-const envelopeGraphValues = [];
-const envelopeRawGraphValues = [];
+const envelopeGraphValues = new Map();
+const envelopeRawGraphValues = new Map();
+let selectedEnvelopeIndex = 0;
 let panic = () => {};
 let updateResonatorDiagnostics = () => {};
 // FILTERBANK editor visuals intentionally describe the manual FILTERBANK
@@ -1623,9 +1624,11 @@ const lfoBpmControl = document.querySelector('[data-lfo-bpm-control]');
 const lfoDivisionControl = document.querySelector('[data-lfo-division-control]');
 const lfoMidiStatus = document.querySelector('[data-lfo-midi-status]');
 const envelopeEnableButton = document.querySelector('[data-envelope-enable]');
+const envelopeSlotButtons = [...document.querySelectorAll('[data-envelope-slot]')];
 const envelopeModeButtons = [...document.querySelectorAll('[data-envelope-mode]')];
 const envelopeAttackInput = document.querySelector('[data-envelope-attack]');
 const envelopeReleaseInput = document.querySelector('[data-envelope-release]');
+const envelopeDelayInput = document.querySelector('[data-envelope-delay]');
 const envelopeSensitivityInput = document.querySelector('[data-envelope-sensitivity]');
 const envelopeThresholdInput = document.querySelector('[data-envelope-threshold]');
 const envelopeAmountInput = document.querySelector('[data-envelope-amount]');
@@ -2127,9 +2130,8 @@ const startLfoDisplay = () => {
   }
 };
 const stopLfoDisplay = () => { if (lfoAnimationFrame) cancelAnimationFrame(lfoAnimationFrame); lfoAnimationFrame = 0; };
-const getEnvelopeSource = () => state.envelopeSources?.[0] || null;
-const getEnvelopeValue = () => {
-  const source = getEnvelopeSource();
+const getEnvelopeSource = (index = selectedEnvelopeIndex) => state.envelopeSources?.[index] || null;
+const getEnvelopeValue = (source = getEnvelopeSource()) => {
   const telemetry = source ? envelopeTelemetry.get(source.id) : null;
   return source?.enabled && telemetry?.enabled && Number.isFinite(telemetry.value)
     ? Math.min(1, Math.max(0, telemetry.value)) : 0;
@@ -2137,6 +2139,8 @@ const getEnvelopeValue = () => {
 const renderEnvelopeGraph = () => {
   const current = getEnvelopeValue();
   const source = getEnvelopeSource();
+  const rawValues = source ? envelopeRawGraphValues.get(source.id) || [] : [];
+  const envelopeValues = source ? envelopeGraphValues.get(source.id) || [] : [];
   const currentTelemetry = source ? envelopeTelemetry.get(source.id) : null;
   const rawCurrent = source?.enabled && currentTelemetry?.enabled ? (currentTelemetry.rawLevel ?? 0) : 0;
   if (envelopeReadout) {
@@ -2154,8 +2158,8 @@ const renderEnvelopeGraph = () => {
     }
     element.setAttribute('d', path.trim());
   };
-  drawPath(envelopeRawWavePath, envelopeRawGraphValues, rawCurrent);
-  drawPath(envelopeWavePath, envelopeGraphValues, current);
+  drawPath(envelopeRawWavePath, rawValues, rawCurrent);
+  drawPath(envelopeWavePath, envelopeValues, current);
   if (envelopeThresholdLine && source) {
     const y = 114 - 10 ** (source.thresholdDb / 20) * 108;
     envelopeThresholdLine.setAttribute('y1', y.toFixed(2));
@@ -2170,10 +2174,11 @@ const commitEnvelopeState = () => {
   state.envelopeSources = normalized.envelopeSources;
   const source = getEnvelopeSource();
   if (!source?.enabled || !previous) {
-    envelopeGraphValues.length = 0;
-    envelopeRawGraphValues.length = 0;
-    if (!source?.enabled) envelopeGraphValues.push(0);
-    if (source) envelopeTelemetry.delete(source.id);
+    if (source) {
+      envelopeGraphValues.delete(source.id);
+      envelopeRawGraphValues.delete(source.id);
+      envelopeTelemetry.delete(source.id);
+    }
   }
   audioEngine?.setModulationState(state);
   renderEnvelopeControls();
@@ -2184,9 +2189,25 @@ const setEnvelopeSource = patch => {
   Object.assign(source, patch);
   commitEnvelopeState();
 };
+const renderEnvelopeSlots = () => {
+  envelopeSlotButtons.forEach(button => {
+    const index = Number(button.dataset.envelopeSlot);
+    const source = getEnvelopeSource(index);
+    if (!source) return;
+    const target = MODULATION_TARGETS.find(item => item.id === source.targetId);
+    const active = index === selectedEnvelopeIndex;
+    button.classList.toggle('active', active);
+    button.classList.toggle('is-enabled', source.enabled);
+    button.setAttribute('aria-pressed', String(active));
+    button.setAttribute('aria-label', `Select ENV ${index + 1}, ${source.enabled ? 'ON' : 'OFF'}, ${source.detectorMode.toUpperCase()}, ${target?.label || 'NO TARGET'}`);
+    button.querySelector('.lfo-slot-state').textContent = source.enabled ? 'ON' : 'OFF';
+    button.querySelector('.lfo-slot-detail').textContent = `${source.detectorMode.toUpperCase()} · ${target?.label?.toUpperCase() || 'NO TARGET'}`;
+  });
+};
 const renderEnvelopeControls = () => {
   const source = getEnvelopeSource();
   if (!source) return;
+  renderEnvelopeSlots();
   envelopePowerButton?.setAttribute('aria-pressed', String(state.envelopeModuleEnabled === true));
   envelopePowerButton?.setAttribute('aria-label', state.envelopeModuleEnabled ? 'ENVELOPE FOLLOWER ausschalten' : 'ENVELOPE FOLLOWER einschalten');
   if (envelopeEnableButton) {
@@ -2201,16 +2222,19 @@ const renderEnvelopeControls = () => {
   });
   if (envelopeAttackInput) envelopeAttackInput.value = String(source.attack);
   if (envelopeReleaseInput) envelopeReleaseInput.value = String(source.release);
+  if (envelopeDelayInput) envelopeDelayInput.value = String(source.delay);
   if (envelopeSensitivityInput) envelopeSensitivityInput.value = String(source.sensitivity);
   if (envelopeThresholdInput) envelopeThresholdInput.value = String(source.thresholdDb);
   if (envelopeAmountInput) envelopeAmountInput.value = String(source.amount);
   const attackOutput = document.querySelector('[data-envelope-attack-output]');
   const releaseOutput = document.querySelector('[data-envelope-release-output]');
+  const delayOutput = document.querySelector('[data-envelope-delay-output]');
   const sensitivityOutput = document.querySelector('[data-envelope-sensitivity-output]');
   const thresholdOutput = document.querySelector('[data-envelope-threshold-output]');
   const amountOutput = document.querySelector('[data-envelope-amount-output]');
   if (attackOutput) attackOutput.textContent = `${Math.round(source.attack)} ms`;
   if (releaseOutput) releaseOutput.textContent = `${Math.round(source.release)} ms`;
+  if (delayOutput) delayOutput.textContent = `${Math.round(source.delay)} ms`;
   if (sensitivityOutput) sensitivityOutput.textContent = `${Math.round(source.sensitivity)} %`;
   if (thresholdOutput) thresholdOutput.textContent = `${Math.round(source.thresholdDb)} dB`;
   if (amountOutput) amountOutput.textContent = `${Math.round(source.amount)} %`;
@@ -2237,7 +2261,7 @@ const renderEnvelopeControls = () => {
     : !target ? 'UNAVAILABLE' : !active ? `INACTIVE · ${target.activeWhen.toUpperCase()}`
       : source.enabled ? 'ACTIVE' : 'ASSIGNED · SOURCE OFF';
   envelopeTargetControl?.classList.toggle('is-inactive', Boolean(source.targetId && !active));
-  if (envelopeStatus) envelopeStatus.textContent = `${state.envelopeModuleEnabled ? 'MODULE ON' : 'MODULE OFF'} · ${source.enabled ? 'SOURCE ON' : 'SOURCE OFF'} · INPUT / PRE-FILTERBANK`;
+  if (envelopeStatus) envelopeStatus.textContent = `${state.envelopeModuleEnabled ? 'MODULE ON' : 'MODULE OFF'} · ENV ${selectedEnvelopeIndex + 1} ${source.enabled ? 'ON' : 'OFF'} · INPUT / PRE-FILTERBANK`;
   renderEnvelopeGraph();
 };
 const filterTypeDefinitions = window.FilterShape.FILTER_TYPE_DEFINITIONS;
@@ -2915,6 +2939,12 @@ envelopePowerButton?.addEventListener('click', event => {
   audioEngine?.setModulationState(state);
   renderEnvelopeControls();
 });
+envelopeSlotButtons.forEach(button => button.addEventListener('click', () => {
+  const index = Number(button.dataset.envelopeSlot);
+  if (!Number.isInteger(index) || index < 0 || index >= 4) return;
+  selectedEnvelopeIndex = index;
+  renderEnvelopeControls();
+}));
 lfoPowerButton?.addEventListener('click', event => {
   event.preventDefault();
   event.stopPropagation();
@@ -3009,6 +3039,7 @@ envelopeModeButtons.forEach(button => button.addEventListener('click', () => {
 }));
 envelopeAttackInput?.addEventListener('input', () => setEnvelopeSource({ attack: Number(envelopeAttackInput.value) }));
 envelopeReleaseInput?.addEventListener('input', () => setEnvelopeSource({ release: Number(envelopeReleaseInput.value) }));
+envelopeDelayInput?.addEventListener('input', () => setEnvelopeSource({ delay: Number(envelopeDelayInput.value) }));
 envelopeSensitivityInput?.addEventListener('input', () => setEnvelopeSource({ sensitivity: Number(envelopeSensitivityInput.value) }));
 envelopeThresholdInput?.addEventListener('input', () => setEnvelopeSource({ thresholdDb: Number(envelopeThresholdInput.value) }));
 envelopeAmountInput?.addEventListener('input', () => setEnvelopeSource({ amount: Number(envelopeAmountInput.value) }));
@@ -3057,7 +3088,7 @@ window.LfoMode = Object.freeze({
   ).map(page => page.map(source => source.id))
 });
 window.EnvelopeMode = Object.freeze({
-  getState: () => ({ envelopeModuleEnabled: state.envelopeModuleEnabled === true, envelopeSources: (state.envelopeSources || []).map(source => ({ ...source })) }),
+  getState: () => ({ envelopeModuleEnabled: state.envelopeModuleEnabled === true, selectedEnvelopeIndex, envelopeSources: (state.envelopeSources || []).map(source => ({ ...source })) }),
   getAudioEngine: () => audioEngine,
   getTelemetry: () => { const source = getEnvelopeSource(); const telemetry = source ? envelopeTelemetry.get(source.id) : null; return telemetry ? { ...telemetry } : null; },
   getTargetRegistry: () => MODULATION_TARGETS.map(target => ({ id: target.id, label: target.label, group: target.group, channelRouting: target.channelRouting }))
@@ -3802,12 +3833,16 @@ audioEngine = new AudioEngine({
   onEnvelopeTelemetry: packet => {
     if (packet.sourceId) envelopeTelemetry.set(packet.sourceId, packet);
     if (Number.isFinite(packet.value) && Number.isFinite(packet.rawLevel)) {
-      envelopeGraphValues.push(Math.min(1, Math.max(0, packet.value)));
-      envelopeRawGraphValues.push(Math.min(1, Math.max(0, packet.rawLevel)));
-      if (envelopeGraphValues.length > 96) envelopeGraphValues.shift();
-      if (envelopeRawGraphValues.length > 96) envelopeRawGraphValues.shift();
+      const values = envelopeGraphValues.get(packet.sourceId) || [];
+      const rawValues = envelopeRawGraphValues.get(packet.sourceId) || [];
+      values.push(Math.min(1, Math.max(0, packet.value)));
+      rawValues.push(Math.min(1, Math.max(0, packet.rawLevel)));
+      if (values.length > 96) values.shift();
+      if (rawValues.length > 96) rawValues.shift();
+      envelopeGraphValues.set(packet.sourceId, values);
+      envelopeRawGraphValues.set(packet.sourceId, rawValues);
     }
-    if (state.selectedWorkspaceMode === 'envelope-follower') renderEnvelopeGraph();
+    if (state.selectedWorkspaceMode === 'envelope-follower' && packet.sourceId === getEnvelopeSource()?.id) renderEnvelopeGraph();
   },
   onOutputProtectionTelemetry: packet => devLabTelemetry.receiveOutputProtection(packet),
   onOutputGuardTelemetry: packet => devLabTelemetry.receiveOutputGuard(packet)

@@ -56,6 +56,26 @@ test('assignments preserve base values, add sources and clamp only effective val
   assert.equal(core.setAssignment({ sourceId: 'lfo.1', targetId: 'not.registered', amount: 20 }), false);
 });
 
+test('four envelope source IDs contribute independently and sum on one effective target', () => {
+  const core = new ModulationCore();
+  const context = {
+    filterbankEnabled: true, baseResonance: .1, effectiveResonance: .1,
+    setEffectiveResonance(value) { this.effectiveResonance = value; }
+  };
+  for (const [id, value, amount] of [
+    ['envelope.1', .2, 25], ['envelope.2', .4, 50], ['envelope.3', .8, 0], ['envelope.4', .6, 0]
+  ]) {
+    assert.equal(core.setSourceValue(id, value, 'unipolar'), true);
+    assert.equal(core.setAssignment({ sourceId: id, targetId: 'global.resonance', amount }), true);
+  }
+  core.evaluate(context);
+  assert.ok(Math.abs(context.effectiveResonance - .35) < 1e-12);
+  core.setSourceValue('envelope.1', 0, 'unipolar');
+  core.evaluate(context);
+  assert.ok(Math.abs(context.effectiveResonance - .3) < 1e-12, 'removing ENV 1 contribution leaves ENV 2 intact');
+  assert.equal(context.baseResonance, .1);
+});
+
 test('filterbank target range follows the active cut and boost limits', () => {
   const core = new ModulationCore();
   const channelOffsets = { left: new Float64Array(10), right: new Float64Array(10) };

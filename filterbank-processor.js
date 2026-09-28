@@ -40,7 +40,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.envelopeModuleEnabled = false;
     this.lfoSources = [new LfoOscillator()];
     this.lfo = this.lfoSources[0];
-    this.envelopeSources = [new EnvelopeFollower()];
+    this.envelopeSources = normalizeEnvelopeSources().map(source => new EnvelopeFollower(source));
     this.clockCore = new ClockCore();
     this.dryWet = 50;
     this.effectiveDryWetTarget = 50;
@@ -1599,6 +1599,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   setModulationState(source = {}) {
     const modulationState = normalizeModulationState(source);
     const envelopeSources = normalizeEnvelopeSources(source);
+    const wasEnvelopeModuleEnabled = this.envelopeModuleEnabled;
     if (source.filterShapeParams && typeof source.filterShapeParams === 'object') {
       Object.assign(this.filterShapeParams, source.filterShapeParams);
       Object.assign(this.effectiveFilterShapeParams, source.filterShapeParams);
@@ -1634,6 +1635,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       follower.updateTimeConstants(sampleRate);
       return follower;
     });
+    if (wasEnvelopeModuleEnabled && !this.envelopeModuleEnabled) {
+      for (const follower of this.envelopeSources) follower.reset();
+    }
     for (const sourceId of [...this.modulationCore.sources.keys()]) {
       const lfoSource = /^lfo\.(\d+)$/.exec(sourceId);
       const envelopeSource = /^envelope\.(\d+)$/.exec(sourceId);

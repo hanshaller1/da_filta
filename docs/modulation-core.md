@@ -123,11 +123,13 @@ modulation core. Clock Mod remains a future workspace.
 
 ## Envelope follower V1
 
-The first envelope source is `envelope.1`. State is count based in
-`envelopeSources`, with normalized source IDs, so later sources can use the
-same Source → Assignment → Target route. Source enable, PEAK/RMS mode, attack,
-release, sensitivity, threshold, amount, target, channel, and invert are regular app
-state and travel through the same state snapshots as the LFO settings.
+The four envelope sources are `envelope.1` through `envelope.4`. State is
+stored independently in `envelopeSources`; legacy states with only
+`envelope.1` are padded with defaults for the other sources. Each source uses
+the same Source → Assignment → Target route. Source enable, PEAK/RMS mode,
+attack, release, delay, sensitivity, threshold, amount, target, channel, and
+invert are regular app state and travel through the same state snapshots as
+the LFO settings.
 
 The detector reads the existing stereo filterbank AudioWorklet input. The
 audio-engine connects the Input Preamp output directly to that input, before
@@ -161,7 +163,14 @@ these channel modes are available only for stereo-routable band-gain targets.
 Global, filter, and Dynamic EQ targets come from the existing registry, with
 their normal active-state and range rules.
 
-The source graph displays Worklet telemetry at about 30 Hz; it does not run a
+Delay (0..2000 ms, default 0) starts once when the sensitivity-scaled detector
+crosses threshold. If the signal falls below threshold while waiting, the
+pending trigger is cancelled. Sustained signal starts attack after the delay;
+during a retrigger delay, an existing envelope continues its release. Zero
+delay preserves the prior immediate-threshold behavior. Every follower owns
+its own delay counter and detector state.
+
+The source graph displays selected-source Worklet telemetry at about 30 Hz; it does not run a
 detector or alter modulation on the main thread. The UI uses the existing LFO
 workspace split, waveform styles, target and slider controls, shared toggle
 buttons, spacing, colors, and responsive single-column breakpoint.

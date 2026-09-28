@@ -5,9 +5,9 @@ const { ModulationCore } = require('../modulation-core.mjs');
 
 test('Envelope state defaults and restores count-based source settings', () => {
   const defaults = normalizeEnvelopeState();
-  assert.equal(defaults.envelopeCount, 1);
+  assert.equal(defaults.envelopeCount, 4);
   assert.deepEqual(defaults.envelopeSources[0], {
-    id: 'envelope.1', enabled: false, detectorMode: 'peak', attack: 20, release: 250,
+    id: 'envelope.1', enabled: false, detectorMode: 'peak', attack: 20, release: 250, delay: 0,
     sensitivity: 100, thresholdDb: -48, amount: 50, targetId: '', channel: 'both', invert: false
   });
   const restored = normalizeEnvelopeState({ envelopeSources: [{
@@ -16,9 +16,27 @@ test('Envelope state defaults and restores count-based source settings', () => {
   }] });
   assert.deepEqual(restored.envelopeSources[0], {
     id: 'envelope.1', enabled: true, detectorMode: 'rms', attack: 35, release: 800,
-    sensitivity: 240, thresholdDb: -32, amount: 62, targetId: 'filterbank.band.3.gainDb', channel: 'spread', invert: true
+    sensitivity: 240, thresholdDb: -32, delay: 0, amount: 62, targetId: 'filterbank.band.3.gainDb', channel: 'spread', invert: true
   });
-  assert.deepEqual(normalizeEnvelopeSources({ envelopeCount: 3 }).map(source => source.id), ['envelope.1', 'envelope.2', 'envelope.3']);
+  assert.deepEqual(normalizeEnvelopeSources({ envelopeCount: 3 }).map(source => source.id), ['envelope.1', 'envelope.2', 'envelope.3', 'envelope.4']);
+  assert.ok(defaults.envelopeSources.slice(1).every(source => !source.enabled && source.delay === 0));
+});
+
+test('legacy one-source state expands to four independent, stable source records', () => {
+  const state = normalizeEnvelopeState({ envelopeSources: [{ enabled: true, delay: 120, targetId: 'global.resonance' }] });
+  assert.deepEqual(state.envelopeSources.map(source => source.id), ['envelope.1', 'envelope.2', 'envelope.3', 'envelope.4']);
+  assert.equal(state.envelopeSources[0].enabled, true);
+  assert.equal(state.envelopeSources[0].delay, 120);
+  assert.equal(state.envelopeSources[0].targetId, 'global.resonance');
+  for (const source of state.envelopeSources.slice(1)) {
+    assert.equal(source.enabled, false);
+    assert.equal(source.delay, 0);
+    assert.equal(source.targetId, '');
+  }
+  state.envelopeSources[0].attack = 99;
+  state.envelopeSources[1].release = 900;
+  assert.equal(state.envelopeSources[1].attack, 20);
+  assert.equal(state.envelopeSources[0].release, 250);
 });
 
 test('threshold state defaults to -48 dB and clamps to -60..0 dB', () => {
@@ -56,6 +74,63 @@ test('RMS threshold uses the RMS detector and sensitivity-adjusted level', () =>
     follower.process(sample, sample, 48000);
   }
   assert.ok(follower.value < 0.001, 'release approaches zero when the sensitivity-adjusted RMS falls below threshold');
+});
+
+test('delay defaults to zero, clamps to 0..2000 ms, and zero delay preserves immediate attack behavior', () => {
+  assert.equal(normalizeEnvelopeState().envelopeSources[0].delay, 0);
+  assert.equal(normalizeEnvelopeState({ envelopeSources: [{ delay: -10 }] }).envelopeSources[0].delay, 0);
+  assert.equal(normalizeEnvelopeState({ envelopeSources: [{ delay: 2500 }] }).envelopeSources[0].delay, 2000);
+  const withDelayZero = new EnvelopeFollower({ enabled: true, thresholdDb: -20, attack: 5, delay: 0 });
+  const baseline = new EnvelopeFollower({ enabled: true, thresholdDb: -20, attack: 5 });
+  for (let index = 0; index < 80; index += 1) {
+    const signal = index < 40 ? .5 : 0;
+    assert.equal(withDelayZero.process(signal, signal, 1000), baseline.process(signal, signal, 1000));
+  }
+});
+
+test('delay starts once on threshold crossing and attack begins only after sustained threshold', () => {
+  const follower = new EnvelopeFollower({ enabled: true, detectorMode: 'peak', thresholdDb: -20, delay: 10, attack: 1 });
+  follower.process(.5, .5, 1000);
+  assert.equal(follower.delayWaiting, true);
+  assert.equal(follower.delayRemainingSamples, 10);
+  for (let index = 0; index < 9; index += 1) {
+    assert.equal(follower.process(.5, .5, 1000), 0);
+    assert.equal(follower.delayWaiting, true);
+  }
+  assert.ok(follower.process(.5, .5, 1000) > 0);
+  assert.equal(follower.delayActive, true);
+  assert.equal(follower.delayRemainingSamples, 0);
+});
+
+test('falling below threshold cancels a pending delay without a ghost trigger', () => {
+  const follower = new EnvelopeFollower({ enabled: true, thresholdDb: -20, delay: 10, attack: 1 });
+  follower.process(.5, .5, 1000);
+  for (let index = 0; index < 4; index += 1) follower.process(.5, .5, 1000);
+  follower.process(0, 0, 1000);
+  assert.equal(follower.delayWaiting, false);
+  for (let index = 0; index < 20; index += 1) assert.equal(follower.process(0, 0, 1000), 0);
+  follower.process(.5, .5, 1000);
+  for (let index = 0; index < 9; index += 1) assert.equal(follower.process(.5, .5, 1000), 0);
+  assert.ok(follower.process(.5, .5, 1000) > 0, 'a later crossing receives a fresh full delay');
+});
+
+test('retrigger delay lets release continue, then attack rises from the current envelope', () => {
+  const follower = new EnvelopeFollower({ enabled: true, thresholdDb: -20, delay: 5, attack: 1, release: 100 });
+  follower.process(.8, .8, 1000);
+  for (let index = 0; index < 12; index += 1) follower.process(.8, .8, 1000);
+  assert.ok(follower.value > .7);
+  follower.process(0, 0, 1000);
+  const releaseStart = follower.value;
+  follower.process(.8, .8, 1000);
+  const valueAtRetrigger = follower.value;
+  assert.ok(valueAtRetrigger < releaseStart);
+  for (let index = 0; index < 4; index += 1) {
+    const before = follower.value;
+    follower.process(.8, .8, 1000);
+    assert.ok(follower.value < before, 'release continues while the new trigger waits');
+  }
+  const beforeAttack = follower.value;
+  assert.ok(follower.process(.8, .8, 1000) > beforeAttack);
 });
 
 test('PEAK is unipolar, follows attack and release, and applies sensitivity gain', () => {

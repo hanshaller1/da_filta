@@ -1729,7 +1729,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .lfo-assignment-row { grid-template-columns: minmax(0, 1fr) minmax(72px, .6fr); }
 }
 
-.envelope-mode-panel { grid-template-rows: auto minmax(0, 1fr); }
+.envelope-mode-panel { grid-template-rows: auto auto minmax(0, 1fr); }
 .envelope-editor { grid-template-columns: minmax(0, 38fr) minmax(0, 62fr); }
 .envelope-response .envelope-visualizer { min-height: 0; background-size: 100% 45%; }
 .envelope-wave-path { stroke-width: 3.5; }
@@ -1752,7 +1752,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .envelope-controls { overflow: auto; }
 }
 @media (max-width: 560px) {
-  .envelope-parameter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(55px, auto)); }
+  .envelope-parameter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(55px, auto)); }
   .envelope-assignment-row { grid-template-columns: minmax(0, 1fr) minmax(76px, .6fr); }
 }
 
