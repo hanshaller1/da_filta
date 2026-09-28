@@ -1969,6 +1969,149 @@ const filterResponseZeroLabel = document.querySelector('[data-filter-response-ze
 const filterResponseZeroLine = document.querySelector('[data-filter-response-zero-line]');
 const filterResponseFloor = document.querySelector('[data-filter-response-floor]');
 const filterResponseGrid = document.querySelector('[data-filter-response-grid]');
+const filterResponseChart = document.querySelector('.filter-response-chart');
+const filterSignalAxis = document.querySelector('[data-filter-signal-axis]');
+const filterViewState = { input: true, output: true, filter: true };
+const filterViewToggles = [...document.querySelectorAll('[data-filter-view]')];
+const filterSpectrumRenderer = (() => {
+  if (!filterResponseChart) return { setVisible() {}, refresh() {} };
+  const canvas = document.createElement('canvas');
+  canvas.className = 'filter-response-spectrum';
+  canvas.setAttribute('aria-hidden', 'true');
+  filterResponseChart.insertBefore(canvas, filterResponseChart.querySelector('svg'));
+  const context = canvas.getContext('2d');
+  const minimumDbfs = -90;
+  const minimumHz = BAND_DEFINITIONS[0].frequency;
+  const maximumHz = BAND_DEFINITIONS[BAND_DEFINITIONS.length - 1].frequency;
+  const logRange = Math.log(maximumHz / minimumHz);
+  let visible = false;
+  let frame = 0;
+  let timer = 0;
+  let lastDraw = 0;
+  let width = 0;
+  let height = 0;
+  let inputLeft = null;
+  let inputRight = null;
+  let outputLeft = null;
+  let outputRight = null;
+  let inputLeftBins = null;
+  let inputRightBins = null;
+  let outputLeftBins = null;
+  let outputRightBins = null;
+  let smoothInput = null;
+  let smoothOutput = null;
+  let palette = null;
+  const spectrumVisible = () => filterViewState.input || filterViewState.output;
+  const active = () => visible && spectrumVisible() && audioEngine?.status === 'ON';
+  const clearCanvas = () => {
+    if (!context) return;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+  };
+  const refresh = () => {
+    if (!active()) { clearCanvas(); return; }
+    if (frame || timer) return;
+    timer = window.setTimeout(() => { timer = 0; if (active() && !frame) frame = requestAnimationFrame(draw); }, 32);
+  };
+  const ensureAnalyzers = () => {
+    if (filterViewState.input) audioEngine?.ensureInputSpectrumAnalysers?.();
+    const next = [audioEngine?.inputSpectrumAnalyserLeft, audioEngine?.inputSpectrumAnalyserRight, audioEngine?.spectrumAnalyserLeft, audioEngine?.spectrumAnalyserRight];
+    if (next[0] !== inputLeft || next[1] !== inputRight || next[2] !== outputLeft || next[3] !== outputRight) {
+      [inputLeft, inputRight, outputLeft, outputRight] = next;
+      inputLeftBins = inputLeft ? new Float32Array(inputLeft.frequencyBinCount) : null;
+      inputRightBins = inputRight ? new Float32Array(inputRight.frequencyBinCount) : null;
+      outputLeftBins = outputLeft ? new Float32Array(outputLeft.frequencyBinCount) : null;
+      outputRightBins = outputRight ? new Float32Array(outputRight.frequencyBinCount) : null;
+      smoothInput = new Float32Array(outputLeft?.frequencyBinCount || inputLeft?.frequencyBinCount || 0); smoothInput.fill(minimumDbfs);
+      smoothOutput = new Float32Array(outputLeft?.frequencyBinCount || 0); smoothOutput.fill(minimumDbfs);
+    }
+  };
+  const dbfsToY = value => (12 + (0 - Math.max(minimumDbfs, Math.min(0, value))) / -minimumDbfs * 208) / 240 * height;
+  const drawSpectrum = (left, right, analyser, smoothed, color, alpha, lineWidth) => {
+    if (!left || !right || !analyser || !smoothed) return;
+    const binWidth = analyser.context.sampleRate / analyser.fftSize;
+    const first = Math.max(1, Math.ceil(minimumHz / binWidth));
+    const last = Math.min(left.length - 1, Math.floor(maximumHz / binWidth));
+    context.beginPath();
+    for (let bin = first; bin <= last; bin += 1) {
+      const leftDb = Number.isFinite(left[bin]) ? left[bin] : minimumDbfs;
+      const rightDb = Number.isFinite(right[bin]) ? right[bin] : minimumDbfs;
+      const level = 10 * Math.log10((10 ** (leftDb / 10) + 10 ** (rightDb / 10)) * .5);
+      smoothed[bin] += (level - smoothed[bin]) * .28;
+      const frequency = bin * binWidth;
+      const x = (50 + Math.log(frequency / minimumHz) / logRange * 900) / 1000 * width;
+      if (bin === first) context.moveTo(x, dbfsToY(smoothed[bin])); else context.lineTo(x, dbfsToY(smoothed[bin]));
+    }
+    context.globalAlpha = alpha;
+    context.strokeStyle = color;
+    context.lineWidth = lineWidth;
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    context.stroke();
+  };
+  function draw(now) {
+    frame = 0;
+    if (!active() || !context) return;
+    if (now - lastDraw < 32) { refresh(); return; }
+    lastDraw = now;
+    const rect = filterResponseChart.getBoundingClientRect();
+    const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
+    const nextWidth = Math.max(0, Math.floor(rect.width));
+    const nextHeight = Math.max(0, Math.floor(rect.height));
+    if (!nextWidth || !nextHeight) { refresh(); return; }
+    if (width !== nextWidth || height !== nextHeight || canvas.width !== Math.round(nextWidth * pixelRatio) || canvas.height !== Math.round(nextHeight * pixelRatio)) {
+      width = nextWidth; height = nextHeight;
+      canvas.width = Math.round(width * pixelRatio); canvas.height = Math.round(height * pixelRatio);
+      canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
+    }
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, width, height);
+    ensureAnalyzers();
+    if (filterViewState.input && inputLeft && inputRight && inputLeftBins && inputRightBins) {
+      inputLeft.getFloatFrequencyData(inputLeftBins); inputRight.getFloatFrequencyData(inputRightBins);
+    }
+    if (filterViewState.output && outputLeft && outputRight && outputLeftBins && outputRightBins) {
+      outputLeft.getFloatFrequencyData(outputLeftBins); outputRight.getFloatFrequencyData(outputRightBins);
+    }
+    if (!palette) {
+      const style = getComputedStyle(document.body);
+      palette = {
+        input: style.getPropertyValue('--secondary-text').trim() || '#9aaab0',
+        output: style.getPropertyValue('--graph-right-color').trim() || '#e16c85'
+      };
+    }
+    if (filterViewState.input) drawSpectrum(inputLeftBins, inputRightBins, inputLeft, smoothInput, palette.input, .66, 1.05);
+    if (filterViewState.output) drawSpectrum(outputLeftBins, outputRightBins, outputLeft, smoothOutput, palette.output, .9, 1.55);
+    context.globalAlpha = 1;
+    refresh();
+  }
+  const setVisible = next => {
+    visible = Boolean(next);
+    if (!visible) {
+      if (frame) { cancelAnimationFrame(frame); frame = 0; }
+      if (timer) { clearTimeout(timer); timer = 0; }
+      clearCanvas();
+    }
+    else refresh();
+  };
+  filterViewToggles.forEach(button => button.addEventListener('click', () => {
+    const layer = button.dataset.filterView;
+    if (!Object.hasOwn(filterViewState, layer)) return;
+    filterViewState[layer] = !filterViewState[layer];
+    button.setAttribute('aria-pressed', String(filterViewState[layer]));
+    button.classList.toggle('active', filterViewState[layer]);
+    filterResponseChart.dataset[`filterView${layer[0].toUpperCase()}${layer.slice(1)}`] = String(filterViewState[layer]);
+    filterSignalAxis.hidden = !(filterViewState.input || filterViewState.output);
+    refresh();
+  }));
+  window.addEventListener('resize', refresh);
+  document.addEventListener('da-filta-theme-change', () => { palette = null; refresh(); });
+  new MutationObserver(() => { palette = null; }).observe(document.body, { attributes: true, attributeFilter: ['data-theme'] });
+  new ResizeObserver(refresh).observe(filterResponseChart);
+  filterViewToggles.forEach(button => button.classList.add('active'));
+  filterSignalAxis.hidden = false;
+  return { setVisible, refresh };
+})();
 const filterFrequencyMarker = document.querySelector('[data-filter-frequency-marker]');
 const filterFrequencyMarkerLabel = document.querySelector('[data-filter-frequency-marker-label]');
 const formatFilterFrequency = value => {
@@ -2610,6 +2753,7 @@ const selectMode = mode => {
     tab.tabIndex = selected ? 0 : -1;
   });
   modePanels.forEach(panel => { panel.hidden = panel.dataset.modePanel !== mode; });
+  filterSpectrumRenderer.setVisible(mode === 'filter');
   updateResonatorDiagnostics();
   if (mode === 'filter') renderFilterMode();
   if (mode === 'lfo') { renderLfoControls(); startLfoDisplay(); }
@@ -3271,6 +3415,7 @@ const updateAudioStatus = (status, message = '') => {
   }
   if (status === 'ON') devLabTelemetry.startSession(audioEngine?.context);
   else if (status !== 'STARTING') devLabTelemetry.setAudioOff();
+  filterSpectrumRenderer.refresh();
 };
 audioEngine = new AudioEngine({
   onStatusChange: updateAudioStatus,

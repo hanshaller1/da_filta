@@ -436,7 +436,12 @@ test('FILTERBANK response controls stay bound to manual FILTERBANK state while F
   const bandTen = await page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(9));
   expect(bandTen.display.leftDb).toBeCloseTo(2.9, 1);
   expect(bandTen.display.rightDb).toBeCloseTo(2.9, 1);
-  await page.locator('[data-analyzer-band="9"]').hover();
+  const feedbackEnergy = page.locator('.analyzer-feedback-energy');
+  await expect(feedbackEnergy).toBeHidden();
+  expect(await feedbackEnergy.boundingBox()).toBeNull();
+  const bandTenElement = page.locator('[data-analyzer-band="9"]');
+  await expect(bandTenElement).toBeVisible();
+  await bandTenElement.hover();
   await expect(page.locator('.analyzer-band-detail')).toContainText('L +2.9 dB');
   await expect(page.locator('.analyzer-band-detail')).toContainText('R +2.9 dB');
 

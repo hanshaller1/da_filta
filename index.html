@@ -500,8 +500,9 @@
             </section>
             <section class="filter-mode-panel" id="mode-filter" role="tabpanel" aria-labelledby="mode-tab-filter" data-mode-panel="filter" hidden>
               <section class="filter-response" aria-label="Filter control response">
-                <header><strong>FILTER RESPONSE</strong><span data-filter-response-descriptor>10-BAND CONTROL SHAPE</span></header>
-                <div class="filter-response-chart">
+                <header><strong>FILTER RESPONSE</strong><div class="filter-response-header-right"><span data-filter-response-descriptor>10-BAND CONTROL SHAPE</span><div class="filter-response-view-toggles" role="group" aria-label="Filtergraph layers"><button type="button" class="dynamic-eq-view-toggle" data-filter-view="input" aria-pressed="true" title="Reales Spektrum vor der Filterbank">INPUT</button><button type="button" class="dynamic-eq-view-toggle" data-filter-view="output" aria-pressed="true" title="Reales Spektrum am Ausgang der Filterbank">OUTPUT</button><button type="button" class="dynamic-eq-view-toggle" data-filter-view="filter" aria-pressed="true" title="10-Band Filter-Response">FILTER</button></div></div></header>
+                <div class="filter-response-chart" data-filter-view-input="true" data-filter-view-output="true" data-filter-view-filter="true">
+                  <div class="filter-response-signal-axis" data-filter-signal-axis role="group" aria-label="Signalpegel dBFS"><span>0</span><span>−22.5</span><span>−45</span><span>−67.5</span><span>−90 dBFS</span></div>
                   <span class="filter-response-ceiling" data-filter-response-ceiling>+12 dB</span>
                   <span class="filter-response-zero" data-filter-response-zero-label>0 dB</span>
                   <span class="filter-response-floor" data-filter-response-floor>−12 dB</span>
