@@ -676,13 +676,13 @@
           <p class="midi-access-message" data-midi-access-message aria-live="polite"></p>
         </section>
         <label class="midi-setup-section"><span class="midi-setup-label">CLOCK INPUT</span><select data-midi-input aria-label="Clock input" disabled><option value="">NO INPUT</option></select></label>
-        <label class="midi-setup-toggle"><span>RECEIVE MIDI CLOCK</span><input type="checkbox" data-midi-receive checked><span class="midi-toggle-track" aria-hidden="true"></span></label>
-        <label class="midi-setup-section"><span class="midi-setup-label">TRANSPORT</span><select data-midi-transport aria-label="MIDI transport mode"><option value="follow">FOLLOW START / STOP</option><option value="auto">CLOCK AUTO-RUN</option></select></label>
+        <label class="midi-setup-toggle"><span>RECEIVE MIDI CLOCK</span><input type="checkbox" data-midi-receive checked disabled><span class="midi-toggle-track" aria-hidden="true"></span></label>
+        <label class="midi-setup-section"><span class="midi-setup-label">TRANSPORT</span><select data-midi-transport aria-label="MIDI transport mode" disabled><option value="follow">FOLLOW START / STOP</option><option value="auto">CLOCK AUTO-RUN</option></select></label>
         <section class="midi-setup-section midi-status-section" aria-label="MIDI clock status">
           <h2>STATUS</h2>
           <dl><dt>Clock</dt><dd data-midi-clock-status>DISABLED</dd><dt>Tempo</dt><dd data-midi-tempo>—</dd><dt>Transport</dt><dd data-midi-transport-status>—</dd></dl>
         </section>
-        <footer class="midi-setup-footer"><button class="audio-button" type="button" data-midi-refresh>REFRESH DEVICES</button></footer>
+        <footer class="midi-setup-footer"><button class="audio-button" type="button" data-midi-refresh disabled>REFRESH DEVICES</button></footer>
       </form>
     </dialog>
     <script type="module" src="filter-shape.js"></script>

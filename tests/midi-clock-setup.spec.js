@@ -75,16 +75,33 @@ test('only the selected input drives clock, and switching inputs clears lock and
   await expect(page.locator('[data-midi-clock-status]')).toHaveText('LOCKED');
   await expect(page.locator('[data-midi-tempo]')).toHaveText('120.0 BPM');
   await expect(page.locator('.midi-setup-button')).toHaveClass(/midi-status-active/);
+  const stableTempoReadings = await page.evaluate(() => {
+    const values = [];
+    const intervals = [20.7, 20.96, 20.75, 20.92];
+    let timestamp = 2000;
+    for (let pulse = 0; pulse < 48; pulse += 1) {
+      window.__midiInputs.a.onmidimessage({ data: [0xf8], timeStamp: timestamp });
+      timestamp += intervals[pulse % intervals.length];
+      values.push(document.querySelector('[data-midi-tempo]').textContent);
+    }
+    return values;
+  });
+  expect(new Set(stableTempoReadings).size).toBeLessThanOrEqual(2);
   await sendPulses(page, 'a', 30, 3000, 19.8413);
   await expect(page.locator('[data-midi-tempo]')).toHaveText('126.0 BPM');
-  await page.evaluate(() => {
+  const jitterTempoReadings = await page.evaluate(() => {
+    const values = [];
     let timestamp = 4000;
-    for (const interval of [19.2, 20.4, 19.5, 20.2, 19.8, 20.1, 19.4, 20.3]) {
+    const intervals = [19.7, 19.9, 19.8, 19.75, 19.95, 19.82, 60, 19.84];
+    for (let pulse = 0; pulse < 48; pulse += 1) {
       window.__midiInputs.a.onmidimessage({ data: [0xf8], timeStamp: timestamp });
-      timestamp += interval;
+      timestamp += intervals[pulse % intervals.length];
+      values.push(document.querySelector('[data-midi-tempo]').textContent);
     }
+    return values;
   });
-  const tempoAfterJitter = await page.locator('[data-midi-tempo]').textContent();
+  expect(new Set(jitterTempoReadings).size).toBeLessThanOrEqual(3);
+  const tempoAfterJitter = jitterTempoReadings.at(-1);
   expect(Number.parseFloat(tempoAfterJitter)).toBeGreaterThan(124);
   expect(Number.parseFloat(tempoAfterJitter)).toBeLessThan(128);
   await page.locator('[data-midi-setup].midi-setup-button').click();
@@ -94,6 +111,53 @@ test('only the selected input drives clock, and switching inputs clears lock and
   await expect(page.locator('[data-midi-clock-status]')).toHaveText('NO CLOCK');
   await sendPulses(page, 'b');
   await expect(page.locator('[data-midi-clock-status]')).toHaveText('LOCKED');
+});
+
+test('MIDI runtime disables and re-enables cleanly while preserving access, device, and settings', async ({ page }) => {
+  await page.addInitScript(`(${midiFixture})()`);
+  await page.goto('/');
+  await enableMidi(page);
+  await page.locator('[data-midi-input]').selectOption('clock-a');
+  await page.locator('[data-midi-transport]').selectOption('auto');
+  await closeMidi(page);
+  await page.locator('[data-mode="lfo"]').click();
+  await page.locator('[data-lfo-rate-mode="sync"]').click();
+  await page.locator('[data-lfo-clock-source]').selectOption('midi');
+  await page.locator('[data-midi-setup].midi-setup-button').click();
+  await page.evaluate(() => { window.__oldClockHandler = window.__midiInputs.a.onmidimessage; });
+  await page.locator('[data-midi-enable]').click();
+  await expect(page.locator('[data-midi-access-status]')).toHaveText('CONNECTED');
+  await expect(page.locator('[data-midi-enable]')).toHaveText('ENABLE MIDI');
+  await expect(page.locator('[data-midi-clock-status]')).toHaveText('DISABLED');
+  await expect(page.locator('[data-midi-tempo]')).toHaveText('—');
+  await expect(page.locator('[data-midi-transport-status]')).toHaveText('—');
+  await expect(page.locator('[data-midi-input]')).toBeDisabled();
+  await expect(page.locator('[data-midi-receive]')).toBeDisabled();
+  await expect(page.locator('[data-midi-transport]')).toBeDisabled();
+  await expect(page.locator('[data-midi-refresh]')).toBeDisabled();
+  expect(await page.evaluate(() => ({
+    inputListener: window.__midiInputs.a.onmidimessage,
+    stateChange: window.__midiAccess.onstatechange,
+    requests: window.__midiRequests
+  }))).toEqual({ inputListener: null, stateChange: null, requests: 1 });
+  const beforeStaleMessages = await page.evaluate(() => window.LfoMode.getState().lfoClock);
+  await page.evaluate(() => {
+    window.__oldClockHandler({ data: [0xfa], timeStamp: 5000 });
+    window.__oldClockHandler({ data: [0xf8], timeStamp: 5020.8 });
+    window.__oldClockHandler({ data: [0xfc], timeStamp: 5041.6 });
+  });
+  expect(await page.evaluate(() => window.LfoMode.getState().lfoClock)).toEqual(beforeStaleMessages);
+  await page.locator('[data-midi-enable]').click();
+  await expect(page.locator('[data-midi-enable]')).toHaveText('DISABLE MIDI');
+  await expect(page.locator('[data-midi-access-status]')).toHaveText('CONNECTED');
+  await expect(page.locator('[data-midi-input]')).toHaveValue('clock-a');
+  await expect(page.locator('[data-midi-transport]')).toHaveValue('auto');
+  await expect(page.locator('[data-midi-receive]')).toBeChecked();
+  expect(await page.evaluate(() => ({
+    inputListener: typeof window.__midiInputs.a.onmidimessage,
+    stateChange: typeof window.__midiAccess.onstatechange,
+    requests: window.__midiRequests
+  }))).toEqual({ inputListener: 'function', stateChange: 'function', requests: 1 });
 });
 
 test('FOLLOW START / STOP and CLOCK AUTO-RUN apply their transport semantics', async ({ page }) => {

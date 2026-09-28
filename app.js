@@ -1637,9 +1637,12 @@ const loadMidiConfig = () => {
 };
 const midiConfig = loadMidiConfig();
 let midiAccessStatus = typeof navigator.requestMIDIAccess === 'function' ? 'NOT GRANTED' : 'UNAVAILABLE';
-let midiClockStatus = midiConfig.receive ? 'NO INPUT' : 'DISABLED';
+let midiRuntimeEnabled = false;
+let midiClockStatus = 'DISABLED';
 let midiTransportStatus = '—';
-let midiTempoEstimate = null;
+let midiDisplayBpm = null;
+let midiDisplayFilteredBpm = null;
+const midiClockIntervals = [];
 let midiClockLocked = false;
 let selectedLfoIndex = 0;
 let lfoSlotPage = 0;
@@ -1708,8 +1711,9 @@ const getMidiStatusText = () => {
   const clock = state.lfoClock || normalizeClockState();
   if (clock.source === 'internal') return `INTERNAL · ${Math.round(clock.bpm)} BPM`;
   if (midiAccessStatus === 'UNAVAILABLE') return 'UNAVAILABLE';
-  return midiClockStatus === 'LOCKED' && Number.isFinite(midiTempoEstimate)
-    ? `LOCKED · ${midiTempoEstimate.toFixed(1)} BPM`
+  if (!midiRuntimeEnabled) return 'DISABLED';
+  return midiClockStatus === 'LOCKED' && Number.isFinite(midiDisplayBpm)
+    ? `LOCKED · ${midiDisplayBpm.toFixed(1)} BPM`
     : midiClockStatus;
 };
 const setClockState = (patch, sendMessage = null) => {
@@ -1722,13 +1726,17 @@ const setClockState = (patch, sendMessage = null) => {
 const persistMidiConfig = () => {
   try { window.localStorage.setItem(MIDI_CONFIG_KEY, JSON.stringify(midiConfig)); } catch { /* Storage may be unavailable. */ }
 };
+const resetMidiTempoTracking = ({ resetWorkingTempo = true, clearDisplay = true } = {}) => {
+  midiLastClockTimestamp = null;
+  midiClockIntervals.length = 0;
+  midiClockLocked = false;
+  if (resetWorkingTempo) midiClockBpm = 120;
+  if (clearDisplay) { midiDisplayBpm = null; midiDisplayFilteredBpm = null; }
+};
 const resetMidiClockTracking = (status = 'NO CLOCK') => {
   if (midiClockStatusTimer) clearTimeout(midiClockStatusTimer);
   midiClockStatusTimer = 0;
-  midiLastClockTimestamp = null;
-  midiTempoEstimate = null;
-  midiClockBpm = 120;
-  midiClockLocked = false;
+  resetMidiTempoTracking();
   midiClockStatus = status;
   midiTransportRunning = false;
   midiTransportStatus = midiConfig.transport === 'auto' ? 'STOPPED' : '—';
@@ -1752,7 +1760,7 @@ const midiManager = new MidiDeviceManager({
       }
       midiInputSelect.disabled = inputs.length === 0 || midiAccessStatus !== 'CONNECTED';
       midiInputSelect.value = selectedId;
-      if (previous !== lastMidiSelection) {
+      if (midiRuntimeEnabled && previous !== lastMidiSelection) {
         lastMidiSelection = previous;
         resetMidiClockTracking(midiConfig.receive ? (previous ? 'NO CLOCK' : 'NO INPUT') : 'DISABLED');
       }
@@ -1761,27 +1769,33 @@ const midiManager = new MidiDeviceManager({
   }
 });
 const renderMidiSetup = () => {
-  const hasInput = Boolean(midiManager?.selectedId && midiManager.activeInput);
+  const hasInput = Boolean(midiRuntimeEnabled && midiManager?.selectedId && midiManager.activeInput);
   if (midiAccessStatusElement) midiAccessStatusElement.textContent = midiAccessStatus;
   if (midiAccessMessage && !midiAccessMessage.dataset.error) midiAccessMessage.textContent = '';
-  if (midiInputSelect) midiInputSelect.disabled = !midiManager?.inputs.length || midiAccessStatus !== 'CONNECTED';
-  if (midiReceiveToggle) midiReceiveToggle.checked = midiConfig.receive;
-  if (midiTransportSelect) midiTransportSelect.value = midiConfig.transport;
-  if (midiClockStatusElement) midiClockStatusElement.textContent = !midiConfig.receive ? 'DISABLED' : !hasInput ? 'NO INPUT' : midiClockStatus;
-  if (midiTempoElement) midiTempoElement.textContent = midiConfig.receive && hasInput && Number.isFinite(midiTempoEstimate) ? `${midiTempoEstimate.toFixed(1)} BPM` : '—';
-  if (midiTransportStatusElement) midiTransportStatusElement.textContent = !midiConfig.receive || !hasInput ? '—' : midiTransportStatus;
+  if (midiInputSelect) midiInputSelect.disabled = !midiRuntimeEnabled || !midiManager?.inputs.length || midiAccessStatus !== 'CONNECTED';
+  if (midiReceiveToggle) { midiReceiveToggle.checked = midiConfig.receive; midiReceiveToggle.disabled = !midiRuntimeEnabled; }
+  if (midiTransportSelect) { midiTransportSelect.value = midiConfig.transport; midiTransportSelect.disabled = !midiRuntimeEnabled; }
+  if (midiRefreshButton) midiRefreshButton.disabled = !midiRuntimeEnabled;
+  const enableButton = document.querySelector('[data-midi-enable]');
+  if (enableButton) {
+    enableButton.textContent = midiRuntimeEnabled ? 'DISABLE MIDI' : 'ENABLE MIDI';
+    enableButton.setAttribute('aria-pressed', String(midiRuntimeEnabled));
+  }
+  if (midiClockStatusElement) midiClockStatusElement.textContent = !midiRuntimeEnabled || !midiConfig.receive ? 'DISABLED' : !hasInput ? 'NO INPUT' : midiClockStatus;
+  if (midiTempoElement) midiTempoElement.textContent = midiRuntimeEnabled && midiConfig.receive && hasInput && Number.isFinite(midiDisplayBpm) ? `${midiDisplayBpm.toFixed(1)} BPM` : '—';
+  if (midiTransportStatusElement) midiTransportStatusElement.textContent = !midiRuntimeEnabled || !midiConfig.receive || !hasInput ? '—' : midiTransportStatus;
   const midiButton = document.querySelector('[data-midi-setup].midi-setup-button');
   if (midiButton) {
-    midiButton.classList.toggle('midi-status-warning', midiAccessStatus === 'CONNECTED' && hasInput && midiClockStatus !== 'LOCKED');
-    midiButton.classList.toggle('midi-status-active', midiConfig.receive && hasInput && midiClockStatus === 'LOCKED');
-    midiButton.classList.toggle('midi-status-neutral', midiAccessStatus !== 'CONNECTED' || !hasInput);
+    midiButton.classList.toggle('midi-status-warning', midiRuntimeEnabled && midiAccessStatus === 'CONNECTED' && hasInput && midiClockStatus !== 'LOCKED');
+    midiButton.classList.toggle('midi-status-active', midiRuntimeEnabled && midiConfig.receive && hasInput && midiClockStatus === 'LOCKED');
+    midiButton.classList.toggle('midi-status-neutral', !midiRuntimeEnabled || midiAccessStatus !== 'CONNECTED' || !hasInput);
     midiButton.setAttribute('aria-label', 'MIDI Setup');
     midiButton.title = `MIDI Setup · ${midiClockStatus}`;
   }
   if (lfoMidiStatus) lfoMidiStatus.textContent = getMidiStatusText();
 };
 const receiveMidiClockMessage = event => {
-  if (!midiConfig.receive || !midiManager?.selectedId) return;
+  if (!midiRuntimeEnabled || !midiConfig.receive || !midiManager?.selectedId) return;
   const status = event.data?.[0];
   const timestamp = Number.isFinite(event.timeStamp) ? event.timeStamp : performance.now();
   if (![0xf8, 0xfa, 0xfb, 0xfc].includes(status)) return;
@@ -1790,9 +1804,7 @@ const receiveMidiClockMessage = event => {
     midiClockStatusTimer = 0;
     midiTransportRunning = true;
     midiTransportStatus = 'RUNNING';
-    midiLastClockTimestamp = null;
-    midiTempoEstimate = null;
-    midiClockLocked = false;
+    resetMidiTempoTracking();
     midiClockStatus = 'NO CLOCK';
     if (state.lfoClock?.source === 'midi') setClockState({ running: true, midiStatus: 'NO CLOCK' }, 'start');
     renderMidiSetup();
@@ -1832,10 +1844,21 @@ const receiveMidiClockMessage = event => {
   if (midiLastClockTimestamp !== null) {
     const periodMs = timestamp - midiLastClockTimestamp;
     if (periodMs >= 5 && periodMs <= 100) {
-      const measured = 60000 / (periodMs * 24);
-      midiClockBpm = Math.min(300, Math.max(30, midiClockBpm * .75 + measured * .25));
-      midiTempoEstimate = midiTempoEstimate === null ? measured : midiClockBpm;
-      midiClockLocked = true;
+      midiClockIntervals.push(periodMs);
+      if (midiClockIntervals.length > 24) midiClockIntervals.shift();
+      const orderedIntervals = [...midiClockIntervals].sort((left, right) => left - right);
+      const middle = Math.floor(orderedIntervals.length / 2);
+      const medianPeriod = orderedIntervals.length % 2
+        ? orderedIntervals[middle]
+        : (orderedIntervals[middle - 1] + orderedIntervals[middle]) / 2;
+      const measured = Math.min(300, Math.max(30, 60000 / (medianPeriod * 24)));
+      midiClockBpm = measured;
+      midiDisplayFilteredBpm = midiDisplayFilteredBpm === null
+        ? midiClockBpm
+        : midiDisplayFilteredBpm + (midiClockBpm - midiDisplayFilteredBpm) * .5;
+      const displayCandidate = Math.round((midiDisplayFilteredBpm + 1e-8) * 10) / 10;
+      if (midiDisplayBpm === null || Math.abs(displayCandidate - midiDisplayBpm) + 1e-8 >= .1) midiDisplayBpm = displayCandidate;
+      midiClockLocked = orderedIntervals.length >= 2;
     }
   }
   midiLastClockTimestamp = timestamp;
@@ -1854,24 +1877,43 @@ const receiveMidiClockMessage = event => {
   }
   renderMidiSetup();
 };
+const disableMidiClock = () => {
+  if (!midiRuntimeEnabled) return;
+  midiManager.disable();
+  if (midiClockStatusTimer) clearTimeout(midiClockStatusTimer);
+  midiClockStatusTimer = 0;
+  resetMidiTempoTracking();
+  midiRuntimeEnabled = false;
+  midiTransportRunning = false;
+  midiClockStatus = 'DISABLED';
+  midiTransportStatus = '—';
+  if (state.lfoClock?.source === 'midi') {
+    setClockState({ running: false, midiAvailable: midiAccessStatus === 'CONNECTED', midiBpm: 120, midiStatus: 'DISABLED' }, 'stop');
+  }
+  renderMidiSetup();
+};
 const enableMidiClock = async () => {
   try {
     if (!midiManager.available) {
       midiAccessStatus = 'UNAVAILABLE';
-      midiClockStatus = 'NO INPUT';
+      midiRuntimeEnabled = false;
+      midiClockStatus = 'DISABLED';
       renderMidiSetup();
       return false;
     }
     const result = await midiManager.enable();
     midiAccessStatus = result.status;
+    midiRuntimeEnabled = true;
     midiAccessMessage.dataset.error = '';
     if (midiConfig.deviceId && midiManager.inputs.some(input => input.id === midiConfig.deviceId)) midiManager.select(midiConfig.deviceId);
-    midiClockStatus = midiManager.selectedId ? 'NO CLOCK' : 'NO INPUT';
+    resetMidiTempoTracking();
+    midiClockStatus = !midiConfig.receive ? 'DISABLED' : midiManager.selectedId ? 'NO CLOCK' : 'NO INPUT';
     if (state.lfoClock?.source === 'midi') setClockState({ midiAvailable: true, running: false, midiStatus: midiClockStatus });
     renderMidiSetup();
     return true;
   } catch (error) {
-    midiAccessStatus = 'NOT GRANTED';
+    if (!midiManager.access) midiAccessStatus = 'NOT GRANTED';
+    midiRuntimeEnabled = false;
     midiAccessMessage.textContent = error?.name === 'SecurityError' ? 'MIDI access is blocked by browser or site settings.' : 'MIDI access could not be enabled. Try again.';
     midiAccessMessage.dataset.error = 'true';
     renderMidiSetup();
@@ -2762,7 +2804,7 @@ lfoDivisionSelect?.addEventListener('change', () => {
 });
 lfoClockSourceSelect?.addEventListener('change', () => {
   if (lfoClockSourceSelect.value === 'midi') {
-    const status = midiAccessStatus === 'UNAVAILABLE' ? 'UNAVAILABLE' : (!midiManager.selectedId ? 'NO INPUT' : (!midiConfig.receive ? 'DISABLED' : 'NO CLOCK'));
+    const status = !midiRuntimeEnabled || !midiConfig.receive ? 'DISABLED' : midiAccessStatus === 'UNAVAILABLE' ? 'UNAVAILABLE' : (!midiManager.selectedId ? 'NO INPUT' : 'NO CLOCK');
     midiTransportRunning = false;
     setClockState({ source: 'midi', midiAvailable: midiAccessStatus === 'CONNECTED', running: false, midiStatus: status });
   } else {
@@ -2774,9 +2816,12 @@ document.querySelectorAll('[data-midi-setup]').forEach(button => button.addEvent
   renderMidiSetup();
   if (midiDialog && !midiDialog.open) midiDialog.showModal();
 }));
-document.querySelector('[data-midi-enable]')?.addEventListener('click', enableMidiClock);
+document.querySelector('[data-midi-enable]')?.addEventListener('click', () => {
+  if (midiRuntimeEnabled) disableMidiClock();
+  else enableMidiClock();
+});
 midiRefreshButton?.addEventListener('click', () => {
-  if (midiManager.access) {
+  if (midiRuntimeEnabled && midiManager.access) {
     midiManager.refresh();
     midiAccessStatus = 'CONNECTED';
     renderMidiSetup();
