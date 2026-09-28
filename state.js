@@ -1,5 +1,6 @@
 import { normalizeModulationState } from './lfo-core.mjs';
 import { normalizeClockState } from './clock-core.mjs';
+import { normalizeEnvelopeState } from './envelope-core.mjs';
 
 (function () {
   const BAND_DEFINITIONS = Object.freeze([
@@ -161,6 +162,7 @@ import { normalizeClockState } from './clock-core.mjs';
     filterEnabled: false,
     ...normalizeDynamicEqState(),
     ...normalizeModulationState(),
+    ...normalizeEnvelopeState(),
     lfoClock: normalizeClockState(),
     filterType: 'lowpass',
     filterFrequencyHz: 777,
@@ -240,6 +242,7 @@ import { normalizeClockState } from './clock-core.mjs';
     normalizeFilterState,
     normalizeDynamicEqState,
     normalizeModulationState,
+    normalizeEnvelopeState,
     setBandBaseGain
   });
 })();

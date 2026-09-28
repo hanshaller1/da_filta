@@ -21,6 +21,8 @@ const state = createInitialState();
 let audioEngine = null;
 let dynamicEqTelemetry = null;
 const lfoTelemetry = new Map();
+const envelopeTelemetry = new Map();
+const envelopeGraphValues = [];
 let panic = () => {};
 let updateResonatorDiagnostics = () => {};
 // FILTERBANK editor visuals intentionally describe the manual FILTERBANK
@@ -1618,6 +1620,20 @@ const lfoInvertButton = document.querySelector('[data-lfo-invert]');
 const lfoBpmControl = document.querySelector('[data-lfo-bpm-control]');
 const lfoDivisionControl = document.querySelector('[data-lfo-division-control]');
 const lfoMidiStatus = document.querySelector('[data-lfo-midi-status]');
+const envelopeEnableButton = document.querySelector('[data-envelope-enable]');
+const envelopeModeButtons = [...document.querySelectorAll('[data-envelope-mode]')];
+const envelopeAttackInput = document.querySelector('[data-envelope-attack]');
+const envelopeReleaseInput = document.querySelector('[data-envelope-release]');
+const envelopeSensitivityInput = document.querySelector('[data-envelope-sensitivity]');
+const envelopeAmountInput = document.querySelector('[data-envelope-amount]');
+const envelopeTargetSelect = document.querySelector('[data-envelope-target]');
+const envelopeChannelSelect = document.querySelector('[data-envelope-channel]');
+const envelopeInvertButton = document.querySelector('[data-envelope-invert]');
+const envelopeWavePath = document.querySelector('[data-envelope-wave-path]');
+const envelopeReadout = document.querySelector('[data-envelope-readout]');
+const envelopeStatus = document.querySelector('[data-envelope-status]');
+const envelopeTargetState = document.querySelector('[data-envelope-target-state]');
+const envelopeTargetControl = document.querySelector('.envelope-target-control');
 const midiDialog = document.querySelector('[data-midi-dialog]');
 const midiAccessStatusElement = document.querySelector('[data-midi-access-status]');
 const midiAccessMessage = document.querySelector('[data-midi-access-message]');
@@ -1692,14 +1708,18 @@ const lfoTargetContext = () => ({
 });
 const populateLfoTargets = () => {
   if (!lfoTargetSelect) return;
-  lfoTargetSelect.replaceChildren(new Option('NONE', ''));
+  populateModulationTargetSelect(lfoTargetSelect);
+};
+const populateModulationTargetSelect = select => {
+  if (!select) return;
+  select.replaceChildren(new Option('NONE', ''));
   const groups = new Map();
   for (const target of MODULATION_TARGETS) {
     if (!groups.has(target.group)) {
       const group = document.createElement('optgroup');
       group.label = target.group;
       groups.set(target.group, group);
-      lfoTargetSelect.append(group);
+      select.append(group);
     }
     const option = document.createElement('option');
     option.value = target.id;
@@ -2102,6 +2122,101 @@ const startLfoDisplay = () => {
   }
 };
 const stopLfoDisplay = () => { if (lfoAnimationFrame) cancelAnimationFrame(lfoAnimationFrame); lfoAnimationFrame = 0; };
+const getEnvelopeSource = () => state.envelopeSources?.[0] || null;
+const getEnvelopeValue = () => {
+  const source = getEnvelopeSource();
+  const telemetry = source ? envelopeTelemetry.get(source.id) : null;
+  return source?.enabled && telemetry?.enabled && Number.isFinite(telemetry.value)
+    ? Math.min(1, Math.max(0, telemetry.value)) : 0;
+};
+const renderEnvelopeGraph = () => {
+  const current = getEnvelopeValue();
+  if (envelopeReadout) {
+    envelopeReadout.textContent = current.toFixed(2);
+    envelopeReadout.setAttribute('aria-label', `Current envelope level ${current.toFixed(2)}`);
+  }
+  if (!envelopeWavePath) return;
+  const values = envelopeGraphValues.length ? envelopeGraphValues : [current];
+  let path = '';
+  for (let index = 0; index < values.length; index += 1) {
+    const x = values.length === 1 ? 1000 : index / (values.length - 1) * 1000;
+    const y = 114 - Math.min(1, Math.max(0, values[index])) * 108;
+    path += `${index ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)} `;
+  }
+  envelopeWavePath.setAttribute('d', path.trim());
+};
+const commitEnvelopeState = () => {
+  const currentSource = getEnvelopeSource();
+  const previous = currentSource ? envelopeTelemetry.get(currentSource.id)?.enabled === true : false;
+  const normalized = window.ResonantState.normalizeEnvelopeState(state);
+  state.envelopeCount = normalized.envelopeCount;
+  state.envelopeSources = normalized.envelopeSources;
+  const source = getEnvelopeSource();
+  if (!source?.enabled || !previous) {
+    envelopeGraphValues.length = 0;
+    if (!source?.enabled) envelopeGraphValues.push(0);
+    if (source) envelopeTelemetry.delete(source.id);
+  }
+  audioEngine?.setModulationState(state);
+  renderEnvelopeControls();
+};
+const setEnvelopeSource = patch => {
+  const source = getEnvelopeSource();
+  if (!source) return;
+  Object.assign(source, patch);
+  commitEnvelopeState();
+};
+const renderEnvelopeControls = () => {
+  const source = getEnvelopeSource();
+  if (!source) return;
+  if (envelopeEnableButton) {
+    envelopeEnableButton.textContent = source.enabled ? 'SOURCE ON' : 'SOURCE OFF';
+    envelopeEnableButton.setAttribute('aria-pressed', String(source.enabled));
+    envelopeEnableButton.setAttribute('aria-label', source.enabled ? 'Disable envelope source' : 'Enable envelope source');
+  }
+  envelopeModeButtons.forEach(button => {
+    const active = button.dataset.envelopeMode === source.detectorMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  if (envelopeAttackInput) envelopeAttackInput.value = String(source.attack);
+  if (envelopeReleaseInput) envelopeReleaseInput.value = String(source.release);
+  if (envelopeSensitivityInput) envelopeSensitivityInput.value = String(source.sensitivity);
+  if (envelopeAmountInput) envelopeAmountInput.value = String(source.amount);
+  const attackOutput = document.querySelector('[data-envelope-attack-output]');
+  const releaseOutput = document.querySelector('[data-envelope-release-output]');
+  const sensitivityOutput = document.querySelector('[data-envelope-sensitivity-output]');
+  const amountOutput = document.querySelector('[data-envelope-amount-output]');
+  if (attackOutput) attackOutput.textContent = `${Math.round(source.attack)} ms`;
+  if (releaseOutput) releaseOutput.textContent = `${Math.round(source.release)} ms`;
+  if (sensitivityOutput) sensitivityOutput.textContent = `${Math.round(source.sensitivity)} %`;
+  if (amountOutput) amountOutput.textContent = `${Math.round(source.amount)} %`;
+  if (envelopeTargetSelect) {
+    const known = MODULATION_TARGETS.some(target => target.id === source.targetId);
+    if (source.targetId && !known && ![...envelopeTargetSelect.options].some(option => option.value === source.targetId)) {
+      const unavailable = new Option(`UNAVAILABLE - ${source.targetId}`, source.targetId, true, true);
+      unavailable.disabled = true;
+      envelopeTargetSelect.add(unavailable);
+    }
+    envelopeTargetSelect.value = source.targetId || '';
+  }
+  const target = MODULATION_TARGETS.find(item => item.id === source.targetId);
+  if (envelopeChannelSelect) {
+    envelopeChannelSelect.disabled = !target?.channelRouting;
+    envelopeChannelSelect.value = target?.channelRouting ? source.channel : 'both';
+  }
+  if (envelopeInvertButton) {
+    envelopeInvertButton.textContent = source.invert ? 'INVERT ON' : 'INVERT OFF';
+    envelopeInvertButton.setAttribute('aria-pressed', String(source.invert));
+  }
+  const active = target ? isModulationTargetActive(target.id, lfoTargetContext()) : false;
+  if (envelopeTargetState) envelopeTargetState.textContent = !source.targetId ? 'NO TARGET'
+    : !target ? 'UNAVAILABLE' : !active ? `INACTIVE · ${target.activeWhen.toUpperCase()}`
+      : source.enabled ? 'ACTIVE' : 'ASSIGNED · SOURCE OFF';
+  envelopeTargetControl?.classList.toggle('is-inactive', Boolean(source.targetId && !active));
+  if (envelopeStatus) envelopeStatus.textContent = `${source.enabled ? 'SOURCE ON' : 'SOURCE OFF'} · INPUT / PRE-FILTERBANK`;
+  renderEnvelopeGraph();
+};
 const filterTypeDefinitions = window.FilterShape.FILTER_TYPE_DEFINITIONS;
 const filterControlDefinitions = window.FilterShape.FILTER_CONTROL_DEFINITIONS;
 const filterTypeGroups = document.querySelector('[data-filter-type-groups]');
@@ -2766,7 +2881,9 @@ document.querySelector('[data-dynamic-eq-reset]')?.addEventListener('click', () 
 });
 renderDynamicEqControls();
 populateLfoTargets();
+populateModulationTargetSelect(envelopeTargetSelect);
 renderLfoControls();
+renderEnvelopeControls();
 lfoPowerButton?.addEventListener('click', event => {
   event.preventDefault();
   event.stopPropagation();
@@ -2855,6 +2972,20 @@ document.querySelector('[data-lfo-reset]')?.addEventListener('click', () => {
   audioEngine?.resetLfoPhase(getSelectedLfo()?.id);
   renderLfoControls();
 });
+envelopeEnableButton?.addEventListener('click', () => setEnvelopeSource({ enabled: !getEnvelopeSource()?.enabled }));
+envelopeModeButtons.forEach(button => button.addEventListener('click', () => {
+  if (['peak', 'rms'].includes(button.dataset.envelopeMode)) setEnvelopeSource({ detectorMode: button.dataset.envelopeMode });
+}));
+envelopeAttackInput?.addEventListener('input', () => setEnvelopeSource({ attack: Number(envelopeAttackInput.value) }));
+envelopeReleaseInput?.addEventListener('input', () => setEnvelopeSource({ release: Number(envelopeReleaseInput.value) }));
+envelopeSensitivityInput?.addEventListener('input', () => setEnvelopeSource({ sensitivity: Number(envelopeSensitivityInput.value) }));
+envelopeAmountInput?.addEventListener('input', () => setEnvelopeSource({ amount: Number(envelopeAmountInput.value) }));
+envelopeTargetSelect?.addEventListener('change', () => {
+  const target = MODULATION_TARGETS.find(item => item.id === envelopeTargetSelect.value);
+  setEnvelopeSource({ targetId: envelopeTargetSelect.value, channel: target?.channelRouting ? getEnvelopeSource().channel : 'both' });
+});
+envelopeChannelSelect?.addEventListener('change', () => setEnvelopeSource({ channel: envelopeChannelSelect.value }));
+envelopeInvertButton?.addEventListener('click', () => setEnvelopeSource({ invert: !getEnvelopeSource()?.invert }));
 window.FilterMode = Object.freeze({
   getState: () => ({
     selectedWorkspaceMode: state.selectedWorkspaceMode,
@@ -2892,6 +3023,11 @@ window.LfoMode = Object.freeze({
   getSlotPages: (count = state.lfoSources.length) => paginateLfoSources(
     Array.from({ length: Math.max(0, count) }, (_, index) => ({ id: `lfo.${index + 1}` })), LFO_SLOT_PAGE_SIZE
   ).map(page => page.map(source => source.id))
+});
+window.EnvelopeMode = Object.freeze({
+  getState: () => ({ envelopeSources: (state.envelopeSources || []).map(source => ({ ...source })) }),
+  getTelemetry: () => { const source = getEnvelopeSource(); const telemetry = source ? envelopeTelemetry.get(source.id) : null; return telemetry ? { ...telemetry } : null; },
+  getTargetRegistry: () => MODULATION_TARGETS.map(target => ({ id: target.id, label: target.label, group: target.group, channelRouting: target.channelRouting }))
 });
 const renderFilterPower = () => {
   if (filterbankPowerButton) {
@@ -2946,6 +3082,7 @@ const selectMode = mode => {
   if (mode === 'filter') renderFilterMode();
   if (mode === 'lfo') { renderLfoControls(); startLfoDisplay(); }
   else stopLfoDisplay();
+  if (mode === 'envelope-follower') renderEnvelopeControls();
 };
 modeTabs.forEach((tab, index) => {
   tab.tabIndex = tab.classList.contains('active') ? 0 : -1;
@@ -3629,6 +3766,14 @@ audioEngine = new AudioEngine({
       startLfoDisplay();
     }
   },
+  onEnvelopeTelemetry: packet => {
+    if (packet.sourceId) envelopeTelemetry.set(packet.sourceId, packet);
+    if (Number.isFinite(packet.value)) {
+      envelopeGraphValues.push(Math.min(1, Math.max(0, packet.value)));
+      if (envelopeGraphValues.length > 96) envelopeGraphValues.shift();
+    }
+    if (state.selectedWorkspaceMode === 'envelope-follower') renderEnvelopeGraph();
+  },
   onOutputProtectionTelemetry: packet => devLabTelemetry.receiveOutputProtection(packet),
   onOutputGuardTelemetry: packet => devLabTelemetry.receiveOutputGuard(packet)
 });
@@ -3865,6 +4010,7 @@ const syncUiFromAudioState = snapshot => {
   if (!snapshot) return;
   Object.assign(state, window.ResonantState.normalizeDynamicEqState(snapshot));
   Object.assign(state, window.ResonantState.normalizeModulationState(snapshot));
+  Object.assign(state, window.ResonantState.normalizeEnvelopeState(snapshot));
   if (snapshot.lfoClock) state.lfoClock = normalizeClockState(snapshot.lfoClock);
   selectedLfoIndex = Math.min(selectedLfoIndex, Math.max(0, state.lfoSources.length - 1));
   renderDynamicEqControls();
@@ -3959,11 +4105,16 @@ const syncUiFromAudioState = snapshot => {
   renderFilterPower();
   renderFilterMode();
   renderLfoControls();
+  renderEnvelopeControls();
 };
 // This is the complete, explicit DEV/LAB snapshot contract. Normal app state
 // is intentionally absent: DEV/LAB snapshots are experimental configurations,
 // not production presets.
 const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
+  ['envelopeSources', value => {
+    Object.assign(state, window.ResonantState.normalizeEnvelopeState({ envelopeSources: value }));
+    commitEnvelopeState();
+  }],
   ['lfoSources', value => {
     state.lfoSources = window.ResonantState.normalizeModulationState({ lfoSources: value, lfoModuleEnabled: state.lfoModuleEnabled }).lfoSources;
     commitLfoState();

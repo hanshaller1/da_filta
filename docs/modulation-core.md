@@ -119,6 +119,37 @@ undocumented Erica behavior was reproduced one to one.
 
 da_filta V1.5 ships four LFOs on a count-based path scalable to at least 20,
 with its own Filter, Filterbank, and Dynamic EQ targets and the existing
-modulation core. Envelope followers and Clock Mod are future sources/workspaces
-that can publish into this same source/clock architecture; they are not
-implemented by this task.
+modulation core. Clock Mod remains a future workspace.
+
+## Envelope follower V1
+
+The first envelope source is `envelope.1`. State is count based in
+`envelopeSources`, with normalized source IDs, so later sources can use the
+same Source → Assignment → Target route. Source enable, PEAK/RMS mode, attack,
+release, sensitivity, amount, target, channel, and invert are regular app
+state and travel through the same state snapshots as the LFO settings.
+
+The detector reads the existing stereo filterbank AudioWorklet input. The
+audio-engine connects the Input Preamp output directly to that input, before
+the filterbank, feedback processing, and filterbank modulation. PEAK detects
+the largest absolute channel sample. RMS detects the stereo root mean square.
+Both are unipolar and clamp the sensitivity-scaled signal to 0…1. Attack
+(1…500 ms) and release (10…3000 ms) use sample-rate exponential smoothing in
+the Worklet. Sensitivity is a 0…400% linear gain with 100% neutral. The
+detector continues to run only while its source is enabled; disabling the
+source removes its modulation contribution without changing assignments or
+base values.
+
+Envelope amount uses the same normalized target mapping as LFO amount. Invert
+is applied once by the modulation assignment. All sources targeting the same
+parameter are summed by `ModulationCore` and then clamped by that target's
+existing descriptor. LEFT and RIGHT route to one channel. SPREAD applies a
+positive contribution to the left channel and its negative to the right;
+these channel modes are available only for stereo-routable band-gain targets.
+Global, filter, and Dynamic EQ targets come from the existing registry, with
+their normal active-state and range rules.
+
+The source graph displays Worklet telemetry at about 30 Hz; it does not run a
+detector or alter modulation on the main thread. The UI uses the existing LFO
+workspace split, waveform styles, target and slider controls, shared toggle
+buttons, spacing, colors, and responsive single-column breakpoint.

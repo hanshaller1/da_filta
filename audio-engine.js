@@ -59,16 +59,18 @@
   };
 
   class AudioEngine {
-    constructor({ onStatusChange, onDevicesChanged, onDiagnostics, onDynamicEqTelemetry, onLfoTelemetry, onOutputProtectionTelemetry, onOutputGuardTelemetry }) {
+    constructor({ onStatusChange, onDevicesChanged, onDiagnostics, onDynamicEqTelemetry, onLfoTelemetry, onEnvelopeTelemetry, onOutputProtectionTelemetry, onOutputGuardTelemetry }) {
       this.onStatusChange = onStatusChange;
       this.onDevicesChanged = onDevicesChanged;
       this.onDiagnostics = onDiagnostics;
       this.onDynamicEqTelemetry = onDynamicEqTelemetry;
       this.onLfoTelemetry = onLfoTelemetry;
+      this.onEnvelopeTelemetry = onEnvelopeTelemetry;
       this.onOutputProtectionTelemetry = onOutputProtectionTelemetry;
       this.onOutputGuardTelemetry = onOutputGuardTelemetry;
       Object.assign(this, window.ResonantState.normalizeDynamicEqState());
       Object.assign(this, window.ResonantState.normalizeModulationState());
+      Object.assign(this, window.ResonantState.normalizeEnvelopeState());
       this.status = 'OFF';
       this.inputGainDb = 0;
       this.inputPreampStage = 'linear';
@@ -433,12 +435,18 @@
 
     getModulationState() {
       const lfo = window.ResonantState.normalizeModulationState(this);
+      const envelope = window.ResonantState.normalizeEnvelopeState(this);
       const assignments = lfo.lfoSources.filter(item => item.targetId).map(item => ({
         sourceId: item.id, targetId: item.targetId, amount: item.amount,
         ...(item.channel && item.channel !== 'both' ? { channel: item.channel } : {})
-      }));
+      })).concat(envelope.envelopeSources.filter(item => item.targetId).map(item => ({
+        sourceId: item.id, targetId: item.targetId, amount: item.amount,
+        ...(item.channel && item.channel !== 'both' ? { channel: item.channel } : {}),
+        ...(item.invert ? { invert: true } : {})
+      })));
       return {
         ...lfo,
+        ...envelope,
         filterEnabled: this.filterEnabled,
         filterbankEnabled: this.filterbankEnabled,
         filterShapeParams: window.FilterShape.shapeParametersFromState(this),
@@ -462,12 +470,13 @@
 
     setModulationState(source = {}) {
       Object.assign(this, window.ResonantState.normalizeModulationState(source));
+      Object.assign(this, window.ResonantState.normalizeEnvelopeState(source));
       if (source.clock) this.setLfoClockState(source.clock);
       else if (source.lfoClock && Object.keys(source.lfoClock).some(key => source.lfoClock[key] !== this.lfoClock?.[key])) {
         this.setLfoClockState(source.lfoClock);
       }
       this.syncModulationState();
-      return window.ResonantState.normalizeModulationState(this);
+      return this.getModulationState();
     }
 
     resetLfoPhase(sourceId) {
@@ -666,6 +675,7 @@
         , onDiagnostics: this.onDiagnostics
         , onDynamicEqTelemetry: packet => this.receiveDynamicEqTelemetry(packet)
         , onLfoTelemetry: packet => this.onLfoTelemetry?.(packet)
+        , onEnvelopeTelemetry: packet => this.onEnvelopeTelemetry?.(packet)
         , ...window.ResonantState.normalizeDynamicEqState(this)
       };
     }
@@ -685,6 +695,7 @@
         filterEnabled: this.filterEnabled,
         ...window.ResonantState.normalizeDynamicEqState(this),
         ...window.ResonantState.normalizeModulationState(this),
+        ...window.ResonantState.normalizeEnvelopeState(this),
         filterType: this.filterType,
         filterFrequencyHz: this.filterFrequencyHz,
         filterSlope: this.filterSlope,

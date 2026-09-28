@@ -575,7 +575,43 @@
                 </section>
               </div>
             </section>
-            <section class="mode-placeholder" id="mode-envelope-follower" role="tabpanel" aria-labelledby="mode-tab-envelope-follower" data-mode-panel="envelope-follower" hidden><strong>ENVELOPE FOLLOWER</strong><span>Envelope follower – coming later</span></section>
+            <section class="filter-mode-panel lfo-mode-panel envelope-mode-panel" id="mode-envelope-follower" role="tabpanel" aria-labelledby="mode-tab-envelope-follower" data-mode-panel="envelope-follower" hidden>
+              <header class="lfo-workspace-header"><strong>ENVELOPE FOLLOWER</strong><span data-envelope-status>INPUT / PRE-FILTERBANK</span></header>
+              <div class="lfo-editor envelope-editor">
+                <section class="filter-response lfo-response envelope-response" aria-label="Envelope level graph">
+                  <header><strong>ENVELOPE.1 · INPUT</strong><button class="dynamic-eq-view-toggle" type="button" data-envelope-enable aria-pressed="false">SOURCE OFF</button></header>
+                  <div class="filter-response-chart lfo-visualizer envelope-visualizer" data-envelope-visualizer>
+                    <svg viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
+                      <line class="lfo-grid-line" x1="0" y1="6" x2="1000" y2="6"></line>
+                      <line class="lfo-grid-line" x1="0" y1="60" x2="1000" y2="60"></line>
+                      <line class="lfo-grid-line" x1="0" y1="114" x2="1000" y2="114"></line>
+                      <path class="lfo-wave-path envelope-wave-path" data-envelope-wave-path></path>
+                    </svg>
+                    <output class="lfo-visual-readout" data-envelope-readout aria-label="Current envelope level">0.00</output>
+                  </div>
+                </section>
+                <section class="filter-controls lfo-controls envelope-controls" aria-label="Envelope detector and modulation controls">
+                  <div class="lfo-row envelope-detector-row">
+                    <span class="lfo-inline-control envelope-control-label">DETECTOR MODE</span>
+                    <div class="envelope-mode-buttons" role="group" aria-label="Envelope detector mode">
+                      <button class="dynamic-eq-view-toggle active" type="button" data-envelope-mode="peak" aria-pressed="true">PEAK</button>
+                      <button class="dynamic-eq-view-toggle" type="button" data-envelope-mode="rms" aria-pressed="false">RMS</button>
+                    </div>
+                  </div>
+                  <div class="lfo-parameter-grid envelope-parameter-grid">
+                    <label class="filter-parameter-control"><span>ATTACK</span><output data-envelope-attack-output>20 ms</output><input class="filter-style-slider" type="range" min="1" max="500" step="1" value="20" data-envelope-attack aria-label="Envelope attack time"></label>
+                    <label class="filter-parameter-control"><span>RELEASE</span><output data-envelope-release-output>250 ms</output><input class="filter-style-slider" type="range" min="10" max="3000" step="1" value="250" data-envelope-release aria-label="Envelope release time"></label>
+                    <label class="filter-parameter-control"><span>SENSITIVITY</span><output data-envelope-sensitivity-output>100 %</output><input class="filter-style-slider" type="range" min="0" max="400" step="1" value="100" data-envelope-sensitivity aria-label="Envelope sensitivity gain"></label>
+                    <label class="filter-parameter-control"><span>AMOUNT</span><output data-envelope-amount-output>50 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="50" data-envelope-amount aria-label="Envelope modulation amount"></label>
+                  </div>
+                  <div class="lfo-row lfo-assignment-row envelope-assignment-row">
+                    <label class="lfo-target-control envelope-target-control"><span>TARGET</span><select data-envelope-target aria-label="Envelope modulation target"><option value="">NONE</option></select><small data-envelope-target-state>NO TARGET</small></label>
+                    <label class="lfo-inline-control"><span>CHANNEL</span><select data-envelope-channel aria-label="Envelope stereo channel"><option value="both">BOTH</option><option value="left">LEFT</option><option value="right">RIGHT</option><option value="spread">SPREAD</option></select></label>
+                    <button class="dynamic-eq-view-toggle" type="button" data-envelope-invert aria-pressed="false">INVERT OFF</button>
+                  </div>
+                </section>
+              </div>
+            </section>
             <section class="dynamic-eq-panel" id="mode-dynamic-eq" role="tabpanel" aria-labelledby="mode-tab-dynamic-eq" data-mode-panel="dynamic-eq" hidden>
               <section class="dynamic-eq-response" aria-label="Dynamic EQ response">
                 <header>

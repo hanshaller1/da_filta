@@ -175,7 +175,7 @@ export class ModulationCore {
   setAssignment({ sourceId, targetId, amount = 100, channel = 'both', invert = false } = {}) {
     if (typeof sourceId !== 'string' || !sourceId.trim() || typeof targetId !== 'string' || !this.targets.has(targetId)) return false;
     const target = this.targets.get(targetId);
-    const normalizedChannel = target.channelRouting && ['left', 'right'].includes(channel) ? channel : 'both';
+    const normalizedChannel = target.channelRouting && ['left', 'right', 'spread'].includes(channel) ? channel : 'both';
     const normalizedAmount = clamp(amount, 0, 100, 0);
     const existing = this.assignments.findIndex(item => item.sourceId === sourceId && item.targetId === targetId);
     const assignment = { sourceId, targetId, amount: normalizedAmount };
@@ -218,10 +218,12 @@ export class ModulationCore {
     let effective = base;
     for (const assignment of this.assignments) {
       if (assignment.targetId !== targetId) continue;
-      if (target.channelRouting && assignment.channel && assignment.channel !== 'both' && assignment.channel !== channel) continue;
+      if (target.channelRouting && assignment.channel && assignment.channel !== 'both'
+        && assignment.channel !== 'spread' && assignment.channel !== channel) continue;
       const source = this.sources.get(assignment.sourceId);
       if (!source || assignment.amount === 0) continue;
-      const signed = assignment.invert ? -source.value : source.value;
+      const channelSign = target.channelRouting && assignment.channel === 'spread' && channel === 'right' ? -1 : 1;
+      const signed = (assignment.invert ? -source.value : source.value) * channelSign;
       const extent = range.max - range.min;
       const delta = signed * (assignment.amount / 100) * extent / 2;
       if (target.mapping === 'logarithmic') {

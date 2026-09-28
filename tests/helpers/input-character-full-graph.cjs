@@ -21,15 +21,16 @@ import { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } from '$
 import { FilterShape } from '${origin}/filter-shape-core.mjs';
 import { ModulationCore } from '${origin}/modulation-core.mjs';
 import { LfoOscillator, normalizeModulationState } from '${origin}/lfo-core.mjs';
+import { EnvelopeFollower, normalizeEnvelopeSources } from '${origin}/envelope-core.mjs';
 import { ClockCore } from '${origin}/clock-core.mjs';
-const deps = { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeModulationState, ClockCore };
+const deps = { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeModulationState, EnvelopeFollower, normalizeEnvelopeSources, ClockCore };
 function classesFor(rate) {
   const sampleRate = rate;
   class Stub { constructor() { this.port = { onmessage: null, postMessage() {} }; } }
   const AudioWorkletProcessor = Stub;
   const registered = {};
   const registerProcessor = (name, Class) => { registered[name] = Class; };
-  const { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeModulationState, ClockCore } = deps;
+  const { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeModulationState, EnvelopeFollower, normalizeEnvelopeSources, ClockCore } = deps;
   ${bank}
   ${read('output-guard-processor.js')}
   ${read('output-protection-processor.js')}

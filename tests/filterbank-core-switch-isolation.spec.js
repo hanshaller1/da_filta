@@ -15,7 +15,9 @@ const qs = frequencies.map((frequency, index) => {
 
 function loadProcessor(source) {
   const moduleSource = (file, bindings, stripExportList = false) => {
-    let source = fs.readFileSync(path.join(root, file), 'utf8').replace(/^export /gm, '');
+    let source = fs.readFileSync(path.join(root, file), 'utf8')
+      .replace(/^import .*?;\s*$/gm, '')
+      .replace(/^export /gm, '');
     if (stripExportList) source = source.replace(/^export\s+\{[^}]+\};?\s*$/gm, '');
     return `(() => {\n${source}\nObject.assign(globalThis, { ${bindings.join(', ')} });\n})();`;
   };
@@ -25,6 +27,7 @@ function loadProcessor(source) {
     moduleSource('filter-shape-core.mjs', ['FilterShape'], true),
     moduleSource('modulation-core.mjs', ['ModulationCore']),
     moduleSource('lfo-core.mjs', ['LfoOscillator', 'normalizeModulationState']),
+    moduleSource('envelope-core.mjs', ['EnvelopeFollower', 'normalizeEnvelopeSources']),
     moduleSource('clock-core.mjs', ['ClockCore'])
   ].join('\n');
   const processorSource = source

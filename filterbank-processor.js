@@ -3,6 +3,7 @@ import { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } from '.
 import { FilterShape } from './filter-shape-core.mjs';
 import { ModulationCore } from './modulation-core.mjs';
 import { LfoOscillator, normalizeModulationState } from './lfo-core.mjs';
+import { EnvelopeFollower, normalizeEnvelopeSources } from './envelope-core.mjs';
 import { ClockCore } from './clock-core.mjs';
 
 const COMMON_BUS_RESONANCE_EPSILON = 1e-12;
@@ -38,6 +39,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.lfoModuleEnabled = false;
     this.lfoSources = [new LfoOscillator()];
     this.lfo = this.lfoSources[0];
+    this.envelopeSources = [new EnvelopeFollower()];
     this.clockCore = new ClockCore();
     this.dryWet = 50;
     this.effectiveDryWetTarget = 50;
@@ -1546,6 +1548,13 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         ? { value: oscillator.sampleValue, range: oscillator.polarity }
         : { value: 0, range: 'bipolar' });
     }
+    for (let index = 0; index < this.envelopeSources.length; index += 1) {
+      const follower = this.envelopeSources[index];
+      this.modulationCore.setSourceValue(follower.sourceId, {
+        value: follower.enabled ? follower.value : 0,
+        range: 'unipolar'
+      });
+    }
     this.modulationCore.evaluate(this);
     if (this.hasFilterParameterModulation) {
       FilterShape.writeFilterShape(this.filterShapeParams, this.bandFrequencies, this.baseFilterShapeGainsDb);
@@ -1588,6 +1597,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   setModulationState(source = {}) {
     const modulationState = normalizeModulationState(source);
+    const envelopeSources = normalizeEnvelopeSources(source);
     if (source.filterShapeParams && typeof source.filterShapeParams === 'object') {
       Object.assign(this.filterShapeParams, source.filterShapeParams);
       Object.assign(this.effectiveFilterShapeParams, source.filterShapeParams);
@@ -1616,14 +1626,26 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       return oscillator;
     });
     this.lfo = this.lfoSources[0] || new LfoOscillator();
+    this.envelopeSources = envelopeSources.map(sourceState => {
+      const follower = this.envelopeSources.find(item => item.sourceId === sourceState.id) || new EnvelopeFollower();
+      follower.configure(sourceState);
+      follower.updateTimeConstants(sampleRate);
+      return follower;
+    });
     for (const sourceId of [...this.modulationCore.sources.keys()]) {
-      if (/^lfo\.\d+$/.test(sourceId) && Number(sourceId.slice(4)) > this.lfoSources.length) this.modulationCore.removeSource(sourceId);
+      const lfoSource = /^lfo\.(\d+)$/.exec(sourceId);
+      const envelopeSource = /^envelope\.(\d+)$/.exec(sourceId);
+      if ((lfoSource && Number(lfoSource[1]) > this.lfoSources.length)
+        || (envelopeSource && Number(envelopeSource[1]) > this.envelopeSources.length)) this.modulationCore.removeSource(sourceId);
     }
-    this.modulationCore.assignments = this.modulationCore.assignments.filter(item => !/^lfo\.\d+$/.test(item.sourceId));
+    this.modulationCore.assignments = this.modulationCore.assignments.filter(item => !/^(lfo|envelope)\.\d+$/.test(item.sourceId));
     const suppliedAssignments = Array.isArray(source.assignments) ? source.assignments : [];
-    const assignments = suppliedAssignments.length ? suppliedAssignments : modulationState.lfoSources
-      .filter(item => item.targetId)
-      .map(item => ({ sourceId: item.id, targetId: item.targetId, amount: item.amount, channel: item.channel }));
+    const assignments = suppliedAssignments.length ? suppliedAssignments : [
+      ...modulationState.lfoSources.filter(item => item.targetId)
+        .map(item => ({ sourceId: item.id, targetId: item.targetId, amount: item.amount, channel: item.channel })),
+      ...envelopeSources.filter(item => item.targetId)
+        .map(item => ({ sourceId: item.id, targetId: item.targetId, amount: item.amount, channel: item.channel, invert: item.invert }))
+    ];
     for (const assignment of assignments) this.modulationCore.setAssignment(assignment);
     this.hasFilterParameterModulation = this.modulationCore.assignments.some(item => item.targetId.startsWith('filter.'));
     this.hasFilterbankBandModulation = this.modulationCore.assignments.some(item => item.targetId.startsWith('filterbank.band.'));
@@ -2614,6 +2636,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const rightOutput = outputChannels[1];
     const frameCount = Math.max(leftOutput?.length || 0, rightOutput?.length || 0, modulationOutput?.length || 0);
     for (let frame = 0; frame < frameCount; frame += 1) {
+      for (let index = 0; index < this.envelopeSources.length; index += 1) {
+        const follower = this.envelopeSources[index];
+        if (follower.enabled) follower.process(inputChannels[0]?.[frame], inputChannels[1]?.[frame], sampleRate);
+      }
       this.advanceModulationFrame();
       this.effectiveDryWet = this.effectiveDryWetTarget + this.modulationGainSmoothingCoefficient
         * (this.effectiveDryWet - this.effectiveDryWetTarget);
@@ -2677,7 +2703,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
           : this.spectralCoreMix === 0 ? source : source + this.spectralCoreMix * (wet - source);
       }
     }
-    if (this.lfoModuleEnabled && this.lfoSources.some(oscillator => oscillator.enabled) || this.modulationTelemetryDirty) {
+    if ((this.lfoModuleEnabled && this.lfoSources.some(oscillator => oscillator.enabled))
+      || this.envelopeSources.some(follower => follower.enabled) || this.modulationTelemetryDirty) {
       this.modulationTelemetryCounter += frameCount;
       if (this.modulationTelemetryCounter >= this.modulationTelemetryInterval || this.modulationTelemetryDirty) {
         this.modulationTelemetryCounter %= this.modulationTelemetryInterval;
@@ -2686,6 +2713,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
             enabled: this.lfoModuleEnabled && oscillator.enabled, waveform: oscillator.waveform,
             polarity: oscillator.polarity, invert: oscillator.invert, rateHz: oscillator.rateHz,
             rateMode: oscillator.rateMode, phase: oscillator.phase, value: oscillator.sampleValue });
+        }
+        for (const follower of this.envelopeSources) {
+          this.port.postMessage({ type: 'envelope-telemetry', sourceId: follower.sourceId,
+            enabled: follower.enabled, detectorMode: follower.detectorMode, value: follower.value });
         }
         this.modulationTelemetryDirty = false;
       }
