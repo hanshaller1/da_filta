@@ -26,9 +26,15 @@ function loadProcessor(source) {
     moduleSource('dynamic-eq-core.mjs', ['normalizeDynamicEq', 'targetGainDb', 'smoothGain', 'timeCoefficient']),
     moduleSource('filter-shape-core.mjs', ['FilterShape'], true),
     moduleSource('modulation-core.mjs', ['ModulationCore']),
-    moduleSource('lfo-core.mjs', ['LfoOscillator', 'normalizeModulationState']),
+    moduleSource('lfo-core.mjs', ['LfoOscillator', 'normalizeModulationState', 'LFO_MIN_RATE_HZ', 'LFO_MAX_RATE_HZ', 'LFO_SYNC_DIVISIONS']),
     moduleSource('envelope-core.mjs', ['EnvelopeFollower', 'normalizeEnvelopeSources']),
-    moduleSource('clock-core.mjs', ['ClockCore'])
+    moduleSource('clock-core.mjs', ['ClockCore', 'SYNC_DIVISION_BEATS']),
+    moduleSource('clock-mod-core.mjs', [
+      'ClockModCore', 'normalizeClockModState', 'CLOCK_MOD_BAND_COUNT',
+      'CLOCK_MOD_WAVEFORMS', 'CLOCK_MOD_DIRECTIONS', 'CLOCK_MOD_CLOCK_SOURCES',
+      'CLOCK_MOD_MIN_BPM', 'CLOCK_MOD_MAX_BPM',
+      'CLOCK_MOD_DEFAULT_OSCILLATOR_SEED', 'CLOCK_MOD_DEFAULT_DIRECTION_SEED'
+    ])
   ].join('\n');
   const processorSource = source
     .replace(/^import .*?;\s*$/gm, '')

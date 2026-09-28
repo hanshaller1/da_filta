@@ -177,6 +177,7 @@
       this.onDynamicEqTelemetry = typeof initialState?.onDynamicEqTelemetry === 'function' ? initialState.onDynamicEqTelemetry : null;
       this.onLfoTelemetry = typeof initialState?.onLfoTelemetry === 'function' ? initialState.onLfoTelemetry : null;
       this.onEnvelopeTelemetry = typeof initialState?.onEnvelopeTelemetry === 'function' ? initialState.onEnvelopeTelemetry : null;
+      this.onClockModTelemetry = typeof initialState?.onClockModTelemetry === 'function' ? initialState.onClockModTelemetry : null;
       this.dynamicEqState = window.ResonantState.normalizeDynamicEqState(initialState);
       this.modulationState = initialState?.modulationState || null;
       this.preDynamicGainDbLeft = [...(initialState?.preDynamicGainDbLeft || Array(BAND_COUNT).fill(0))];
@@ -243,6 +244,7 @@
         if (event.data?.type === 'dynamic-eq-telemetry') this.onDynamicEqTelemetry?.(event.data);
         if (event.data?.type === 'lfo-telemetry') this.onLfoTelemetry?.(event.data);
         if (event.data?.type === 'envelope-telemetry') this.onEnvelopeTelemetry?.(event.data);
+        if (event.data?.type === 'clock-mod-telemetry') this.onClockModTelemetry?.(event.data);
       };
       this.inputNode.connect(this.workletNode);
       this.workletNode.connect(this.outputNode, 0, 0);
@@ -325,6 +327,12 @@
     sendClockTransport(action) {
       if (this.disposed || !['start', 'continue', 'stop'].includes(action)) return false;
       this.workletNode.port.postMessage({ type: `midi-clock-${action}` });
+      return true;
+    }
+
+    resetClockModProgression() {
+      if (this.disposed) return false;
+      this.workletNode.port.postMessage({ type: 'reset-clockmod-progression' });
       return true;
     }
 

@@ -160,6 +160,25 @@ test('MIDI clock uses 24 PPQN, follows transport, and stop freezes sync phase on
   assert.ok(free.phase > 0.49 && free.phase < 0.51);
 });
 
+test('shared MIDI pulses stay stopped until START or CONTINUE when LFO uses internal clock', () => {
+  const clock = new ClockCore({ source: 'internal', bpm: 120, running: true });
+  assert.equal(clock.midiPulse(), false);
+  assert.equal(clock.midiPulseCount, 0);
+
+  clock.startMidi(true);
+  assert.equal(clock.midiPulse(), true);
+  assert.equal(clock.midiBeatPosition, 1 / 24);
+  clock.stopMidi();
+  const stoppedPosition = clock.midiBeatPosition;
+  assert.equal(clock.midiPulse(), false);
+  assert.equal(clock.midiBeatPosition, stoppedPosition);
+  assert.equal(clock.midiPulseCount, 1);
+
+  clock.continueMidi();
+  assert.equal(clock.midiPulse(), true);
+  assert.equal(clock.midiBeatPosition, 2 / 24);
+});
+
 test('MIDI clock anchors absolute PPQN pulses across beat rollover', () => {
   const clock = new ClockCore({ source: 'midi', midiBpm: 120, running: false });
   clock.start(true);

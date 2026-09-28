@@ -59,18 +59,20 @@
   };
 
   class AudioEngine {
-    constructor({ onStatusChange, onDevicesChanged, onDiagnostics, onDynamicEqTelemetry, onLfoTelemetry, onEnvelopeTelemetry, onOutputProtectionTelemetry, onOutputGuardTelemetry }) {
+    constructor({ onStatusChange, onDevicesChanged, onDiagnostics, onDynamicEqTelemetry, onLfoTelemetry, onEnvelopeTelemetry, onClockModTelemetry, onOutputProtectionTelemetry, onOutputGuardTelemetry }) {
       this.onStatusChange = onStatusChange;
       this.onDevicesChanged = onDevicesChanged;
       this.onDiagnostics = onDiagnostics;
       this.onDynamicEqTelemetry = onDynamicEqTelemetry;
       this.onLfoTelemetry = onLfoTelemetry;
       this.onEnvelopeTelemetry = onEnvelopeTelemetry;
+      this.onClockModTelemetry = onClockModTelemetry;
       this.onOutputProtectionTelemetry = onOutputProtectionTelemetry;
       this.onOutputGuardTelemetry = onOutputGuardTelemetry;
       Object.assign(this, window.ResonantState.normalizeDynamicEqState());
       Object.assign(this, window.ResonantState.normalizeModulationState());
       Object.assign(this, window.ResonantState.normalizeEnvelopeState());
+      this.clockMod = window.ResonantState.normalizeClockModState();
       this.envelopeModuleEnabled = false;
       this.status = 'OFF';
       this.inputGainDb = 0;
@@ -352,8 +354,8 @@
     }
 
     setReferenceLevel(value) { this.referenceLevel = [1, 0.75, 0.5, 0.25, 0].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setReferenceLevel(this.referenceLevel); return this.referenceLevel; }
-    setBandBoostDb(value) { this.maxBandBoostDb = [12, 18, 24].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandBoostDb(this.maxBandBoostDb); this.rebuildFilterModeBandControls(); this.applyEffectiveBandGains(); return this.maxBandBoostDb; }
-    setBandCutDb(value) { this.maxBandCutDb = [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandCutDb(this.maxBandCutDb); this.rebuildFilterModeBandControls(); this.applyEffectiveBandGains(); return this.maxBandCutDb; }
+    setBandBoostDb(value) { this.maxBandBoostDb = [12, 18, 24].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandBoostDb(this.maxBandBoostDb); if (this.clampClockModMidpoint()) this.syncModulationState(); this.rebuildFilterModeBandControls(); this.applyEffectiveBandGains(); return this.maxBandBoostDb; }
+    setBandCutDb(value) { this.maxBandCutDb = [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : 12; this.filterbank?.setBandCutDb(this.maxBandCutDb); if (this.clampClockModMidpoint()) this.syncModulationState(); this.rebuildFilterModeBandControls(); this.applyEffectiveBandGains(); return this.maxBandCutDb; }
     setSpread(value) { this.spread = clampSpread(value, this.spreadMaxOffsetDb); this.syncModulationState(); return this.spread; }
     setPerChannelBands(value) { this.perChannelBands = Boolean(value); this.applyEffectiveBandGains(); this.syncModulationState(); return this.perChannelBands; }
     setSpreadMode(value) { this.spreadMode = value === 'FB_CH_SELECT' ? 'FB_CH_SELECT' : 'CLASSIC'; this.applyEffectiveBandGains(); this.syncModulationState(); return this.spreadMode; }
@@ -448,6 +450,7 @@
       return {
         ...lfo,
         ...envelope,
+        clockMod: window.ResonantState.normalizeClockModState(this.clockMod || {}),
         envelopeModuleEnabled: this.envelopeModuleEnabled === true,
         filterEnabled: this.filterEnabled,
         filterbankEnabled: this.filterbankEnabled,
@@ -471,15 +474,36 @@
     }
 
     setModulationState(source = {}) {
+      const wasClockModEnabled = this.clockMod?.enabled === true;
       Object.assign(this, window.ResonantState.normalizeModulationState(source));
       Object.assign(this, window.ResonantState.normalizeEnvelopeState(source));
+      this.clockMod = window.ResonantState.normalizeClockModState(source.clockMod ?? this.clockMod ?? {});
+      this.clampClockModMidpoint();
       this.envelopeModuleEnabled = source.envelopeModuleEnabled === true;
       if (source.clock) this.setLfoClockState(source.clock);
       else if (source.lfoClock && Object.keys(source.lfoClock).some(key => source.lfoClock[key] !== this.lfoClock?.[key])) {
         this.setLfoClockState(source.lfoClock);
       }
       this.syncModulationState();
+      if (wasClockModEnabled !== this.clockMod.enabled) this.applySpectralCoreRequired();
       return this.getModulationState();
+    }
+
+    setClockModState(source = {}) {
+      const previousEnabled = this.clockMod?.enabled === true;
+      this.clockMod = window.ResonantState.normalizeClockModState(source);
+      this.clampClockModMidpoint();
+      this.syncModulationState();
+      if (previousEnabled !== this.clockMod.enabled) this.applySpectralCoreRequired();
+      return { ...this.clockMod, lockedBands: [...this.clockMod.lockedBands] };
+    }
+
+    clampClockModMidpoint() {
+      if (!this.clockMod) return false;
+      const midpointDb = Math.min(this.maxBandBoostDb, Math.max(-this.maxBandCutDb, this.clockMod.midpointDb));
+      if (midpointDb === this.clockMod.midpointDb) return false;
+      this.clockMod = { ...this.clockMod, midpointDb };
+      return true;
     }
 
     resetLfoPhase(sourceId) {
@@ -500,6 +524,10 @@
 
     sendLfoClockMessage(action) {
       this.filterbank?.sendClockTransport?.(action);
+    }
+
+    resetClockModProgression() {
+      return this.filterbank?.resetClockModProgression?.() === true;
     }
 
     syncModulationState() {
@@ -533,7 +561,7 @@
     }
 
     get spectralCoreRequired() {
-      return this.filterbankEnabled || this.filterEnabled || this.dynamicEqEnabled;
+      return this.filterbankEnabled || this.filterEnabled || this.dynamicEqEnabled || this.clockMod?.enabled === true;
     }
 
     applySpectralCoreRequired() {
@@ -679,6 +707,7 @@
         , onDynamicEqTelemetry: packet => this.receiveDynamicEqTelemetry(packet)
         , onLfoTelemetry: packet => this.onLfoTelemetry?.(packet)
         , onEnvelopeTelemetry: packet => this.onEnvelopeTelemetry?.(packet)
+        , onClockModTelemetry: packet => this.onClockModTelemetry?.(packet)
         , ...window.ResonantState.normalizeDynamicEqState(this)
       };
     }
@@ -694,6 +723,7 @@
         spreadCurve: this.spreadCurve,
         spreadMaxOffsetDb: this.spreadMaxOffsetDb,
         lfoClock: { ...this.lfoClock },
+        clockMod: window.ResonantState.normalizeClockModState(this.clockMod || {}),
         filterbankEnabled: this.filterbankEnabled,
         filterEnabled: this.filterEnabled,
         ...window.ResonantState.normalizeDynamicEqState(this),

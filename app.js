@@ -22,6 +22,7 @@ let audioEngine = null;
 let dynamicEqTelemetry = null;
 const lfoTelemetry = new Map();
 const envelopeTelemetry = new Map();
+let clockModTelemetry = null;
 const envelopeGraphValues = new Map();
 const envelopeRawGraphValues = new Map();
 let selectedEnvelopeIndex = 0;
@@ -1598,6 +1599,7 @@ const filterPowerButton = document.querySelector('[data-module-power="filter"]')
 const lfoPowerButton = document.querySelector('[data-module-power="lfo"]');
 const envelopePowerButton = document.querySelector('[data-module-power="envelope-follower"]');
 const dynamicEqPowerButton = document.querySelector('[data-module-power="dynamic-eq"]');
+const clockModPowerButton = document.querySelector('[data-module-power="clock-mod"]');
 const lfoWaveformButtons = [...document.querySelectorAll('[data-lfo-waveform]')];
 const lfoPolarityButtons = [...document.querySelectorAll('[data-lfo-polarity]')];
 const lfoTargetSelect = document.querySelector('[data-lfo-target]');
@@ -1623,6 +1625,33 @@ const lfoInvertButton = document.querySelector('[data-lfo-invert]');
 const lfoBpmControl = document.querySelector('[data-lfo-bpm-control]');
 const lfoDivisionControl = document.querySelector('[data-lfo-division-control]');
 const lfoMidiStatus = document.querySelector('[data-lfo-midi-status]');
+const clockModWaveformButtons = [...document.querySelectorAll('[data-clock-mod-waveform]')];
+const clockModDirectionButtons = [...document.querySelectorAll('[data-clock-mod-direction]')];
+const clockModSourceButtons = [...document.querySelectorAll('[data-clock-mod-source]')];
+const clockModFrequencyInput = document.querySelector('[data-clock-mod-frequency]');
+const clockModFrequencyOutput = document.querySelector('[data-clock-mod-frequency-output]');
+const clockModGainInput = document.querySelector('[data-clock-mod-gain]');
+const clockModGainOutput = document.querySelector('[data-clock-mod-gain-output]');
+const clockModMidpointInput = document.querySelector('[data-clock-mod-midpoint]');
+const clockModMidpointOutput = document.querySelector('[data-clock-mod-midpoint-output]');
+const clockModBpmInput = document.querySelector('[data-clock-mod-bpm]');
+const clockModBpmControl = document.querySelector('[data-clock-mod-bpm-control]');
+const clockModMidiTempo = document.querySelector('[data-clock-mod-midi-tempo]');
+const clockModMidiBpm = document.querySelector('[data-clock-mod-midi-bpm]');
+const clockModScaleInput = document.querySelector('[data-clock-mod-scale]');
+const clockModScaleControl = document.querySelector('[data-clock-mod-scale-control]');
+const clockModRightInvertButton = document.querySelector('[data-clock-mod-right-invert]');
+const clockModResetButton = document.querySelector('[data-clock-mod-reset]');
+const clockModStatus = document.querySelector('[data-clock-mod-status]');
+const clockModGrid = document.querySelector('[data-clock-mod-grid]');
+const clockModCurrentBand = document.querySelector('[data-clock-mod-current-band]');
+const clockModLeftPath = document.querySelector('[data-clock-mod-left-path]');
+const clockModRightPath = document.querySelector('[data-clock-mod-right-path]');
+const clockModPoints = document.querySelector('[data-clock-mod-points]');
+const clockModFrequencies = document.querySelector('[data-clock-mod-frequencies]');
+const clockModLocks = document.querySelector('[data-clock-mod-locks]');
+const clockModAxisBoost = document.querySelector('[data-clock-mod-axis-boost]');
+const clockModAxisCut = document.querySelector('[data-clock-mod-axis-cut]');
 const envelopeEnableButton = document.querySelector('[data-envelope-enable]');
 const envelopeSlotButtons = [...document.querySelectorAll('[data-envelope-slot]')];
 const envelopeModeButtons = [...document.querySelectorAll('[data-envelope-mode]')];
@@ -1744,6 +1773,7 @@ const getMidiStatusText = () => {
     ? `LOCKED · ${midiDisplayBpm.toFixed(1)} BPM`
     : midiClockStatus;
 };
+const usesMidiClockSource = () => state.lfoClock?.source === 'midi' || state.clockMod?.clockSource === 'midi';
 const setClockState = (patch, sendMessage = null) => {
   state.lfoClock = normalizeClockState({ ...state.lfoClock, ...patch });
   audioEngine?.setLfoClockState(state.lfoClock);
@@ -1768,7 +1798,10 @@ const resetMidiClockTracking = (status = 'NO CLOCK') => {
   midiClockStatus = status;
   midiTransportRunning = false;
   midiTransportStatus = midiConfig.transport === 'auto' ? 'STOPPED' : '—';
-  if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiBpm: 120, midiStatus: status === 'NO CLOCK' ? 'NO CLOCK' : status }, 'stop');
+  if (usesMidiClockSource()) {
+    if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiBpm: 120, midiStatus: status === 'NO CLOCK' ? 'NO CLOCK' : status }, 'stop');
+    else audioEngine?.sendLfoClockMessage?.('stop');
+  }
   renderMidiSetup();
 };
 let lastMidiSelection = '';
@@ -1821,6 +1854,7 @@ const renderMidiSetup = () => {
     midiButton.title = `MIDI Setup · ${midiClockStatus}`;
   }
   if (lfoMidiStatus) lfoMidiStatus.textContent = getMidiStatusText();
+  if (state.selectedWorkspaceMode === 'clock-mod') renderClockModControls();
 };
 const receiveMidiClockMessage = event => {
   if (!midiRuntimeEnabled || !midiConfig.receive || !midiManager?.selectedId) return;
@@ -1834,7 +1868,10 @@ const receiveMidiClockMessage = event => {
     midiTransportStatus = 'RUNNING';
     resetMidiTempoTracking();
     midiClockStatus = 'NO CLOCK';
-    if (state.lfoClock?.source === 'midi') setClockState({ running: true, midiStatus: 'NO CLOCK' }, 'start');
+    if (usesMidiClockSource()) {
+      if (state.lfoClock?.source === 'midi') setClockState({ running: true, midiStatus: 'NO CLOCK' }, 'start');
+      else audioEngine?.sendLfoClockMessage?.('start');
+    }
     renderMidiSetup();
     return;
   }
@@ -1845,7 +1882,10 @@ const receiveMidiClockMessage = event => {
     midiTransportStatus = 'RUNNING';
     midiLastClockTimestamp = null;
     midiClockStatus = 'NO CLOCK';
-    if (state.lfoClock?.source === 'midi') setClockState({ running: true, midiStatus: 'NO CLOCK' }, 'continue');
+    if (usesMidiClockSource()) {
+      if (state.lfoClock?.source === 'midi') setClockState({ running: true, midiStatus: 'NO CLOCK' }, 'continue');
+      else audioEngine?.sendLfoClockMessage?.('continue');
+    }
     renderMidiSetup();
     return;
   }
@@ -1856,10 +1896,16 @@ const receiveMidiClockMessage = event => {
     midiTransportStatus = 'STOPPED';
     if (midiConfig.transport === 'follow') {
       midiClockStatus = midiLastClockTimestamp === null ? 'NO CLOCK' : 'STOPPED';
-      if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiStatus: 'STOPPED' }, 'stop');
+      if (usesMidiClockSource()) {
+        if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiStatus: 'STOPPED' }, 'stop');
+        else audioEngine?.sendLfoClockMessage?.('stop');
+      }
     } else {
       midiClockStatus = 'STOPPED';
-      if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiStatus: 'STOPPED' }, 'stop');
+      if (usesMidiClockSource()) {
+        if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiStatus: 'STOPPED' }, 'stop');
+        else audioEngine?.sendLfoClockMessage?.('stop');
+      }
     }
     renderMidiSetup();
     return;
@@ -1894,15 +1940,18 @@ const receiveMidiClockMessage = event => {
   midiClockStatusTimer = setTimeout(() => {
     midiClockStatus = midiConfig.transport === 'follow' && !midiTransportRunning ? 'STOPPED' : 'NO CLOCK';
     if (midiConfig.transport === 'auto') { midiTransportRunning = false; midiTransportStatus = 'STOPPED'; }
-    if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiStatus: midiClockStatus }, 'stop');
+    if (usesMidiClockSource()) {
+      if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiStatus: midiClockStatus }, 'stop');
+      else audioEngine?.sendLfoClockMessage?.('stop');
+    }
     renderMidiSetup();
   }, 750);
   midiClockStatus = midiConfig.transport === 'follow' && !midiTransportRunning ? 'STOPPED' : (midiClockLocked ? 'LOCKED' : 'NO CLOCK');
   if (state.lfoClock?.source === 'midi') {
     const running = midiTransportRunning;
     setClockState({ midiBpm: midiClockBpm, running, midiStatus: midiClockStatus }, null);
-    if (running) audioEngine?.sendMidiClockPulse?.(midiClockBpm);
   }
+  if (usesMidiClockSource() && midiTransportRunning) audioEngine?.sendMidiClockPulse?.(midiClockBpm);
   renderMidiSetup();
 };
 const disableMidiClock = () => {
@@ -1915,8 +1964,10 @@ const disableMidiClock = () => {
   midiTransportRunning = false;
   midiClockStatus = 'DISABLED';
   midiTransportStatus = '—';
-  if (state.lfoClock?.source === 'midi') {
-    setClockState({ running: false, midiAvailable: midiAccessStatus === 'CONNECTED', midiBpm: 120, midiStatus: 'DISABLED' }, 'stop');
+  if (usesMidiClockSource()) {
+    if (state.lfoClock?.source === 'midi') {
+      setClockState({ running: false, midiAvailable: midiAccessStatus === 'CONNECTED', midiBpm: 120, midiStatus: 'DISABLED' }, 'stop');
+    } else audioEngine?.sendLfoClockMessage?.('stop');
   }
   renderMidiSetup();
 };
@@ -1937,6 +1988,7 @@ const enableMidiClock = async () => {
     resetMidiTempoTracking();
     midiClockStatus = !midiConfig.receive ? 'DISABLED' : midiManager.selectedId ? 'NO CLOCK' : 'NO INPUT';
     if (state.lfoClock?.source === 'midi') setClockState({ midiAvailable: true, running: false, midiStatus: midiClockStatus });
+    else if (state.clockMod?.clockSource === 'midi') audioEngine?.sendLfoClockMessage?.('stop');
     renderMidiSetup();
     return true;
   } catch (error) {
@@ -1948,6 +2000,174 @@ const enableMidiClock = async () => {
     return false;
   }
 };
+const clockModFrequencyX = frequency => {
+  const minimum = BAND_DEFINITIONS[0].frequency;
+  const maximum = BAND_DEFINITIONS[BAND_DEFINITIONS.length - 1].frequency;
+  return 20 + Math.log(frequency / minimum) / Math.log(maximum / minimum) * 960;
+};
+const getClockModBandLimits = () => ({
+  boost: Number.isFinite(audioEngine?.maxBandBoostDb) ? audioEngine.maxBandBoostDb : 12,
+  cut: Number.isFinite(audioEngine?.maxBandCutDb) ? audioEngine.maxBandCutDb : 12
+});
+const commitClockModState = patch => {
+  state.clockMod = window.ResonantState.normalizeClockModState({ ...state.clockMod, ...patch });
+  if (audioEngine?.setClockModState) state.clockMod = audioEngine.setClockModState(state.clockMod);
+  renderClockModControls();
+  return state.clockMod;
+};
+const setClockModEnabled = enabled => commitClockModState({ enabled: enabled === true });
+const renderClockModLocks = () => {
+  if (!clockModLocks) return;
+  if (!clockModLocks.children.length) {
+    clockModLocks.replaceChildren(...BAND_DEFINITIONS.map((band, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.clockModLock = String(index);
+      button.setAttribute('aria-label', `Lock Clock Mod band ${index + 1} (${band.label})`);
+      button.addEventListener('click', () => {
+        const lockedBands = [...state.clockMod.lockedBands];
+        lockedBands[index] = !lockedBands[index];
+        commitClockModState({ lockedBands });
+      });
+      return button;
+    }));
+    clockModFrequencies?.replaceChildren(...BAND_DEFINITIONS.map(band => {
+      const label = document.createElement('span');
+      label.textContent = band.label.replace(' Hz', '').replace(' kHz', 'k');
+      label.style.left = `${clockModFrequencyX(band.frequency) / 10}%`;
+      return label;
+    }));
+    const boundaries = [0];
+    for (let index = 0; index < BAND_DEFINITIONS.length - 1; index += 1) {
+      boundaries.push((clockModFrequencyX(BAND_DEFINITIONS[index].frequency)
+        + clockModFrequencyX(BAND_DEFINITIONS[index + 1].frequency)) / 2);
+    }
+    boundaries.push(1000);
+    clockModLocks.style.gridTemplateColumns = Array.from({ length: BAND_COUNT }, (_, index) =>
+      `${boundaries[index + 1] - boundaries[index]}fr`).join(' ');
+  }
+  [...clockModLocks.querySelectorAll('[data-clock-mod-lock]')].forEach((button, index) => {
+    const locked = state.clockMod.lockedBands[index] === true;
+    button.textContent = `${index + 1} ${locked ? 'LOCK' : '—'}`;
+    button.setAttribute('aria-pressed', String(locked));
+    button.classList.toggle('is-locked', locked);
+  });
+};
+const renderClockModGraph = () => {
+  if (!clockModGrid || !clockModLeftPath || !clockModRightPath || !clockModPoints) return;
+  const { boost, cut } = getClockModBandLimits();
+  const maximum = Math.max(.1, boost);
+  const minimum = -Math.max(.1, cut);
+  const yFor = value => 12 + (maximum - Math.min(maximum, Math.max(minimum, value))) / (maximum - minimum) * 206;
+  if (clockModAxisBoost) clockModAxisBoost.textContent = `+${maximum} dB`;
+  if (clockModAxisCut) clockModAxisCut.textContent = `${minimum} dB`;
+  const gridValues = [maximum, maximum / 2, 0, minimum / 2, minimum];
+  const svgNs = 'http://www.w3.org/2000/svg';
+  clockModGrid.replaceChildren(...gridValues.map(value => {
+    const line = document.createElementNS(svgNs, 'line');
+    const y = yFor(value);
+    line.setAttribute('x1', '0'); line.setAttribute('x2', '1000');
+    line.setAttribute('y1', y.toFixed(2)); line.setAttribute('y2', y.toFixed(2));
+    line.setAttribute('class', `clock-mod-grid-line${value === 0 ? ' is-zero' : ''}`);
+    return line;
+  }));
+  const telemetry = clockModTelemetry;
+  const heldLeft = Array.isArray(telemetry?.heldLeft) ? telemetry.heldLeft : [];
+  const heldRight = Array.isArray(telemetry?.heldRight) ? telemetry.heldRight : [];
+  const lockedBands = state.clockMod.lockedBands;
+  const leftValues = Array.from({ length: BAND_COUNT }, (_, index) => Number.isFinite(heldLeft[index])
+    ? lockedBands[index] ? state.clockMod.midpointDb : heldLeft[index] : state.clockMod.midpointDb);
+  const rightValues = Array.from({ length: BAND_COUNT }, (_, index) => Number.isFinite(heldRight[index])
+    ? lockedBands[index] ? state.clockMod.midpointDb : heldRight[index] : state.clockMod.midpointDb);
+  const xValues = BAND_DEFINITIONS.map(band => clockModFrequencyX(band.frequency));
+  clockModLeftPath.setAttribute('d', leftValues.map((value, index) =>
+    `${index ? 'L' : 'M'}${xValues[index].toFixed(2)} ${yFor(value).toFixed(2)}`).join(' '));
+  clockModRightPath.setAttribute('d', rightValues.map((value, index) =>
+    `${index ? 'L' : 'M'}${xValues[index].toFixed(2)} ${yFor(value).toFixed(2)}`).join(' '));
+  const highlightedBand = Number.isInteger(telemetry?.currentBand) ? telemetry.currentBand : 0;
+  const bandLeft = highlightedBand === 0 ? 0 : (xValues[highlightedBand - 1] + xValues[highlightedBand]) / 2;
+  const bandRight = highlightedBand === BAND_COUNT - 1 ? 1000 : (xValues[highlightedBand] + xValues[highlightedBand + 1]) / 2;
+  if (clockModCurrentBand) {
+    clockModCurrentBand.setAttribute('x', bandLeft.toFixed(2));
+    clockModCurrentBand.setAttribute('width', (bandRight - bandLeft).toFixed(2));
+    clockModCurrentBand.setAttribute('visibility', state.clockMod.enabled ? 'visible' : 'hidden');
+  }
+  const points = [];
+  for (let index = 0; index < BAND_COUNT; index += 1) {
+    for (const channel of ['left', 'right']) {
+      const value = channel === 'left' ? leftValues[index] : rightValues[index];
+      const y = yFor(value);
+      const circle = document.createElementNS(svgNs, 'circle');
+      circle.setAttribute('cx', xValues[index].toFixed(2)); circle.setAttribute('cy', y.toFixed(2));
+      circle.setAttribute('r', channel === 'left' ? '5' : '3.5');
+      circle.setAttribute('class', `clock-mod-point-${channel}`);
+      const title = document.createElementNS(svgNs, 'title');
+      title.textContent = `Band ${index + 1} · ${channel.toUpperCase()} ${value >= 0 ? '+' : ''}${value.toFixed(1)} dB${lockedBands[index] ? ' · LOCKED' : ''}`;
+      circle.append(title); points.push(circle);
+      const label = document.createElementNS(svgNs, 'text');
+      label.setAttribute('x', xValues[index].toFixed(2));
+      label.setAttribute('y', Math.min(222, Math.max(13, y + (channel === 'left' ? -8 : 14))).toFixed(2));
+      label.setAttribute('class', 'clock-mod-point-label');
+      label.textContent = `${channel === 'left' ? 'L' : 'R'} ${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
+      points.push(label);
+    }
+  }
+  clockModPoints.replaceChildren(...points);
+  renderClockModLocks();
+};
+const renderClockModControls = () => {
+  if (!clockModStatus) return;
+  const config = state.clockMod;
+  const telemetry = clockModTelemetry;
+  const current = Number.isInteger(telemetry?.currentBand) ? telemetry.currentBand : 0;
+  const last = Number.isInteger(telemetry?.lastTriggeredBand) ? telemetry.lastTriggeredBand : -1;
+  clockModStatus.textContent = `${config.enabled ? 'MODULE ON' : 'MODULE OFF'} · ${last >= 0 ? `LAST ${last + 1} · ` : ''}NEXT ${current + 1}`;
+  clockModStatus.classList.toggle('clock-mod-status-current', config.enabled);
+  if (clockModPowerButton) {
+    clockModPowerButton.setAttribute('aria-pressed', String(config.enabled));
+    clockModPowerButton.setAttribute('aria-label', `CLOCK MOD ${config.enabled ? 'ausschalten' : 'einschalten'}`);
+  }
+  clockModWaveformButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.clockModWaveform === config.waveform)));
+  clockModDirectionButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.clockModDirection === config.direction)));
+  clockModSourceButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.clockModSource === config.clockSource)));
+  if (clockModFrequencyInput) clockModFrequencyInput.value = String(rateToSlider(config.sourceFrequencyHz));
+  if (clockModFrequencyOutput) clockModFrequencyOutput.textContent = `${config.sourceFrequencyHz < 1 ? config.sourceFrequencyHz.toFixed(2) : config.sourceFrequencyHz.toFixed(2)} Hz`;
+  if (clockModGainInput) clockModGainInput.value = String(config.modulationGain);
+  if (clockModGainOutput) clockModGainOutput.textContent = `${config.modulationGain} %`;
+  const limits = getClockModBandLimits();
+  if (clockModMidpointInput) {
+    clockModMidpointInput.min = String(-limits.cut); clockModMidpointInput.max = String(limits.boost);
+    clockModMidpointInput.value = String(Math.min(limits.boost, Math.max(-limits.cut, config.midpointDb)));
+  }
+  if (clockModMidpointOutput) clockModMidpointOutput.textContent = `${config.midpointDb >= 0 ? '+' : ''}${config.midpointDb.toFixed(1)} dB`;
+  if (clockModBpmInput) { clockModBpmInput.value = String(config.internalBpm); clockModBpmInput.disabled = config.clockSource !== 'internal'; }
+  clockModBpmControl?.classList.toggle('is-inactive', config.clockSource !== 'internal');
+  if (clockModMidiTempo) clockModMidiTempo.classList.toggle('is-inactive', config.clockSource !== 'midi');
+  if (clockModScaleInput) { clockModScaleInput.value = config.clockScale; clockModScaleInput.disabled = config.clockSource !== 'midi'; }
+  clockModScaleControl?.classList.toggle('is-inactive', config.clockSource !== 'midi');
+  const bpm = Number.isFinite(midiDisplayBpm) ? midiDisplayBpm : Number.isFinite(telemetry?.midiBpm) ? telemetry.midiBpm : null;
+  if (clockModMidiBpm) clockModMidiBpm.textContent = config.clockSource !== 'midi' || bpm === null ? '—' : `${bpm.toFixed(1)} BPM`;
+  if (clockModRightInvertButton) {
+    clockModRightInvertButton.textContent = `RIGHT INVERT ${config.rightInvert ? 'ON' : 'OFF'}`;
+    clockModRightInvertButton.setAttribute('aria-pressed', String(config.rightInvert));
+  }
+  renderClockModLocks();
+  renderClockModGraph();
+};
+clockModWaveformButtons.forEach(button => button.addEventListener('click', () => commitClockModState({ waveform: button.dataset.clockModWaveform })));
+clockModDirectionButtons.forEach(button => button.addEventListener('click', () => commitClockModState({ direction: button.dataset.clockModDirection })));
+clockModSourceButtons.forEach(button => button.addEventListener('click', () => commitClockModState({ clockSource: button.dataset.clockModSource })));
+clockModFrequencyInput?.addEventListener('input', () => commitClockModState({ sourceFrequencyHz: sliderToRate(clockModFrequencyInput.value) }));
+clockModGainInput?.addEventListener('input', () => commitClockModState({ modulationGain: Number(clockModGainInput.value) }));
+clockModMidpointInput?.addEventListener('input', () => commitClockModState({ midpointDb: Number(clockModMidpointInput.value) }));
+clockModBpmInput?.addEventListener('change', () => commitClockModState({ internalBpm: Number(clockModBpmInput.value) }));
+clockModScaleInput?.addEventListener('change', () => commitClockModState({ clockScale: clockModScaleInput.value }));
+clockModRightInvertButton?.addEventListener('click', () => commitClockModState({ rightInvert: !state.clockMod.rightInvert }));
+clockModResetButton?.addEventListener('click', () => {
+  audioEngine?.resetClockModProgression?.();
+  clockModTelemetry = { ...(clockModTelemetry || {}), currentBand: 0, lastTriggeredBand: -1 };
+  renderClockModControls();
+});
 const getDisplayedLfoPhase = () => {
   const source = getSelectedLfo();
   const telemetry = getSourceLfoTelemetry(source);
@@ -3093,6 +3313,12 @@ window.EnvelopeMode = Object.freeze({
   getTelemetry: () => { const source = getEnvelopeSource(); const telemetry = source ? envelopeTelemetry.get(source.id) : null; return telemetry ? { ...telemetry } : null; },
   getTargetRegistry: () => MODULATION_TARGETS.map(target => ({ id: target.id, label: target.label, group: target.group, channelRouting: target.channelRouting }))
 });
+window.ClockModMode = Object.freeze({
+  getState: () => ({ ...state.clockMod, lockedBands: [...state.clockMod.lockedBands] }),
+  getTelemetry: () => clockModTelemetry ? { ...clockModTelemetry,
+    heldLeft: [...(clockModTelemetry.heldLeft || [])], heldRight: [...(clockModTelemetry.heldRight || [])] } : null,
+  getAudioEngine: () => audioEngine
+});
 const renderFilterPower = () => {
   if (filterbankPowerButton) {
     filterbankPowerButton.setAttribute('aria-pressed', String(state.filterbankEnabled));
@@ -3118,6 +3344,11 @@ const setFilterEnabled = enabled => {
   renderLfoControls();
   return state.filterEnabled;
 };
+clockModPowerButton?.addEventListener('click', event => {
+  event.preventDefault();
+  event.stopPropagation();
+  setClockModEnabled(!state.clockMod.enabled);
+});
 renderFilterPower();
 filterbankPowerButton?.addEventListener('click', event => {
   event.preventDefault();
@@ -3146,6 +3377,7 @@ const selectMode = mode => {
   if (mode === 'filter') renderFilterMode();
   if (mode === 'lfo') { renderLfoControls(); startLfoDisplay(); }
   else stopLfoDisplay();
+  if (mode === 'clock-mod') renderClockModControls();
   if (mode === 'envelope-follower') renderEnvelopeControls();
 };
 modeTabs.forEach((tab, index) => {
@@ -3844,10 +4076,15 @@ audioEngine = new AudioEngine({
     }
     if (state.selectedWorkspaceMode === 'envelope-follower' && packet.sourceId === getEnvelopeSource()?.id) renderEnvelopeGraph();
   },
+  onClockModTelemetry: packet => {
+    clockModTelemetry = packet;
+    if (state.selectedWorkspaceMode === 'clock-mod') renderClockModControls();
+  },
   onOutputProtectionTelemetry: packet => devLabTelemetry.receiveOutputProtection(packet),
   onOutputGuardTelemetry: packet => devLabTelemetry.receiveOutputGuard(packet)
 });
 audioEngine.applyState(state);
+renderClockModControls();
 updateResonatorDiagnostics();
 const setAudioBypass = enabled => {
   audioBypassEnabled = Boolean(enabled);
@@ -4081,6 +4318,7 @@ const syncUiFromAudioState = snapshot => {
   Object.assign(state, window.ResonantState.normalizeDynamicEqState(snapshot));
   Object.assign(state, window.ResonantState.normalizeModulationState(snapshot));
   Object.assign(state, window.ResonantState.normalizeEnvelopeState(snapshot));
+  state.clockMod = window.ResonantState.normalizeClockModState(snapshot.clockMod ?? state.clockMod ?? {});
   state.envelopeModuleEnabled = snapshot.envelopeModuleEnabled === true;
   if (snapshot.lfoClock) state.lfoClock = normalizeClockState(snapshot.lfoClock);
   selectedLfoIndex = Math.min(selectedLfoIndex, Math.max(0, state.lfoSources.length - 1));
@@ -4177,11 +4415,13 @@ const syncUiFromAudioState = snapshot => {
   renderFilterMode();
   renderLfoControls();
   renderEnvelopeControls();
+  renderClockModControls();
 };
 // This is the complete, explicit DEV/LAB snapshot contract. Normal app state
 // is intentionally absent: DEV/LAB snapshots are experimental configurations,
 // not production presets.
 const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
+  ['clockMod', value => { state.clockMod = window.ResonantState.normalizeClockModState(value); audioEngine.setClockModState(state.clockMod); renderClockModControls(); }],
   ['envelopeModuleEnabled', value => { state.envelopeModuleEnabled = value === true; audioEngine.setModulationState(state); renderEnvelopeControls(); }],
   ['envelopeSources', value => {
     Object.assign(state, window.ResonantState.normalizeEnvelopeState({ envelopeSources: value }));

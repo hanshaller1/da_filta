@@ -30,37 +30,66 @@ export class ClockCore {
   constructor(source = {}) {
     this.state = normalizeClockState(source);
     this.beatPosition = 0;
+    // MIDI phase is tracked alongside the selected LFO clock so another mode
+    // can follow MIDI without changing the LFO's independent clock selection.
+    this.midiBeatPosition = 0;
+    this.midiTransportRunning = this.state.source === 'midi' && this.state.running;
     this.midiPulseCount = 0;
+    this.clockModTickPhase = 0;
     this.sampleRate = 48000;
   }
 
   configure(source = {}) {
     this.state = normalizeClockState({ ...this.state, ...source });
+    if (this.state.source === 'midi') this.midiTransportRunning = this.state.running;
     return { ...this.state };
   }
 
   start(reset = true) {
     if (reset) {
       this.beatPosition = 0;
+      this.midiBeatPosition = 0;
       this.midiPulseCount = 0;
     }
     this.state.running = true;
+    this.midiTransportRunning = true;
   }
 
-  stop() { this.state.running = false; }
+  startMidi(reset = true) {
+    if (reset) {
+      this.midiBeatPosition = 0;
+      this.midiPulseCount = 0;
+      if (this.state.source === 'midi') this.beatPosition = 0;
+    }
+    this.midiTransportRunning = true;
+    if (this.state.source === 'midi') this.state.running = true;
+  }
 
-  continue() { this.state.running = true; }
+  stop() { this.state.running = false; this.midiTransportRunning = false; }
+
+  stopMidi() {
+    this.midiTransportRunning = false;
+    if (this.state.source === 'midi') this.state.running = false;
+  }
+
+  continue() { this.state.running = true; this.midiTransportRunning = true; }
+
+  continueMidi() {
+    this.midiTransportRunning = true;
+    if (this.state.source === 'midi') this.state.running = true;
+  }
 
   setMidiTempo(bpm) {
     this.state.midiBpm = clamp(bpm, CLOCK_MIN_BPM, CLOCK_MAX_BPM, this.state.midiBpm);
   }
 
   midiPulse() {
-    if (!this.state.running || this.state.source !== 'midi') return false;
+    if (!this.midiTransportRunning || (this.state.source === 'midi' && !this.state.running)) return false;
     this.midiPulseCount += 1;
     // Pulses are absolute quarter-note subdivisions since MIDI Start. Modulo
     // 24 loses the beat rollover and can re-anchor 0.99 back to 0.0 on pulse 24.
-    this.beatPosition = this.midiPulseCount / 24;
+    this.midiBeatPosition = this.midiPulseCount / 24;
+    if (this.state.source === 'midi') this.beatPosition = this.midiBeatPosition;
     return true;
   }
 
@@ -71,8 +100,27 @@ export class ClockCore {
       const bpm = this.state.source === 'midi' ? this.state.midiBpm : this.state.bpm;
       this.beatPosition += bpm / 60 / safeRate;
     }
+    if (this.midiTransportRunning) {
+      this.midiBeatPosition += this.state.midiBpm / 60 / safeRate;
+      if (this.state.source === 'midi' && this.state.running) this.beatPosition = this.midiBeatPosition;
+    }
     return this.beatPosition;
   }
+
+  // Clock Mod has its own BPM setting, but shares this audio-sample clock
+  // engine. The high-rate phase is isolated from the LFO's 30-300 BPM range.
+  advanceClockModSteps(bpm, sampleRate = this.sampleRate) {
+    const safeRate = Number.isFinite(sampleRate) && sampleRate > 0 ? sampleRate : 48000;
+    const numericBpm = Number(bpm);
+    const safeBpm = Number.isFinite(numericBpm) ? Math.min(10000, Math.max(1, numericBpm)) : 120;
+    this.clockModTickPhase += safeBpm / 60 / safeRate;
+    const due = Math.floor(this.clockModTickPhase + 1e-10);
+    if (due < 1) return 0;
+    this.clockModTickPhase = Math.max(0, this.clockModTickPhase - due);
+    return Math.min(3, due);
+  }
+
+  resetClockModPhase() { this.clockModTickPhase = 0; }
 
   phaseFor(division = '1/4', resetBeat = 0, phaseOffset = 0) {
     const beatsPerCycle = SYNC_DIVISION_BEATS[division] || 1;

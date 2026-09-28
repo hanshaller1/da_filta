@@ -366,7 +366,7 @@
               <button class="mode-select" type="button" role="tab" id="mode-tab-filter" aria-selected="false" aria-controls="mode-filter" data-mode="filter"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 14c3.2 0 3.2-8 6.4-8s3.2 8 6.4 8c1.3 0 2.2-1.2 3.2-3"/></svg><span>FILTER</span></button>
             </div>
             <div class="mode-tab-row">
-              <button class="mode-power" type="button" disabled aria-disabled="true" aria-label="CLOCK MOD Power nicht verfügbar" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
+              <button class="mode-power" type="button" data-module-power="clock-mod" aria-label="CLOCK MOD einschalten" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
               <button class="mode-select" type="button" role="tab" id="mode-tab-clock-mod" aria-selected="false" aria-controls="mode-clock-mod" data-mode="clock-mod"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg><span>CLOCK MOD</span></button>
             </div>
             <div class="mode-tab-row">
@@ -529,7 +529,45 @@
                 </div>
               </section>
             </section>
-            <section class="mode-placeholder" id="mode-clock-mod" role="tabpanel" aria-labelledby="mode-tab-clock-mod" data-mode-panel="clock-mod" hidden><strong>CLOCK MOD</strong><span>Clock modulation – coming later</span></section>
+            <section class="clock-mod-panel" id="mode-clock-mod" role="tabpanel" aria-labelledby="mode-tab-clock-mod" data-mode-panel="clock-mod" hidden>
+              <header class="lfo-workspace-header"><strong>CLOCK MOD RESPONSE</strong><span data-clock-mod-status>MODULE OFF · BAND 1 READY</span></header>
+              <div class="clock-mod-editor">
+                <section class="filter-response clock-mod-response" aria-label="Clock Mod band response">
+                  <div class="clock-mod-chart" data-clock-mod-chart>
+                    <div class="clock-mod-axis-y" aria-hidden="true"><span data-clock-mod-axis-boost>+12 dB</span><span>0 dB</span><span data-clock-mod-axis-cut>−12 dB</span></div>
+                    <svg viewBox="0 0 1000 240" preserveAspectRatio="none" role="img" aria-label="Clock Mod values across the ten filterbank bands">
+                      <g data-clock-mod-grid></g>
+                      <rect class="clock-mod-current-band" data-clock-mod-current-band y="8" height="216" visibility="hidden"></rect>
+                      <path class="clock-mod-path clock-mod-path-left" data-clock-mod-left-path></path>
+                      <path class="clock-mod-path clock-mod-path-right" data-clock-mod-right-path></path>
+                      <g data-clock-mod-points></g>
+                    </svg>
+                    <div class="clock-mod-axis-x" data-clock-mod-frequencies aria-hidden="true"></div>
+                  </div>
+                  <div class="clock-mod-lock-row"><span>LOCK</span><div class="clock-mod-locks" data-clock-mod-locks role="group" aria-label="Clock Mod band locks"></div></div>
+                </section>
+                <section class="filter-controls clock-mod-controls" aria-label="Clock Mod controls">
+                  <div class="filter-type-control clock-mod-wave-control"><span>WAVE</span><div class="filter-type-options clock-mod-wave-buttons" role="group" aria-label="Clock Mod waveform">
+                    <button type="button" data-clock-mod-waveform="sine">SINE</button><button type="button" data-clock-mod-waveform="square">SQUARE</button><button type="button" data-clock-mod-waveform="triangle">TRIANGLE</button><button type="button" data-clock-mod-waveform="saw">SAW</button><button type="button" data-clock-mod-waveform="random">RANDOM</button>
+                  </div></div>
+                  <div class="clock-mod-parameters">
+                    <label class="filter-parameter-control"><span>SOURCE FREQ</span><output data-clock-mod-frequency-output>1.00 Hz</output><input class="filter-style-slider" type="range" min="0" max="1000" step="1" data-clock-mod-frequency aria-label="Source frequency"></label>
+                    <label class="filter-parameter-control"><span>MOD GAIN</span><output data-clock-mod-gain-output>0 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" data-clock-mod-gain aria-label="Modulation gain"></label>
+                    <label class="filter-parameter-control"><span>MIDPOINT</span><output data-clock-mod-midpoint-output>0.0 dB</output><input class="filter-style-slider" type="range" min="-60" max="24" step="0.1" data-clock-mod-midpoint aria-label="Band gain midpoint"></label>
+                  </div>
+                  <div class="clock-mod-direction-row"><span>DIRECTION</span><div class="filter-type-options" role="group" aria-label="Clock Mod progression direction">
+                    <button type="button" data-clock-mod-direction="forward">FORWARD</button><button type="button" data-clock-mod-direction="backward">BACKWARD</button><button type="button" data-clock-mod-direction="ping-pong">PING-PONG</button><button type="button" data-clock-mod-direction="random">RANDOM</button>
+                  </div></div>
+                  <div class="clock-mod-clock-row">
+                    <div class="clock-mod-source-control"><span>CLOCK SOURCE</span><div class="filter-type-options" role="group" aria-label="Clock source"><button type="button" data-clock-mod-source="internal">INTERNAL</button><button type="button" data-clock-mod-source="midi">MIDI</button></div></div>
+                    <label class="clock-mod-inline-control" data-clock-mod-bpm-control><span>INTERNAL BPM</span><input data-clock-mod-bpm type="number" min="1" max="10000" step="1" value="120" aria-label="Internal BPM"></label>
+                    <div class="clock-mod-inline-control clock-mod-midi-tempo" data-clock-mod-midi-tempo><span>INCOMING BPM</span><output data-clock-mod-midi-bpm>−</output></div>
+                    <label class="clock-mod-inline-control" data-clock-mod-scale-control><span>CLOCK SCALE</span><select data-clock-mod-scale aria-label="MIDI clock scale"><option>1/32</option><option>1/16</option><option>1/8</option><option>1/4</option><option>1/2</option><option>1/1</option><option>2/1</option><option>4/1</option></select></label>
+                  </div>
+                  <div class="clock-mod-actions"><button class="dynamic-eq-view-toggle" type="button" data-clock-mod-right-invert aria-pressed="false">RIGHT INVERT OFF</button><button class="dynamic-eq-view-toggle" type="button" data-clock-mod-reset>RESET PROGRESSION</button></div>
+                </section>
+              </div>
+            </section>
             <section class="filter-mode-panel lfo-mode-panel" id="mode-lfo" role="tabpanel" aria-labelledby="mode-tab-lfo" data-mode-panel="lfo" hidden>
               <header class="lfo-workspace-header"><strong>LFO MODULATION</strong><span data-lfo-status>MODULE OFF</span></header>
               <nav class="lfo-slot-navigator" data-lfo-slots aria-label="LFO slots"></nav>

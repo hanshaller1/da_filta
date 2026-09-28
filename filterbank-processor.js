@@ -5,11 +5,13 @@ import { ModulationCore } from './modulation-core.mjs';
 import { LfoOscillator, normalizeModulationState } from './lfo-core.mjs';
 import { EnvelopeFollower, normalizeEnvelopeSources } from './envelope-core.mjs';
 import { ClockCore } from './clock-core.mjs';
+import { ClockModCore } from './clock-mod-core.mjs';
 
 const COMMON_BUS_RESONANCE_EPSILON = 1e-12;
 const DIAGNOSTICS_UPDATE_HZ = 15;
 const MODULATION_CONTROL_INTERVAL = 32;
 const LFO_TELEMETRY_HZ = 30;
+const CLOCK_MOD_TELEMETRY_HZ = 15;
 const LEARNED_REFERENCE_ADAPTATION_SECONDS = 30;
 const dynamicEqLocalReferenceDb = (levels, band, precomputedWeights) => {
   let weightedLevel = 0;
@@ -42,6 +44,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.lfo = this.lfoSources[0];
     this.envelopeSources = normalizeEnvelopeSources().map(source => new EnvelopeFollower(source));
     this.clockCore = new ClockCore();
+    this.clockMod = null;
     this.dryWet = 50;
     this.effectiveDryWetTarget = 50;
     this.effectiveDryWet = 50;
@@ -54,6 +57,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.modulationTelemetryCounter = 0;
     this.modulationTelemetryInterval = Math.max(1, Math.round(sampleRate / LFO_TELEMETRY_HZ));
     this.modulationTelemetryDirty = false;
+    this.clockModTelemetryCounter = 0;
+    this.clockModTelemetryInterval = Math.max(1, Math.round(sampleRate / CLOCK_MOD_TELEMETRY_HZ));
+    this.clockModTelemetryDirty = false;
     this.bandFrequencies = this.readBandDefinition(processorOptions.bandFrequencies, 'Frequenzen');
     this.bandQs = this.readBandDefinition(processorOptions.bandQs, 'Q-Werte');
     this.bandCount = this.bandFrequencies.length;
@@ -226,6 +232,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.modulationBandGains = { left: new Float64Array(this.bandCount).fill(1), right: new Float64Array(this.bandCount).fill(1) };
     this.modulationControlCounter = 0;
     this.modulationGainSmoothingCoefficient = this.smoothingCoefficient(0.004, 0.004);
+    this.clockMod = new ClockModCore(initialModulationState.clockMod || {}, {
+      maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb
+    });
     this.setModulationState(initialModulationState);
     this.feedbackGates = {
       left: this.readFeedbackGates(processorOptions.feedbackBandLeft),
@@ -1560,31 +1569,27 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (this.hasFilterParameterModulation) {
       FilterShape.writeFilterShape(this.filterShapeParams, this.bandFrequencies, this.baseFilterShapeGainsDb);
       FilterShape.writeFilterShape(this.effectiveFilterShapeParams, this.bandFrequencies, this.effectiveFilterShapeGainsDb);
-      for (let index = 0; index < this.bandCount; index += 1) {
-        const filterOffset = this.effectiveFilterShapeGainsDb[index] - this.baseFilterShapeGainsDb[index];
-        this.modulationDirectBandOffsetsDb[index] = (this.modulationDirectBandOffsetsByChannel.left[index]
-          + this.modulationDirectBandOffsetsByChannel.right[index]) / 2;
-        for (const channel of ['left', 'right']) {
-          const spreadOffset = this.effectiveSpreadDeltaDb * (channel === 'left' ? -1 : 1);
-          this.modulationBandOffsetsByChannel[channel][index] = filterOffset
-            + this.modulationDirectBandOffsetsByChannel[channel][index] + spreadOffset;
-        }
-        this.modulationBandOffsetsDb[index] = (this.modulationBandOffsetsByChannel.left[index]
-          + this.modulationBandOffsetsByChannel.right[index]) / 2;
-        this.setModulationBandGainTarget(index);
-      }
-    } else {
-      for (let index = 0; index < this.bandCount; index += 1) {
-        const spreadOffset = this.effectiveSpreadDeltaDb;
-        this.modulationBandOffsetsByChannel.left[index] = this.modulationDirectBandOffsetsByChannel.left[index] - spreadOffset;
-        this.modulationBandOffsetsByChannel.right[index] = this.modulationDirectBandOffsetsByChannel.right[index] + spreadOffset;
-        this.modulationDirectBandOffsetsDb[index] = (this.modulationDirectBandOffsetsByChannel.left[index]
-          + this.modulationDirectBandOffsetsByChannel.right[index]) / 2;
-        this.modulationBandOffsetsDb[index] = (this.modulationBandOffsetsByChannel.left[index]
-          + this.modulationBandOffsetsByChannel.right[index]) / 2;
-        this.setModulationBandGainTarget(index);
-      }
     }
+    for (let index = 0; index < this.bandCount; index += 1) {
+      this.refreshBandModulationOffsets(index);
+    }
+  }
+
+  refreshBandModulationOffsets(index) {
+    const filterOffset = this.hasFilterParameterModulation
+      ? this.effectiveFilterShapeGainsDb[index] - this.baseFilterShapeGainsDb[index] : 0;
+    const clockModLeftDb = this.clockMod?.valueDb('left', index) || 0;
+    const clockModRightDb = this.clockMod?.valueDb('right', index) || 0;
+    const spreadOffset = this.effectiveSpreadDeltaDb;
+    this.modulationDirectBandOffsetsDb[index] = (this.modulationDirectBandOffsetsByChannel.left[index]
+      + this.modulationDirectBandOffsetsByChannel.right[index]) / 2;
+    this.modulationBandOffsetsByChannel.left[index] = filterOffset
+      + this.modulationDirectBandOffsetsByChannel.left[index] + clockModLeftDb - spreadOffset;
+    this.modulationBandOffsetsByChannel.right[index] = filterOffset
+      + this.modulationDirectBandOffsetsByChannel.right[index] + clockModRightDb + spreadOffset;
+    this.modulationBandOffsetsDb[index] = (this.modulationBandOffsetsByChannel.left[index]
+      + this.modulationBandOffsetsByChannel.right[index]) / 2;
+    this.setModulationBandGainTarget(index);
   }
 
   setModulationBandGainTarget(index) {
@@ -1614,6 +1619,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.lfoModuleEnabled = modulationState.lfoModuleEnabled;
     this.envelopeModuleEnabled = source.envelopeModuleEnabled === true;
     if (source.clock && typeof source.clock === 'object') this.clockCore.configure(source.clock);
+    this.clockMod.configure(source.clockMod || {}, this.clockCore);
     this.dryWet = Number.isFinite(Number(source.dryWet)) ? Math.min(100, Math.max(0, Number(source.dryWet))) : this.dryWet;
     this.baseSpread = Number.isFinite(Number(source.baseSpread ?? source.spread)) ? Number(source.baseSpread ?? source.spread) : this.baseSpread;
     this.spreadMaxOffsetDb = Number.isFinite(Number(source.spreadMaxOffsetDb)) ? Math.abs(Number(source.spreadMaxOffsetDb)) : 6;
@@ -1658,12 +1664,19 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.updateModulationTargets();
     this.modulationControlCounter = 0;
     this.modulationTelemetryDirty = true;
+    this.clockModTelemetryDirty = true;
     if (!wasRunning && this.lfoModuleEnabled) this.modulationTelemetryCounter = this.modulationTelemetryInterval;
   }
 
   advanceModulationFrame() {
     const clockBeat = this.clockCore.advance(sampleRate);
     for (const oscillator of this.lfoSources) oscillator.advance(sampleRate, clockBeat, this.clockCore.state.running);
+    const clockModMask = this.clockMod.advance(sampleRate, this.clockCore);
+    if (clockModMask) {
+      for (let band = 0; band < this.bandCount; band += 1) {
+        if (clockModMask & (1 << band)) this.refreshBandModulationOffsets(band);
+      }
+    }
     this.modulationControlCounter += 1;
     if (this.modulationControlCounter >= MODULATION_CONTROL_INTERVAL) {
       this.modulationControlCounter = 0;
@@ -1717,12 +1730,16 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   setBandBoostDb(value, immediate = false) {
     this.maxBandBoostDb = this.readBandBoostDb(value);
+    this.clockMod?.setBandLimits(this.maxBandBoostDb, this.maxBandCutDb);
     this.refreshDeltaTargets(immediate);
+    if (this.clockMod) this.updateModulationTargets();
   }
 
   setBandCutDb(value, immediate = false) {
     this.maxBandCutDb = this.readBandCutDb(value);
+    this.clockMod?.setBandLimits(this.maxBandBoostDb, this.maxBandCutDb);
     this.refreshDeltaTargets(immediate);
+    if (this.clockMod) this.updateModulationTargets();
   }
 
   refreshDeltaTargets(immediate) {
@@ -2021,16 +2038,35 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-modulation-state') { this.setModulationState(data); return; }
     if (data.type === 'set-clock-state') { this.clockCore.configure(data.clock || data); return; }
     if (data.type === 'midi-clock-start') {
-      this.clockCore.start(true);
-      for (const oscillator of this.lfoSources) {
-        if (oscillator.rateMode === 'sync') oscillator.reset(0);
+      if (this.clockCore.state.source === 'midi') {
+        this.clockCore.start(true);
+        for (const oscillator of this.lfoSources) {
+          if (oscillator.rateMode === 'sync') oscillator.reset(0);
+        }
+      } else this.clockCore.startMidi(true);
+      if (this.clockMod.config.clockSource === 'midi') {
+        this.clockMod.resetMidiProgression(this.clockCore);
       }
       this.updateModulationTargets();
       this.modulationTelemetryDirty = true;
+      this.clockModTelemetryDirty = true;
       return;
     }
-    if (data.type === 'midi-clock-continue') { this.clockCore.continue(); return; }
-    if (data.type === 'midi-clock-stop') { this.clockCore.stop(); return; }
+    if (data.type === 'midi-clock-continue') {
+      if (this.clockCore.state.source === 'midi') this.clockCore.continue();
+      else this.clockCore.continueMidi();
+      return;
+    }
+    if (data.type === 'midi-clock-stop') {
+      if (this.clockCore.state.source === 'midi') this.clockCore.stop();
+      else this.clockCore.stopMidi();
+      return;
+    }
+    if (data.type === 'reset-clockmod-progression') {
+      this.clockMod.resetProgression();
+      this.clockModTelemetryDirty = true;
+      return;
+    }
     if (data.type === 'midi-clock-pulse') {
       if (Number.isFinite(Number(data.bpm))) this.clockCore.setMidiTempo(Number(data.bpm));
       this.clockCore.midiPulse();
@@ -2726,6 +2762,21 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
             rawLevel: follower.rawLevel, value: follower.value, thresholdLevel: follower.thresholdLevel });
         }
         this.modulationTelemetryDirty = false;
+      }
+    }
+    if (this.clockMod.config.enabled || this.clockModTelemetryDirty) {
+      this.clockModTelemetryCounter += frameCount;
+      if (this.clockModTelemetryCounter >= this.clockModTelemetryInterval || this.clockModTelemetryDirty) {
+        this.clockModTelemetryCounter %= this.clockModTelemetryInterval;
+        this.port.postMessage({ type: 'clock-mod-telemetry', enabled: this.clockMod.config.enabled,
+          currentBand: this.clockMod.nextBandIndex, runtimeCurrentBand: this.clockMod.currentBand,
+          lastTriggeredBand: this.clockMod.lastTriggeredBand,
+          oscillatorPhase: this.clockMod.oscillatorPhase, sourceFrequencyHz: this.clockMod.config.sourceFrequencyHz,
+          internalBpm: this.clockMod.config.internalBpm, clockSource: this.clockMod.config.clockSource,
+          midiBpm: this.clockCore.state.midiBpm, midiRunning: this.clockCore.midiTransportRunning,
+          midpointDb: this.clockMod.config.midpointDb, heldLeft: Array.from(this.clockMod.heldLeft),
+          heldRight: Array.from(this.clockMod.heldRight), lockedBands: [...this.clockMod.config.lockedBands] });
+        this.clockModTelemetryDirty = false;
       }
     }
     if (this.dynamicEqEnabled || this.learnActive || this.learnCompleted || this.dynamicEqTelemetryDirty) {
