@@ -438,6 +438,11 @@ test('Web MIDI UI reports availability and routes START, CLOCK, STOP, and CONTIN
     Object.defineProperty(navigator, 'requestMIDIAccess', { configurable: true, value: async () => access });
   });
   await noInputPage.goto('http://localhost:3000');
+  await noInputPage.locator('[data-midi-setup].midi-setup-button').click();
+  await noInputPage.locator('[data-midi-enable]').click();
+  await expect(noInputPage.locator('[data-midi-access-status]')).toHaveText('CONNECTED');
+  await expect(noInputPage.locator('[data-midi-clock-status]')).toHaveText('NO INPUT');
+  await noInputPage.locator('.midi-dialog-close').click();
   await noInputPage.locator('[data-mode="lfo"]').click();
   await noInputPage.locator('[data-lfo-rate-mode="sync"]').click();
   await noInputPage.locator('[data-lfo-clock-source]').selectOption('midi');
@@ -449,12 +454,19 @@ test('Web MIDI UI reports availability and routes START, CLOCK, STOP, and CONTIN
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.addInitScript(() => {
-    const input = { state: 'connected', onmidimessage: null };
+    const input = { id: 'mock-input', name: 'Mock Clock', state: 'connected', onmidimessage: null };
     const access = { inputs: new Map([['mock-input', input]]), onstatechange: null };
     window.__mockMidiInput = input;
     Object.defineProperty(navigator, 'requestMIDIAccess', { configurable: true, value: async () => access });
   });
   await page.goto('http://localhost:3000');
+  await page.locator('[data-midi-setup].midi-setup-button').click();
+  await expect(page.locator('[data-midi-access-status]')).toHaveText('NOT GRANTED');
+  await expect(page.locator('[data-midi-input]')).toBeDisabled();
+  await page.locator('[data-midi-enable]').click();
+  await expect(page.locator('[data-midi-access-status]')).toHaveText('CONNECTED');
+  await page.locator('[data-midi-input]').selectOption('mock-input');
+  await page.locator('.midi-dialog-close').click();
   await page.locator('[data-mode="lfo"]').click();
   await page.locator('[data-lfo-rate-mode="sync"]').click();
   await page.evaluate(() => {
@@ -485,7 +497,7 @@ test('Web MIDI UI reports availability and routes START, CLOCK, STOP, and CONTIN
   await expect(page.locator('[data-lfo-midi-status]')).toHaveText('STOPPED');
   await page.evaluate(() => window.__mockMidiInput.onmidimessage({ data: [0xfb], timeStamp: performance.now() }));
   expect((await page.evaluate(() => window.LfoMode.getState().lfoClock)).running).toBe(true);
-  await expect(page.locator('[data-lfo-midi-status]')).toHaveText('WAITING FOR CLOCK');
+  await expect(page.locator('[data-lfo-midi-status]')).toHaveText('NO CLOCK');
   const messages = await page.evaluate(() => window.__clockMessages);
   expect(messages[0]).toBe('start');
   expect(messages.filter(item => typeof item === 'object' && item.pulse)).toHaveLength(24);

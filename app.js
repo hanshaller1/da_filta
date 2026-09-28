@@ -1,6 +1,7 @@
 import { MODULATION_TARGETS, isModulationTargetActive } from './modulation-core.mjs';
 import { LFO_WAVEFORMS, LFO_SYNC_DIVISIONS, paginateLfoSources, rateToSlider, sliderToRate, waveformSample } from './lfo-core.mjs';
 import { normalizeClockState, SYNC_DIVISION_BEATS } from './clock-core.mjs';
+import { MidiDeviceManager } from './midi-device-manager.mjs';
 
 const {
   BAND_DEFINITIONS,
@@ -1617,12 +1618,34 @@ const lfoInvertButton = document.querySelector('[data-lfo-invert]');
 const lfoBpmControl = document.querySelector('[data-lfo-bpm-control]');
 const lfoDivisionControl = document.querySelector('[data-lfo-division-control]');
 const lfoMidiStatus = document.querySelector('[data-lfo-midi-status]');
+const midiDialog = document.querySelector('[data-midi-dialog]');
+const midiAccessStatusElement = document.querySelector('[data-midi-access-status]');
+const midiAccessMessage = document.querySelector('[data-midi-access-message]');
+const midiInputSelect = document.querySelector('[data-midi-input]');
+const midiReceiveToggle = document.querySelector('[data-midi-receive]');
+const midiTransportSelect = document.querySelector('[data-midi-transport]');
+const midiClockStatusElement = document.querySelector('[data-midi-clock-status]');
+const midiTempoElement = document.querySelector('[data-midi-tempo]');
+const midiTransportStatusElement = document.querySelector('[data-midi-transport-status]');
+const midiRefreshButton = document.querySelector('[data-midi-refresh]');
+const MIDI_CONFIG_KEY = 'da-filta-midi-clock-v1';
+const loadMidiConfig = () => {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(MIDI_CONFIG_KEY) || 'null');
+    return { receive: stored?.receive !== false, transport: stored?.transport === 'auto' ? 'auto' : 'follow', deviceId: typeof stored?.deviceId === 'string' ? stored.deviceId : '' };
+  } catch { return { receive: true, transport: 'follow', deviceId: '' }; }
+};
+const midiConfig = loadMidiConfig();
+let midiAccessStatus = typeof navigator.requestMIDIAccess === 'function' ? 'NOT GRANTED' : 'UNAVAILABLE';
+let midiClockStatus = midiConfig.receive ? 'NO INPUT' : 'DISABLED';
+let midiTransportStatus = '—';
+let midiTempoEstimate = null;
+let midiClockLocked = false;
 let selectedLfoIndex = 0;
 let lfoSlotPage = 0;
 const LFO_SLOT_PAGE_SIZE = 4;
 let lfoAnimationFrame = 0;
 let lfoTelemetryReceivedAt = 0;
-let midiAccess = null;
 let midiLastClockTimestamp = null;
 let midiClockBpm = 120;
 let midiTransportRunning = false;
@@ -1684,7 +1707,10 @@ const populateLfoTargets = () => {
 const getMidiStatusText = () => {
   const clock = state.lfoClock || normalizeClockState();
   if (clock.source === 'internal') return `INTERNAL · ${Math.round(clock.bpm)} BPM`;
-  return clock.midiStatus || (!clock.midiAvailable ? 'UNAVAILABLE' : 'NO CLOCK');
+  if (midiAccessStatus === 'UNAVAILABLE') return 'UNAVAILABLE';
+  return midiClockStatus === 'LOCKED' && Number.isFinite(midiTempoEstimate)
+    ? `LOCKED · ${midiTempoEstimate.toFixed(1)} BPM`
+    : midiClockStatus;
 };
 const setClockState = (patch, sendMessage = null) => {
   state.lfoClock = normalizeClockState({ ...state.lfoClock, ...patch });
@@ -1693,76 +1719,162 @@ const setClockState = (patch, sendMessage = null) => {
   if (lfoMidiStatus) lfoMidiStatus.textContent = getMidiStatusText();
   renderLfoControls();
 };
+const persistMidiConfig = () => {
+  try { window.localStorage.setItem(MIDI_CONFIG_KEY, JSON.stringify(midiConfig)); } catch { /* Storage may be unavailable. */ }
+};
+const resetMidiClockTracking = (status = 'NO CLOCK') => {
+  if (midiClockStatusTimer) clearTimeout(midiClockStatusTimer);
+  midiClockStatusTimer = 0;
+  midiLastClockTimestamp = null;
+  midiTempoEstimate = null;
+  midiClockBpm = 120;
+  midiClockLocked = false;
+  midiClockStatus = status;
+  midiTransportRunning = false;
+  midiTransportStatus = midiConfig.transport === 'auto' ? 'STOPPED' : '—';
+  if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiBpm: 120, midiStatus: status === 'NO CLOCK' ? 'NO CLOCK' : status }, 'stop');
+  renderMidiSetup();
+};
+let lastMidiSelection = '';
+const midiManager = new MidiDeviceManager({
+  onMessage: event => receiveMidiClockMessage(event),
+  onChange: (inputs, selectedId) => {
+    if (midiInputSelect) {
+      const previous = selectedId;
+      midiInputSelect.replaceChildren();
+      if (!inputs.length) midiInputSelect.add(new Option('NO INPUT', ''));
+      else {
+        midiInputSelect.add(new Option('SELECT INPUT', ''));
+        inputs.forEach(input => {
+          const name = [input.name, input.manufacturer].filter(Boolean).join(' · ') || `MIDI Input ${input.id}`;
+          midiInputSelect.add(new Option(name, input.id));
+        });
+      }
+      midiInputSelect.disabled = inputs.length === 0 || midiAccessStatus !== 'CONNECTED';
+      midiInputSelect.value = selectedId;
+      if (previous !== lastMidiSelection) {
+        lastMidiSelection = previous;
+        resetMidiClockTracking(midiConfig.receive ? (previous ? 'NO CLOCK' : 'NO INPUT') : 'DISABLED');
+      }
+    }
+    renderMidiSetup();
+  }
+});
+const renderMidiSetup = () => {
+  const hasInput = Boolean(midiManager?.selectedId && midiManager.activeInput);
+  if (midiAccessStatusElement) midiAccessStatusElement.textContent = midiAccessStatus;
+  if (midiAccessMessage && !midiAccessMessage.dataset.error) midiAccessMessage.textContent = '';
+  if (midiInputSelect) midiInputSelect.disabled = !midiManager?.inputs.length || midiAccessStatus !== 'CONNECTED';
+  if (midiReceiveToggle) midiReceiveToggle.checked = midiConfig.receive;
+  if (midiTransportSelect) midiTransportSelect.value = midiConfig.transport;
+  if (midiClockStatusElement) midiClockStatusElement.textContent = !midiConfig.receive ? 'DISABLED' : !hasInput ? 'NO INPUT' : midiClockStatus;
+  if (midiTempoElement) midiTempoElement.textContent = midiConfig.receive && hasInput && Number.isFinite(midiTempoEstimate) ? `${midiTempoEstimate.toFixed(1)} BPM` : '—';
+  if (midiTransportStatusElement) midiTransportStatusElement.textContent = !midiConfig.receive || !hasInput ? '—' : midiTransportStatus;
+  const midiButton = document.querySelector('[data-midi-setup].midi-setup-button');
+  if (midiButton) {
+    midiButton.classList.toggle('midi-status-warning', midiAccessStatus === 'CONNECTED' && hasInput && midiClockStatus !== 'LOCKED');
+    midiButton.classList.toggle('midi-status-active', midiConfig.receive && hasInput && midiClockStatus === 'LOCKED');
+    midiButton.classList.toggle('midi-status-neutral', midiAccessStatus !== 'CONNECTED' || !hasInput);
+    midiButton.setAttribute('aria-label', 'MIDI Setup');
+    midiButton.title = `MIDI Setup · ${midiClockStatus}`;
+  }
+  if (lfoMidiStatus) lfoMidiStatus.textContent = getMidiStatusText();
+};
 const receiveMidiClockMessage = event => {
+  if (!midiConfig.receive || !midiManager?.selectedId) return;
   const status = event.data?.[0];
   const timestamp = Number.isFinite(event.timeStamp) ? event.timeStamp : performance.now();
+  if (![0xf8, 0xfa, 0xfb, 0xfc].includes(status)) return;
   if (status === 0xfa) {
     if (midiClockStatusTimer) clearTimeout(midiClockStatusTimer);
     midiClockStatusTimer = 0;
     midiTransportRunning = true;
+    midiTransportStatus = 'RUNNING';
     midiLastClockTimestamp = null;
-    setClockState({ running: true, midiStatus: 'WAITING FOR CLOCK' }, 'start');
+    midiTempoEstimate = null;
+    midiClockLocked = false;
+    midiClockStatus = 'NO CLOCK';
+    if (state.lfoClock?.source === 'midi') setClockState({ running: true, midiStatus: 'NO CLOCK' }, 'start');
+    renderMidiSetup();
     return;
   }
   if (status === 0xfb) {
     if (midiClockStatusTimer) clearTimeout(midiClockStatusTimer);
     midiClockStatusTimer = 0;
     midiTransportRunning = true;
+    midiTransportStatus = 'RUNNING';
     midiLastClockTimestamp = null;
-    setClockState({ running: true, midiStatus: 'WAITING FOR CLOCK' }, 'continue');
+    midiClockStatus = 'NO CLOCK';
+    if (state.lfoClock?.source === 'midi') setClockState({ running: true, midiStatus: 'NO CLOCK' }, 'continue');
+    renderMidiSetup();
     return;
   }
   if (status === 0xfc) {
     if (midiClockStatusTimer) clearTimeout(midiClockStatusTimer);
     midiClockStatusTimer = 0;
     midiTransportRunning = false;
-    setClockState({ running: false, midiStatus: 'STOPPED' }, 'stop');
+    midiTransportStatus = 'STOPPED';
+    if (midiConfig.transport === 'follow') {
+      midiClockStatus = midiLastClockTimestamp === null ? 'NO CLOCK' : 'STOPPED';
+      if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiStatus: 'STOPPED' }, 'stop');
+    } else {
+      midiClockStatus = 'STOPPED';
+      if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiStatus: 'STOPPED' }, 'stop');
+    }
+    renderMidiSetup();
     return;
   }
-  if (status !== 0xf8 || state.lfoClock?.source !== 'midi') return;
+  if (status !== 0xf8) return;
+  if (midiConfig.transport === 'auto') {
+    midiTransportRunning = true;
+    midiTransportStatus = 'RUNNING';
+  }
   if (midiLastClockTimestamp !== null) {
     const periodMs = timestamp - midiLastClockTimestamp;
     if (periodMs >= 5 && periodMs <= 100) {
       const measured = 60000 / (periodMs * 24);
       midiClockBpm = Math.min(300, Math.max(30, midiClockBpm * .75 + measured * .25));
+      midiTempoEstimate = midiTempoEstimate === null ? measured : midiClockBpm;
+      midiClockLocked = true;
     }
   }
   midiLastClockTimestamp = timestamp;
-  if (!midiTransportRunning) {
-    state.lfoClock = normalizeClockState({ ...state.lfoClock, midiBpm: midiClockBpm, running: false, midiStatus: 'STOPPED' });
-    audioEngine?.setLfoClockState(state.lfoClock);
-    if (lfoMidiStatus) lfoMidiStatus.textContent = getMidiStatusText();
-    return;
-  }
   if (midiClockStatusTimer) clearTimeout(midiClockStatusTimer);
   midiClockStatusTimer = setTimeout(() => {
-    if (state.lfoClock?.source === 'midi' && state.lfoClock.running) setClockState({ running: false, midiStatus: 'NO CLOCK' }, 'stop');
+    midiClockStatus = midiConfig.transport === 'follow' && !midiTransportRunning ? 'STOPPED' : 'NO CLOCK';
+    if (midiConfig.transport === 'auto') { midiTransportRunning = false; midiTransportStatus = 'STOPPED'; }
+    if (state.lfoClock?.source === 'midi') setClockState({ running: false, midiStatus: midiClockStatus }, 'stop');
+    renderMidiSetup();
   }, 750);
-  state.lfoClock = normalizeClockState({ ...state.lfoClock, midiBpm: midiClockBpm, running: true, midiStatus: `LOCKED · ${midiClockBpm.toFixed(1)} BPM` });
-  audioEngine?.setLfoClockState(state.lfoClock);
-  audioEngine?.sendMidiClockPulse?.(midiClockBpm);
-  if (lfoMidiStatus) lfoMidiStatus.textContent = getMidiStatusText();
-};
-const attachMidiInputs = () => {
-  if (!midiAccess) return;
-  for (const input of midiAccess.inputs.values()) input.onmidimessage = receiveMidiClockMessage;
-  midiAccess.onstatechange = () => {
-    for (const input of midiAccess.inputs.values()) input.onmidimessage = receiveMidiClockMessage;
-  };
+  midiClockStatus = midiConfig.transport === 'follow' && !midiTransportRunning ? 'STOPPED' : (midiClockLocked ? 'LOCKED' : 'NO CLOCK');
+  if (state.lfoClock?.source === 'midi') {
+    const running = midiTransportRunning;
+    setClockState({ midiBpm: midiClockBpm, running, midiStatus: midiClockStatus }, null);
+    if (running) audioEngine?.sendMidiClockPulse?.(midiClockBpm);
+  }
+  renderMidiSetup();
 };
 const enableMidiClock = async () => {
-  if (!navigator.requestMIDIAccess) {
-    setClockState({ midiAvailable: false, midiStatus: 'UNAVAILABLE' });
-    return false;
-  }
   try {
-    midiAccess ||= await navigator.requestMIDIAccess({ sysex: false });
-    attachMidiInputs();
-    const hasInput = [...midiAccess.inputs.values()].some(input => input.state === 'connected');
-    setClockState({ midiAvailable: true, midiStatus: hasInput ? 'NO CLOCK' : 'NO INPUT' });
+    if (!midiManager.available) {
+      midiAccessStatus = 'UNAVAILABLE';
+      midiClockStatus = 'NO INPUT';
+      renderMidiSetup();
+      return false;
+    }
+    const result = await midiManager.enable();
+    midiAccessStatus = result.status;
+    midiAccessMessage.dataset.error = '';
+    if (midiConfig.deviceId && midiManager.inputs.some(input => input.id === midiConfig.deviceId)) midiManager.select(midiConfig.deviceId);
+    midiClockStatus = midiManager.selectedId ? 'NO CLOCK' : 'NO INPUT';
+    if (state.lfoClock?.source === 'midi') setClockState({ midiAvailable: true, running: false, midiStatus: midiClockStatus });
+    renderMidiSetup();
     return true;
-  } catch (_) {
-    setClockState({ midiAvailable: false, midiStatus: 'UNAVAILABLE' });
+  } catch (error) {
+    midiAccessStatus = 'NOT GRANTED';
+    midiAccessMessage.textContent = error?.name === 'SecurityError' ? 'MIDI access is blocked by browser or site settings.' : 'MIDI access could not be enabled. Try again.';
+    midiAccessMessage.dataset.error = 'true';
+    renderMidiSetup();
     return false;
   }
 };
@@ -2648,16 +2760,47 @@ lfoInvertButton?.addEventListener('click', () => setSelectedLfo({ invert: !getSe
 lfoDivisionSelect?.addEventListener('change', () => {
   if (LFO_SYNC_DIVISIONS.includes(lfoDivisionSelect.value)) setSelectedLfo({ syncDivision: lfoDivisionSelect.value });
 });
-lfoClockSourceSelect?.addEventListener('change', async () => {
+lfoClockSourceSelect?.addEventListener('change', () => {
   if (lfoClockSourceSelect.value === 'midi') {
+    const status = midiAccessStatus === 'UNAVAILABLE' ? 'UNAVAILABLE' : (!midiManager.selectedId ? 'NO INPUT' : (!midiConfig.receive ? 'DISABLED' : 'NO CLOCK'));
     midiTransportRunning = false;
-    state.lfoClock = normalizeClockState({ ...state.lfoClock, source: 'midi', running: false, midiStatus: 'NO CLOCK' });
-    const available = await enableMidiClock();
-    if (!available) setClockState({ source: 'midi', midiAvailable: false, running: false, midiStatus: 'UNAVAILABLE' });
+    setClockState({ source: 'midi', midiAvailable: midiAccessStatus === 'CONNECTED', running: false, midiStatus: status });
   } else {
     midiTransportRunning = false;
     setClockState({ source: 'internal', running: true, midiStatus: 'UNAVAILABLE' });
   }
+});
+document.querySelectorAll('[data-midi-setup]').forEach(button => button.addEventListener('click', () => {
+  renderMidiSetup();
+  if (midiDialog && !midiDialog.open) midiDialog.showModal();
+}));
+document.querySelector('[data-midi-enable]')?.addEventListener('click', enableMidiClock);
+midiRefreshButton?.addEventListener('click', () => {
+  if (midiManager.access) {
+    midiManager.refresh();
+    midiAccessStatus = 'CONNECTED';
+    renderMidiSetup();
+  } else if (!midiManager.available) {
+    midiAccessStatus = 'UNAVAILABLE';
+    renderMidiSetup();
+  }
+});
+midiInputSelect?.addEventListener('change', () => {
+  midiManager.select(midiInputSelect.value);
+  midiConfig.deviceId = midiManager.selectedId;
+  persistMidiConfig();
+  resetMidiClockTracking(!midiConfig.receive ? 'DISABLED' : (midiManager.selectedId ? 'NO CLOCK' : 'NO INPUT'));
+});
+midiReceiveToggle?.addEventListener('change', () => {
+  midiConfig.receive = midiReceiveToggle.checked;
+  persistMidiConfig();
+  if (!midiConfig.receive) resetMidiClockTracking('DISABLED');
+  else resetMidiClockTracking(midiManager.selectedId ? 'NO CLOCK' : 'NO INPUT');
+});
+midiTransportSelect?.addEventListener('change', () => {
+  midiConfig.transport = midiTransportSelect.value === 'auto' ? 'auto' : 'follow';
+  persistMidiConfig();
+  resetMidiClockTracking(midiConfig.receive ? (midiManager.selectedId ? 'NO CLOCK' : 'NO INPUT') : 'DISABLED');
 });
 lfoBpmInput?.addEventListener('change', () => {
   const bpm = Math.min(300, Math.max(30, Number(lfoBpmInput.value) || 120));

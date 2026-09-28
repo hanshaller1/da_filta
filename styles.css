@@ -1728,3 +1728,37 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .lfo-parameter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(55px, auto)); }
   .lfo-assignment-row { grid-template-columns: minmax(0, 1fr) minmax(72px, .6fr); }
 }
+
+.midi-setup-dialog { width: min(440px, calc(100vw - 28px)); max-width: calc(100vw - 28px); max-height: min(720px, calc(100vh - 28px)); padding: 0; overflow: auto; border: 1px solid var(--panel-border); border-radius: 5px; color: var(--text); background: var(--panel-background); box-shadow: var(--panel-shadow), 0 12px 36px rgba(0,0,0,.42); }
+.midi-setup-dialog::backdrop { background: rgba(0,0,0,.62); }
+.midi-setup-panel { display: grid; gap: 14px; padding: 16px; }
+.midi-setup-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid var(--panel-border); color: var(--cyan); letter-spacing: 1px; }
+.midi-setup-header strong { font-size: var(--text-panel-title); }
+.midi-dialog-close { width: 28px; height: 28px; padding: 0; border: 1px solid var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--button-background); font-size: 19px; line-height: 1; cursor: pointer; }
+.midi-setup-section { display: grid; gap: 7px; min-width: 0; color: var(--muted-text); font-size: var(--text-control-label); letter-spacing: .7px; }
+.midi-setup-section h2, .midi-setup-label { margin: 0; color: var(--secondary-text); font-size: var(--text-section-title); font-weight: 700; letter-spacing: .9px; }
+.midi-setup-section select { width: 100%; min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--button-text); background: var(--output-background); font: 12px var(--font-ui); letter-spacing: normal; }
+.midi-setup-section select:disabled { opacity: .48; }
+.midi-access-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; color: var(--strong-text); font-size: var(--text-value); font-weight: 700; }
+.midi-access-message { min-height: 0; margin: 0; color: var(--secondary-text); font-size: var(--text-value-small); letter-spacing: normal; }
+.midi-access-message[data-error=true] { color: var(--error); }
+.midi-setup-toggle { display: flex; align-items: center; gap: 10px; min-height: 32px; color: var(--secondary-text); font-size: var(--text-section-title); font-weight: 700; letter-spacing: .8px; cursor: pointer; }
+.midi-setup-toggle input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.midi-toggle-track { position: relative; width: 38px; height: 20px; margin-left: auto; border: 1px solid var(--button-border); border-radius: 11px; background: var(--output-background); }
+.midi-toggle-track::after { position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--secondary-text); content: ''; transition: transform .12s ease; }
+.midi-setup-toggle input:checked + .midi-toggle-track { border-color: var(--cyan); background: var(--active-background); }
+.midi-setup-toggle input:checked + .midi-toggle-track::after { background: var(--cyan); transform: translateX(18px); }
+.midi-setup-toggle input:focus-visible + .midi-toggle-track, .midi-setup-dialog button:focus-visible, .midi-setup-dialog select:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.midi-status-section { padding-top: 11px; border-top: 1px solid color-mix(in srgb, var(--panel-border) 65%, transparent); }
+.midi-status-section dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; margin: 0; font-size: var(--text-value); letter-spacing: normal; }
+.midi-status-section dt { color: var(--secondary-text); }
+.midi-status-section dd { margin: 0; color: var(--strong-text); font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.midi-setup-footer { display: flex; justify-content: flex-end; padding-top: 2px; }
+.midi-setup-button.midi-status-neutral { color: var(--secondary-text); }
+.midi-setup-button.midi-status-warning { color: var(--active-color, var(--secondary-text)); }
+.midi-setup-button.midi-status-active { color: var(--cyan); border-color: var(--cyan); background: var(--active-background); }
+.lfo-midi-setup { min-height: 22px !important; padding: 2px 6px !important; font-size: 8px !important; }
+@media (max-width: 480px) {
+  .midi-setup-panel { gap: 11px; padding: 12px; }
+  .midi-access-row { align-items: flex-start; }
+}

@@ -558,6 +558,7 @@
                     <label class="lfo-inline-control" data-lfo-bpm-control><span>INTERNAL BPM</span><input data-lfo-bpm type="number" min="30" max="300" step="1" value="120" aria-label="Internal clock tempo"></label>
                     <label class="lfo-inline-control" data-lfo-division-control><span>DIVISION</span><select data-lfo-division aria-label="LFO clock division"><option>1/32</option><option>1/16</option><option>1/8</option><option>1/4</option><option>1/2</option><option>1/1</option><option>2/1</option><option>4/1</option></select></label>
                     <span class="lfo-midi-status" data-lfo-midi-status>INTERNAL · 120 BPM</span>
+                    <button class="dynamic-eq-view-toggle lfo-midi-setup" type="button" data-midi-setup>SETUP</button>
                   </div>
                   <div class="lfo-parameter-grid">
                     <label class="filter-parameter-control lfo-rate-control"><span>FREE RATE</span><output data-lfo-rate-output>1.00 Hz</output><input class="filter-style-slider" type="range" min="0" max="1000" step="1" value="434" data-lfo-rate aria-label="LFO free rate"></label>
@@ -666,6 +667,24 @@
         </aside>
       </main>
     </div>
+    <dialog class="midi-setup-dialog" data-midi-dialog aria-labelledby="midi-dialog-title">
+      <form method="dialog" class="midi-setup-panel">
+        <header class="midi-setup-header"><strong id="midi-dialog-title">MIDI SETUP</strong><button class="midi-dialog-close" type="submit" aria-label="Close MIDI Setup">×</button></header>
+        <section class="midi-setup-section">
+          <h2>MIDI ACCESS</h2>
+          <div class="midi-access-row"><span data-midi-access-status>NOT GRANTED</span><button class="audio-button start" type="button" data-midi-enable>ENABLE MIDI</button></div>
+          <p class="midi-access-message" data-midi-access-message aria-live="polite"></p>
+        </section>
+        <label class="midi-setup-section"><span class="midi-setup-label">CLOCK INPUT</span><select data-midi-input aria-label="Clock input" disabled><option value="">NO INPUT</option></select></label>
+        <label class="midi-setup-toggle"><span>RECEIVE MIDI CLOCK</span><input type="checkbox" data-midi-receive checked><span class="midi-toggle-track" aria-hidden="true"></span></label>
+        <label class="midi-setup-section"><span class="midi-setup-label">TRANSPORT</span><select data-midi-transport aria-label="MIDI transport mode"><option value="follow">FOLLOW START / STOP</option><option value="auto">CLOCK AUTO-RUN</option></select></label>
+        <section class="midi-setup-section midi-status-section" aria-label="MIDI clock status">
+          <h2>STATUS</h2>
+          <dl><dt>Clock</dt><dd data-midi-clock-status>DISABLED</dd><dt>Tempo</dt><dd data-midi-tempo>—</dd><dt>Transport</dt><dd data-midi-transport-status>—</dd></dl>
+        </section>
+        <footer class="midi-setup-footer"><button class="audio-button" type="button" data-midi-refresh>REFRESH DEVICES</button></footer>
+      </form>
+    </dialog>
     <script type="module" src="filter-shape.js"></script>
     <script type="module" src="state.js"></script>
     <script type="module" src="filterbank.js"></script>
