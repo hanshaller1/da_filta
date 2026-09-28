@@ -1733,13 +1733,16 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .envelope-editor { grid-template-columns: minmax(0, 38fr) minmax(0, 62fr); }
 .envelope-response .envelope-visualizer { min-height: 0; background-size: 100% 45%; }
 .envelope-wave-path { stroke-width: 3.5; }
+.envelope-raw-wave-path { stroke-width: 1.5; opacity: .48; filter: none; }
+.envelope-visualizer .envelope-grid-midline { stroke-dasharray: none; }
+.envelope-threshold-line { stroke: var(--active-color, #f4d35e); opacity: .82; }
 .envelope-controls { grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; overflow: auto; }
 .envelope-detector-row { grid-template-columns: minmax(105px, .7fr) minmax(0, 1fr); align-items: end; gap: 8px; }
 .envelope-control-label { align-self: center; }
 .envelope-mode-buttons { display: flex; gap: 4px; min-width: 0; }
 .envelope-mode-buttons button { box-sizing: border-box; flex: 1 1 0; height: 27px; min-height: 27px; padding: 3px 7px; font-size: 9px; }
 .envelope-mode-buttons button[aria-pressed=true] { border-color: var(--cyan); color: var(--cyan); background: var(--active-background); }
-.envelope-parameter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(60px, 1fr)); gap: 4px 10px; }
+.envelope-parameter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(60px, 1fr)); gap: 4px 10px; }
 .envelope-parameter-grid .filter-parameter-control { min-height: 0; padding: 6px 8px; }
 .envelope-assignment-row { grid-template-columns: minmax(0, 2fr) minmax(76px, .8fr) auto; }
 .envelope-target-control { grid-template-rows: auto 27px; }

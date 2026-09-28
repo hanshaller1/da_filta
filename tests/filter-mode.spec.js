@@ -202,8 +202,9 @@ test('workspace selection and module power remain independent pointer interactio
 
   await page.locator('[data-mode="filterbank"]').click();
   expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: false });
-  // Only CLOCK MOD, ENVELOPE FOLLOWER and MAKROS remain unavailable; LFO is routable.
-  await expect(page.locator('.mode-power:disabled')).toHaveCount(3);
+  // Only CLOCK MOD and MAKROS remain unavailable; LFO and ENVELOPE are routable.
+  await expect(page.locator('.mode-power:disabled')).toHaveCount(2);
+  await expect(page.locator('[data-module-power="envelope-follower"]')).toBeEnabled();
   await expect(page.locator('[data-mode="filterbank"]').locator('xpath=..').locator('[data-module-power="filterbank"]')).toHaveCount(1);
   await expect(page.locator('[data-mode="presets"]').locator('xpath=..').locator('.mode-power-slot')).toHaveCount(1);
 });

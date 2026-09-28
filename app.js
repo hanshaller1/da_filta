@@ -23,6 +23,7 @@ let dynamicEqTelemetry = null;
 const lfoTelemetry = new Map();
 const envelopeTelemetry = new Map();
 const envelopeGraphValues = [];
+const envelopeRawGraphValues = [];
 let panic = () => {};
 let updateResonatorDiagnostics = () => {};
 // FILTERBANK editor visuals intentionally describe the manual FILTERBANK
@@ -1594,6 +1595,7 @@ const modePanels = [...document.querySelectorAll('[data-mode-panel]')];
 const filterbankPowerButton = document.querySelector('[data-module-power="filterbank"]');
 const filterPowerButton = document.querySelector('[data-module-power="filter"]');
 const lfoPowerButton = document.querySelector('[data-module-power="lfo"]');
+const envelopePowerButton = document.querySelector('[data-module-power="envelope-follower"]');
 const dynamicEqPowerButton = document.querySelector('[data-module-power="dynamic-eq"]');
 const lfoWaveformButtons = [...document.querySelectorAll('[data-lfo-waveform]')];
 const lfoPolarityButtons = [...document.querySelectorAll('[data-lfo-polarity]')];
@@ -1625,11 +1627,14 @@ const envelopeModeButtons = [...document.querySelectorAll('[data-envelope-mode]'
 const envelopeAttackInput = document.querySelector('[data-envelope-attack]');
 const envelopeReleaseInput = document.querySelector('[data-envelope-release]');
 const envelopeSensitivityInput = document.querySelector('[data-envelope-sensitivity]');
+const envelopeThresholdInput = document.querySelector('[data-envelope-threshold]');
 const envelopeAmountInput = document.querySelector('[data-envelope-amount]');
 const envelopeTargetSelect = document.querySelector('[data-envelope-target]');
 const envelopeChannelSelect = document.querySelector('[data-envelope-channel]');
 const envelopeInvertButton = document.querySelector('[data-envelope-invert]');
 const envelopeWavePath = document.querySelector('[data-envelope-wave-path]');
+const envelopeRawWavePath = document.querySelector('[data-envelope-raw-wave-path]');
+const envelopeThresholdLine = document.querySelector('[data-envelope-threshold-line]');
 const envelopeReadout = document.querySelector('[data-envelope-readout]');
 const envelopeStatus = document.querySelector('[data-envelope-status]');
 const envelopeTargetState = document.querySelector('[data-envelope-target-state]');
@@ -2131,19 +2136,31 @@ const getEnvelopeValue = () => {
 };
 const renderEnvelopeGraph = () => {
   const current = getEnvelopeValue();
+  const source = getEnvelopeSource();
+  const currentTelemetry = source ? envelopeTelemetry.get(source.id) : null;
+  const rawCurrent = source?.enabled && currentTelemetry?.enabled ? (currentTelemetry.rawLevel ?? 0) : 0;
   if (envelopeReadout) {
-    envelopeReadout.textContent = current.toFixed(2);
-    envelopeReadout.setAttribute('aria-label', `Current envelope level ${current.toFixed(2)}`);
+    envelopeReadout.textContent = `RAW ${rawCurrent.toFixed(2)} · ENV ${current.toFixed(2)}`;
+    envelopeReadout.setAttribute('aria-label', `Raw detector level ${rawCurrent.toFixed(2)}, smoothed envelope ${current.toFixed(2)}`);
   }
-  if (!envelopeWavePath) return;
-  const values = envelopeGraphValues.length ? envelopeGraphValues : [current];
-  let path = '';
-  for (let index = 0; index < values.length; index += 1) {
-    const x = values.length === 1 ? 1000 : index / (values.length - 1) * 1000;
-    const y = 114 - Math.min(1, Math.max(0, values[index])) * 108;
-    path += `${index ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)} `;
+  const drawPath = (element, values, fallback) => {
+    if (!element) return;
+    const points = values.length ? values : [fallback];
+    let path = '';
+    for (let index = 0; index < points.length; index += 1) {
+      const x = points.length === 1 ? 1000 : index / (points.length - 1) * 1000;
+      const y = 114 - Math.min(1, Math.max(0, points[index])) * 108;
+      path += `${index ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)} `;
+    }
+    element.setAttribute('d', path.trim());
+  };
+  drawPath(envelopeRawWavePath, envelopeRawGraphValues, rawCurrent);
+  drawPath(envelopeWavePath, envelopeGraphValues, current);
+  if (envelopeThresholdLine && source) {
+    const y = 114 - 10 ** (source.thresholdDb / 20) * 108;
+    envelopeThresholdLine.setAttribute('y1', y.toFixed(2));
+    envelopeThresholdLine.setAttribute('y2', y.toFixed(2));
   }
-  envelopeWavePath.setAttribute('d', path.trim());
 };
 const commitEnvelopeState = () => {
   const currentSource = getEnvelopeSource();
@@ -2154,6 +2171,7 @@ const commitEnvelopeState = () => {
   const source = getEnvelopeSource();
   if (!source?.enabled || !previous) {
     envelopeGraphValues.length = 0;
+    envelopeRawGraphValues.length = 0;
     if (!source?.enabled) envelopeGraphValues.push(0);
     if (source) envelopeTelemetry.delete(source.id);
   }
@@ -2169,6 +2187,8 @@ const setEnvelopeSource = patch => {
 const renderEnvelopeControls = () => {
   const source = getEnvelopeSource();
   if (!source) return;
+  envelopePowerButton?.setAttribute('aria-pressed', String(state.envelopeModuleEnabled === true));
+  envelopePowerButton?.setAttribute('aria-label', state.envelopeModuleEnabled ? 'ENVELOPE FOLLOWER ausschalten' : 'ENVELOPE FOLLOWER einschalten');
   if (envelopeEnableButton) {
     envelopeEnableButton.textContent = source.enabled ? 'SOURCE ON' : 'SOURCE OFF';
     envelopeEnableButton.setAttribute('aria-pressed', String(source.enabled));
@@ -2182,14 +2202,17 @@ const renderEnvelopeControls = () => {
   if (envelopeAttackInput) envelopeAttackInput.value = String(source.attack);
   if (envelopeReleaseInput) envelopeReleaseInput.value = String(source.release);
   if (envelopeSensitivityInput) envelopeSensitivityInput.value = String(source.sensitivity);
+  if (envelopeThresholdInput) envelopeThresholdInput.value = String(source.thresholdDb);
   if (envelopeAmountInput) envelopeAmountInput.value = String(source.amount);
   const attackOutput = document.querySelector('[data-envelope-attack-output]');
   const releaseOutput = document.querySelector('[data-envelope-release-output]');
   const sensitivityOutput = document.querySelector('[data-envelope-sensitivity-output]');
+  const thresholdOutput = document.querySelector('[data-envelope-threshold-output]');
   const amountOutput = document.querySelector('[data-envelope-amount-output]');
   if (attackOutput) attackOutput.textContent = `${Math.round(source.attack)} ms`;
   if (releaseOutput) releaseOutput.textContent = `${Math.round(source.release)} ms`;
   if (sensitivityOutput) sensitivityOutput.textContent = `${Math.round(source.sensitivity)} %`;
+  if (thresholdOutput) thresholdOutput.textContent = `${Math.round(source.thresholdDb)} dB`;
   if (amountOutput) amountOutput.textContent = `${Math.round(source.amount)} %`;
   if (envelopeTargetSelect) {
     const known = MODULATION_TARGETS.some(target => target.id === source.targetId);
@@ -2214,7 +2237,7 @@ const renderEnvelopeControls = () => {
     : !target ? 'UNAVAILABLE' : !active ? `INACTIVE · ${target.activeWhen.toUpperCase()}`
       : source.enabled ? 'ACTIVE' : 'ASSIGNED · SOURCE OFF';
   envelopeTargetControl?.classList.toggle('is-inactive', Boolean(source.targetId && !active));
-  if (envelopeStatus) envelopeStatus.textContent = `${source.enabled ? 'SOURCE ON' : 'SOURCE OFF'} · INPUT / PRE-FILTERBANK`;
+  if (envelopeStatus) envelopeStatus.textContent = `${state.envelopeModuleEnabled ? 'MODULE ON' : 'MODULE OFF'} · ${source.enabled ? 'SOURCE ON' : 'SOURCE OFF'} · INPUT / PRE-FILTERBANK`;
   renderEnvelopeGraph();
 };
 const filterTypeDefinitions = window.FilterShape.FILTER_TYPE_DEFINITIONS;
@@ -2884,6 +2907,14 @@ populateLfoTargets();
 populateModulationTargetSelect(envelopeTargetSelect);
 renderLfoControls();
 renderEnvelopeControls();
+envelopePowerButton?.addEventListener('click', event => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.detail === 0) return;
+  state.envelopeModuleEnabled = !state.envelopeModuleEnabled;
+  audioEngine?.setModulationState(state);
+  renderEnvelopeControls();
+});
 lfoPowerButton?.addEventListener('click', event => {
   event.preventDefault();
   event.stopPropagation();
@@ -2979,6 +3010,7 @@ envelopeModeButtons.forEach(button => button.addEventListener('click', () => {
 envelopeAttackInput?.addEventListener('input', () => setEnvelopeSource({ attack: Number(envelopeAttackInput.value) }));
 envelopeReleaseInput?.addEventListener('input', () => setEnvelopeSource({ release: Number(envelopeReleaseInput.value) }));
 envelopeSensitivityInput?.addEventListener('input', () => setEnvelopeSource({ sensitivity: Number(envelopeSensitivityInput.value) }));
+envelopeThresholdInput?.addEventListener('input', () => setEnvelopeSource({ thresholdDb: Number(envelopeThresholdInput.value) }));
 envelopeAmountInput?.addEventListener('input', () => setEnvelopeSource({ amount: Number(envelopeAmountInput.value) }));
 envelopeTargetSelect?.addEventListener('change', () => {
   const target = MODULATION_TARGETS.find(item => item.id === envelopeTargetSelect.value);
@@ -3025,7 +3057,8 @@ window.LfoMode = Object.freeze({
   ).map(page => page.map(source => source.id))
 });
 window.EnvelopeMode = Object.freeze({
-  getState: () => ({ envelopeSources: (state.envelopeSources || []).map(source => ({ ...source })) }),
+  getState: () => ({ envelopeModuleEnabled: state.envelopeModuleEnabled === true, envelopeSources: (state.envelopeSources || []).map(source => ({ ...source })) }),
+  getAudioEngine: () => audioEngine,
   getTelemetry: () => { const source = getEnvelopeSource(); const telemetry = source ? envelopeTelemetry.get(source.id) : null; return telemetry ? { ...telemetry } : null; },
   getTargetRegistry: () => MODULATION_TARGETS.map(target => ({ id: target.id, label: target.label, group: target.group, channelRouting: target.channelRouting }))
 });
@@ -3768,9 +3801,11 @@ audioEngine = new AudioEngine({
   },
   onEnvelopeTelemetry: packet => {
     if (packet.sourceId) envelopeTelemetry.set(packet.sourceId, packet);
-    if (Number.isFinite(packet.value)) {
+    if (Number.isFinite(packet.value) && Number.isFinite(packet.rawLevel)) {
       envelopeGraphValues.push(Math.min(1, Math.max(0, packet.value)));
+      envelopeRawGraphValues.push(Math.min(1, Math.max(0, packet.rawLevel)));
       if (envelopeGraphValues.length > 96) envelopeGraphValues.shift();
+      if (envelopeRawGraphValues.length > 96) envelopeRawGraphValues.shift();
     }
     if (state.selectedWorkspaceMode === 'envelope-follower') renderEnvelopeGraph();
   },
@@ -4011,6 +4046,7 @@ const syncUiFromAudioState = snapshot => {
   Object.assign(state, window.ResonantState.normalizeDynamicEqState(snapshot));
   Object.assign(state, window.ResonantState.normalizeModulationState(snapshot));
   Object.assign(state, window.ResonantState.normalizeEnvelopeState(snapshot));
+  state.envelopeModuleEnabled = snapshot.envelopeModuleEnabled === true;
   if (snapshot.lfoClock) state.lfoClock = normalizeClockState(snapshot.lfoClock);
   selectedLfoIndex = Math.min(selectedLfoIndex, Math.max(0, state.lfoSources.length - 1));
   renderDynamicEqControls();
@@ -4111,6 +4147,7 @@ const syncUiFromAudioState = snapshot => {
 // is intentionally absent: DEV/LAB snapshots are experimental configurations,
 // not production presets.
 const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
+  ['envelopeModuleEnabled', value => { state.envelopeModuleEnabled = value === true; audioEngine.setModulationState(state); renderEnvelopeControls(); }],
   ['envelopeSources', value => {
     Object.assign(state, window.ResonantState.normalizeEnvelopeState({ envelopeSources: value }));
     commitEnvelopeState();

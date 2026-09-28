@@ -374,7 +374,7 @@
               <button class="mode-select" type="button" role="tab" id="mode-tab-lfo" aria-selected="false" aria-controls="mode-lfo" data-mode="lfo"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M1 10c2.2-6 4.5-6 6.7 0s4.5 6 6.7 0S18 4 19 7"/></svg><span>LFO</span></button>
             </div>
             <div class="mode-tab-row">
-              <button class="mode-power" type="button" disabled aria-disabled="true" aria-label="ENVELOPE FOLLOWER Power nicht verfügbar" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
+              <button class="mode-power" type="button" data-module-power="envelope-follower" aria-label="ENVELOPE FOLLOWER einschalten" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v7M5.4 4.8a7 7 0 1 0 9.2 0"/></svg></button>
               <button class="mode-select" type="button" role="tab" id="mode-tab-envelope-follower" aria-selected="false" aria-controls="mode-envelope-follower" data-mode="envelope-follower"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 15 6 5h5l3 5h4"/></svg><span>ENVELOPE FOLLOWER</span></button>
             </div>
             <div class="mode-tab-row">
@@ -579,12 +579,14 @@
               <header class="lfo-workspace-header"><strong>ENVELOPE FOLLOWER</strong><span data-envelope-status>INPUT / PRE-FILTERBANK</span></header>
               <div class="lfo-editor envelope-editor">
                 <section class="filter-response lfo-response envelope-response" aria-label="Envelope level graph">
-                  <header><strong>ENVELOPE.1 · INPUT</strong><button class="dynamic-eq-view-toggle" type="button" data-envelope-enable aria-pressed="false">SOURCE OFF</button></header>
+                  <header><strong>RAW LEVEL · ENVELOPE</strong><button class="dynamic-eq-view-toggle" type="button" data-envelope-enable aria-pressed="false">SOURCE OFF</button></header>
                   <div class="filter-response-chart lfo-visualizer envelope-visualizer" data-envelope-visualizer>
                     <svg viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
                       <line class="lfo-grid-line" x1="0" y1="6" x2="1000" y2="6"></line>
-                      <line class="lfo-grid-line" x1="0" y1="60" x2="1000" y2="60"></line>
+                      <line class="lfo-grid-line envelope-grid-midline" x1="0" y1="60" x2="1000" y2="60"></line>
                       <line class="lfo-grid-line" x1="0" y1="114" x2="1000" y2="114"></line>
+                      <line class="lfo-phase-line envelope-threshold-line" x1="0" y1="0" x2="1000" y2="0" data-envelope-threshold-line></line>
+                      <path class="lfo-wave-path envelope-raw-wave-path" data-envelope-raw-wave-path></path>
                       <path class="lfo-wave-path envelope-wave-path" data-envelope-wave-path></path>
                     </svg>
                     <output class="lfo-visual-readout" data-envelope-readout aria-label="Current envelope level">0.00</output>
@@ -603,6 +605,7 @@
                     <label class="filter-parameter-control"><span>RELEASE</span><output data-envelope-release-output>250 ms</output><input class="filter-style-slider" type="range" min="10" max="3000" step="1" value="250" data-envelope-release aria-label="Envelope release time"></label>
                     <label class="filter-parameter-control"><span>SENSITIVITY</span><output data-envelope-sensitivity-output>100 %</output><input class="filter-style-slider" type="range" min="0" max="400" step="1" value="100" data-envelope-sensitivity aria-label="Envelope sensitivity gain"></label>
                     <label class="filter-parameter-control"><span>AMOUNT</span><output data-envelope-amount-output>50 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="50" data-envelope-amount aria-label="Envelope modulation amount"></label>
+                    <label class="filter-parameter-control"><span>THRESHOLD</span><output data-envelope-threshold-output>−48 dB</output><input class="filter-style-slider" type="range" min="-60" max="0" step="1" value="-48" data-envelope-threshold aria-label="Envelope threshold in decibels"></label>
                   </div>
                   <div class="lfo-row lfo-assignment-row envelope-assignment-row">
                     <label class="lfo-target-control envelope-target-control"><span>TARGET</span><select data-envelope-target aria-label="Envelope modulation target"><option value="">NONE</option></select><small data-envelope-target-state>NO TARGET</small></label>

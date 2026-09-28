@@ -71,6 +71,7 @@
       Object.assign(this, window.ResonantState.normalizeDynamicEqState());
       Object.assign(this, window.ResonantState.normalizeModulationState());
       Object.assign(this, window.ResonantState.normalizeEnvelopeState());
+      this.envelopeModuleEnabled = false;
       this.status = 'OFF';
       this.inputGainDb = 0;
       this.inputPreampStage = 'linear';
@@ -447,6 +448,7 @@
       return {
         ...lfo,
         ...envelope,
+        envelopeModuleEnabled: this.envelopeModuleEnabled === true,
         filterEnabled: this.filterEnabled,
         filterbankEnabled: this.filterbankEnabled,
         filterShapeParams: window.FilterShape.shapeParametersFromState(this),
@@ -471,6 +473,7 @@
     setModulationState(source = {}) {
       Object.assign(this, window.ResonantState.normalizeModulationState(source));
       Object.assign(this, window.ResonantState.normalizeEnvelopeState(source));
+      this.envelopeModuleEnabled = source.envelopeModuleEnabled === true;
       if (source.clock) this.setLfoClockState(source.clock);
       else if (source.lfoClock && Object.keys(source.lfoClock).some(key => source.lfoClock[key] !== this.lfoClock?.[key])) {
         this.setLfoClockState(source.lfoClock);
@@ -696,6 +699,7 @@
         ...window.ResonantState.normalizeDynamicEqState(this),
         ...window.ResonantState.normalizeModulationState(this),
         ...window.ResonantState.normalizeEnvelopeState(this),
+        envelopeModuleEnabled: this.envelopeModuleEnabled === true,
         filterType: this.filterType,
         filterFrequencyHz: this.filterFrequencyHz,
         filterSlope: this.filterSlope,

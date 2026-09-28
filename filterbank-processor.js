@@ -37,6 +37,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const processorOptions = options?.processorOptions || {};
     this.modulationCore = new ModulationCore();
     this.lfoModuleEnabled = false;
+    this.envelopeModuleEnabled = false;
     this.lfoSources = [new LfoOscillator()];
     this.lfo = this.lfoSources[0];
     this.envelopeSources = [new EnvelopeFollower()];
@@ -1551,7 +1552,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     for (let index = 0; index < this.envelopeSources.length; index += 1) {
       const follower = this.envelopeSources[index];
       this.modulationCore.setSourceValue(follower.sourceId, {
-        value: follower.enabled ? follower.value : 0,
+        value: this.envelopeModuleEnabled && follower.enabled ? follower.value : 0,
         range: 'unipolar'
       });
     }
@@ -1610,6 +1611,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (typeof source.filterbankEnabled === 'boolean') this.filterbankEnabled = source.filterbankEnabled;
     if (Number.isFinite(Number(source.baseResonance))) this.baseResonance = this.clampResonance(source.baseResonance);
     this.lfoModuleEnabled = modulationState.lfoModuleEnabled;
+    this.envelopeModuleEnabled = source.envelopeModuleEnabled === true;
     if (source.clock && typeof source.clock === 'object') this.clockCore.configure(source.clock);
     this.dryWet = Number.isFinite(Number(source.dryWet)) ? Math.min(100, Math.max(0, Number(source.dryWet))) : this.dryWet;
     this.baseSpread = Number.isFinite(Number(source.baseSpread ?? source.spread)) ? Number(source.baseSpread ?? source.spread) : this.baseSpread;
@@ -2638,7 +2640,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     for (let frame = 0; frame < frameCount; frame += 1) {
       for (let index = 0; index < this.envelopeSources.length; index += 1) {
         const follower = this.envelopeSources[index];
-        if (follower.enabled) follower.process(inputChannels[0]?.[frame], inputChannels[1]?.[frame], sampleRate);
+        if (this.envelopeModuleEnabled && follower.enabled) follower.process(inputChannels[0]?.[frame], inputChannels[1]?.[frame], sampleRate);
       }
       this.advanceModulationFrame();
       this.effectiveDryWet = this.effectiveDryWetTarget + this.modulationGainSmoothingCoefficient
@@ -2704,7 +2706,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       }
     }
     if ((this.lfoModuleEnabled && this.lfoSources.some(oscillator => oscillator.enabled))
-      || this.envelopeSources.some(follower => follower.enabled) || this.modulationTelemetryDirty) {
+      || (this.envelopeModuleEnabled && this.envelopeSources.some(follower => follower.enabled)) || this.modulationTelemetryDirty) {
       this.modulationTelemetryCounter += frameCount;
       if (this.modulationTelemetryCounter >= this.modulationTelemetryInterval || this.modulationTelemetryDirty) {
         this.modulationTelemetryCounter %= this.modulationTelemetryInterval;
@@ -2716,7 +2718,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         }
         for (const follower of this.envelopeSources) {
           this.port.postMessage({ type: 'envelope-telemetry', sourceId: follower.sourceId,
-            enabled: follower.enabled, detectorMode: follower.detectorMode, value: follower.value });
+            enabled: this.envelopeModuleEnabled && follower.enabled, detectorMode: follower.detectorMode,
+            rawLevel: follower.rawLevel, value: follower.value, thresholdLevel: follower.thresholdLevel });
         }
         this.modulationTelemetryDirty = false;
       }

@@ -163,6 +163,7 @@ import { normalizeEnvelopeState } from './envelope-core.mjs';
     ...normalizeDynamicEqState(),
     ...normalizeModulationState(),
     ...normalizeEnvelopeState(),
+    envelopeModuleEnabled: false,
     lfoClock: normalizeClockState(),
     filterType: 'lowpass',
     filterFrequencyHz: 777,

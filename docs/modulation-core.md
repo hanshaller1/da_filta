@@ -126,7 +126,7 @@ modulation core. Clock Mod remains a future workspace.
 The first envelope source is `envelope.1`. State is count based in
 `envelopeSources`, with normalized source IDs, so later sources can use the
 same Source → Assignment → Target route. Source enable, PEAK/RMS mode, attack,
-release, sensitivity, amount, target, channel, and invert are regular app
+release, sensitivity, threshold, amount, target, channel, and invert are regular app
 state and travel through the same state snapshots as the LFO settings.
 
 The detector reads the existing stereo filterbank AudioWorklet input. The
@@ -139,6 +139,18 @@ the Worklet. Sensitivity is a 0…400% linear gain with 100% neutral. The
 detector continues to run only while its source is enabled; disabling the
 source removes its modulation contribution without changing assignments or
 base values.
+
+Envelope threshold semantics: the detector output is multiplied by sensitivity
+first, clamped to 0..1, then compared with the threshold amplitude
+`10^(thresholdDb/20)`. This retains the existing 0..400% sensitivity gain
+semantics. Below threshold the smoothed target is zero and the envelope falls
+through its configured release; above threshold the sensitivity-scaled detector
+level passes to attack/release smoothing. The order is input -> PEAK/RMS
+detector -> sensitivity -> threshold -> attack/release. The graph plots that
+sensitivity-scaled raw detector and the smoothed envelope from Worklet
+telemetry. Its dashed threshold guide uses the same dB-to-amplitude conversion
+as the detector comparison. Module power and source enable are separate gates
+and neither changes source settings, assignments, or base values.
 
 Envelope amount uses the same normalized target mapping as LFO amount. Invert
 is applied once by the modulation assignment. All sources targeting the same

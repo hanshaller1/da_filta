@@ -8,6 +8,9 @@ export const ENVELOPE_MIN_RELEASE_MS = 10;
 export const ENVELOPE_MAX_RELEASE_MS = 3000;
 export const ENVELOPE_MIN_SENSITIVITY = 0;
 export const ENVELOPE_MAX_SENSITIVITY = 400;
+export const ENVELOPE_MIN_THRESHOLD_DB = -60;
+export const ENVELOPE_MAX_THRESHOLD_DB = 0;
+export const ENVELOPE_DEFAULT_THRESHOLD_DB = -48;
 
 const clamp = (value, minimum, maximum, fallback) => {
   const number = Number(value);
@@ -22,6 +25,7 @@ export function normalizeEnvelopeSourceState(source = {}, index = 0) {
     attack: clamp(source.attack, ENVELOPE_MIN_ATTACK_MS, ENVELOPE_MAX_ATTACK_MS, 20),
     release: clamp(source.release, ENVELOPE_MIN_RELEASE_MS, ENVELOPE_MAX_RELEASE_MS, 250),
     sensitivity: clamp(source.sensitivity, ENVELOPE_MIN_SENSITIVITY, ENVELOPE_MAX_SENSITIVITY, 100),
+    thresholdDb: clamp(source.thresholdDb, ENVELOPE_MIN_THRESHOLD_DB, ENVELOPE_MAX_THRESHOLD_DB, ENVELOPE_DEFAULT_THRESHOLD_DB),
     amount: clamp(source.amount, 0, 100, 50),
     targetId: typeof source.targetId === 'string' ? source.targetId.trim() : '',
     channel: ['left', 'right', 'spread'].includes(source.channel) ? source.channel : 'both',
@@ -49,6 +53,9 @@ export class EnvelopeFollower {
     this.attack = 20;
     this.release = 250;
     this.sensitivity = 100;
+    this.thresholdDb = ENVELOPE_DEFAULT_THRESHOLD_DB;
+    this.thresholdLevel = 10 ** (this.thresholdDb / 20);
+    this.rawLevel = 0;
     this.value = 0;
     this.sampleRate = 0;
     this.attackCoefficient = 0;
@@ -75,6 +82,8 @@ export class EnvelopeFollower {
     this.attack = state.attack;
     this.release = state.release;
     this.sensitivity = state.sensitivity;
+    this.thresholdDb = state.thresholdDb;
+    this.thresholdLevel = 10 ** (this.thresholdDb / 20);
     if (detectorChanged || disabled) this.reset();
     return this;
   }
@@ -111,7 +120,10 @@ export class EnvelopeFollower {
       this.rmsSamplesSeen = Math.min(this.rmsWindow.length, this.rmsSamplesSeen + 1);
       detector = Math.sqrt(Math.max(0, this.rmsEnergy / this.rmsSamplesSeen));
     } else detector = Math.max(Math.abs(safeLeft), Math.abs(safeRight));
-    const target = Math.min(1, Math.max(0, detector * this.sensitivity / 100));
+    // Sensitivity retains its original meaning: gain is applied to the
+    // detector result first. Threshold compares that normalized result.
+    this.rawLevel = Math.min(1, Math.max(0, detector * this.sensitivity / 100));
+    const target = this.rawLevel >= this.thresholdLevel ? this.rawLevel : 0;
     const coefficient = target > this.value ? this.attackCoefficient : this.releaseCoefficient;
     const next = target + coefficient * (this.value - target);
     this.value = Number.isFinite(next) ? Math.min(1, Math.max(0, next)) : 0;
@@ -120,6 +132,7 @@ export class EnvelopeFollower {
 
   reset() {
     this.value = 0;
+    this.rawLevel = 0;
     this.rmsWindow.fill(0);
     this.rmsWindowIndex = 0;
     this.rmsSamplesSeen = 0;

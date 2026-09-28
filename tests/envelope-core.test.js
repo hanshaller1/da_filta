@@ -8,17 +8,54 @@ test('Envelope state defaults and restores count-based source settings', () => {
   assert.equal(defaults.envelopeCount, 1);
   assert.deepEqual(defaults.envelopeSources[0], {
     id: 'envelope.1', enabled: false, detectorMode: 'peak', attack: 20, release: 250,
-    sensitivity: 100, amount: 50, targetId: '', channel: 'both', invert: false
+    sensitivity: 100, thresholdDb: -48, amount: 50, targetId: '', channel: 'both', invert: false
   });
   const restored = normalizeEnvelopeState({ envelopeSources: [{
     enabled: true, detectorMode: 'rms', attack: 35, release: 800, sensitivity: 240,
-    amount: 62, targetId: 'filterbank.band.3.gainDb', channel: 'spread', invert: true
+    thresholdDb: -32, amount: 62, targetId: 'filterbank.band.3.gainDb', channel: 'spread', invert: true
   }] });
   assert.deepEqual(restored.envelopeSources[0], {
     id: 'envelope.1', enabled: true, detectorMode: 'rms', attack: 35, release: 800,
-    sensitivity: 240, amount: 62, targetId: 'filterbank.band.3.gainDb', channel: 'spread', invert: true
+    sensitivity: 240, thresholdDb: -32, amount: 62, targetId: 'filterbank.band.3.gainDb', channel: 'spread', invert: true
   });
   assert.deepEqual(normalizeEnvelopeSources({ envelopeCount: 3 }).map(source => source.id), ['envelope.1', 'envelope.2', 'envelope.3']);
+});
+
+test('threshold state defaults to -48 dB and clamps to -60..0 dB', () => {
+  assert.equal(normalizeEnvelopeState().envelopeSources[0].thresholdDb, -48);
+  assert.equal(normalizeEnvelopeState({ envelopeSources: [{ thresholdDb: -100 }] }).envelopeSources[0].thresholdDb, -60);
+  assert.equal(normalizeEnvelopeState({ envelopeSources: [{ thresholdDb: 20 }] }).envelopeSources[0].thresholdDb, 0);
+  assert.equal(normalizeEnvelopeState({ envelopeSources: [{ thresholdDb: 'bad' }] }).envelopeSources[0].thresholdDb, -48);
+});
+
+test('threshold follows sensitivity before attack and release in PEAK mode', () => {
+  const follower = new EnvelopeFollower({ enabled: true, detectorMode: 'peak', thresholdDb: -30, sensitivity: 100, attack: 100, release: 100 });
+  for (let index = 0; index < 2400; index += 1) follower.process(.01, .01, 48000);
+  assert.ok(follower.rawLevel > 0 && follower.rawLevel < follower.thresholdLevel);
+  assert.ok(follower.value < 1e-6);
+  for (let index = 0; index < 2400; index += 1) follower.process(.5, .5, 48000);
+  assert.ok(follower.rawLevel > follower.thresholdLevel);
+  assert.ok(follower.value > 0 && follower.value < follower.rawLevel, 'attack smooths the gated detector');
+  const beforeRelease = follower.value;
+  follower.process(0, 0, 48000);
+  assert.ok(follower.value < beforeRelease && follower.value > 0, 'release decays after the detector falls below threshold');
+});
+
+test('RMS threshold uses the RMS detector and sensitivity-adjusted level', () => {
+  const follower = new EnvelopeFollower({ enabled: true, detectorMode: 'rms', thresholdDb: -36, sensitivity: 50, attack: 1 });
+  for (let index = 0; index < 12000; index += 1) {
+    const sample = .2 * Math.sin(index * Math.PI * 2 * 1000 / 48000);
+    follower.process(sample, sample, 48000);
+  }
+  assert.ok(follower.rawLevel > 0.003 && follower.rawLevel < .1);
+  assert.ok(follower.rawLevel > follower.thresholdLevel);
+  assert.ok(follower.value > 0);
+  follower.configure({ enabled: true, detectorMode: 'rms', thresholdDb: -20, sensitivity: 50, attack: 1 });
+  for (let index = 0; index < 96000; index += 1) {
+    const sample = .2 * Math.sin(index * Math.PI * 2 * 1000 / 48000);
+    follower.process(sample, sample, 48000);
+  }
+  assert.ok(follower.value < 0.001, 'release approaches zero when the sensitivity-adjusted RMS falls below threshold');
 });
 
 test('PEAK is unipolar, follows attack and release, and applies sensitivity gain', () => {

@@ -1,6 +1,37 @@
 const { test, expect } = require('playwright/test');
 const { browserBundle } = require('./helpers/input-character-full-graph.cjs');
 
+test('Envelope module power is independent from workspace selection and source enable', async ({ page }) => {
+  await page.goto('/');
+  const power = page.locator('[data-module-power="envelope-follower"]');
+  await expect(power).toBeEnabled();
+  await expect(power).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('tab', { name: 'ENVELOPE FOLLOWER' }).click();
+  let state = await page.evaluate(() => window.EnvelopeMode.getState());
+  expect(state.envelopeModuleEnabled).toBe(false);
+  await page.locator('[data-envelope-enable]').click();
+  await power.click();
+  await expect(power).toHaveAttribute('aria-pressed', 'true');
+  state = await page.evaluate(() => window.EnvelopeMode.getState());
+  expect(state.envelopeModuleEnabled).toBe(true);
+  expect(state.envelopeSources[0].enabled).toBe(true);
+  const savedSource = { ...state.envelopeSources[0] };
+  await power.click();
+  await expect(power).toHaveAttribute('aria-pressed', 'false');
+  state = await page.evaluate(() => window.EnvelopeMode.getState());
+  expect(state.envelopeModuleEnabled).toBe(false);
+  expect(state.envelopeSources[0]).toEqual(savedSource);
+  await page.getByRole('tab', { name: 'LFO', exact: true }).click();
+  state = await page.evaluate(() => window.EnvelopeMode.getState());
+  expect(state.envelopeModuleEnabled).toBe(false);
+  expect(state.envelopeSources[0].enabled).toBe(true);
+  await power.click();
+  await page.getByRole('tab', { name: 'FILTER', exact: true }).click();
+  state = await page.evaluate(() => window.EnvelopeMode.getState());
+  expect(state.envelopeModuleEnabled).toBe(true);
+  expect(state.envelopeSources[0]).toEqual(savedSource);
+});
+
 test('Envelope workspace exposes the shared modulation targets and persists V1 controls', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('tab', { name: 'ENVELOPE FOLLOWER' }).click();
@@ -8,12 +39,15 @@ test('Envelope workspace exposes the shared modulation targets and persists V1 c
   await expect(page.locator('[data-envelope-attack]')).toBeVisible();
   await expect(page.locator('[data-envelope-release]')).toBeVisible();
   await expect(page.locator('[data-envelope-sensitivity]')).toBeVisible();
+  await expect(page.locator('[data-envelope-threshold]')).toBeVisible();
   await expect(page.locator('[data-envelope-amount]')).toBeVisible();
 
   await page.locator('[data-envelope-mode="rms"]').click();
+  const defaultThresholdY = Number(await page.locator('[data-envelope-threshold-line]').getAttribute('y1'));
   await page.locator('[data-envelope-attack]').evaluate(input => { input.value = '35'; input.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.locator('[data-envelope-release]').evaluate(input => { input.value = '700'; input.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.locator('[data-envelope-sensitivity]').evaluate(input => { input.value = '180'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.locator('[data-envelope-threshold]').evaluate(input => { input.value = '-18'; input.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.locator('[data-envelope-target]').selectOption('filterbank.band.3.gainDb');
   await page.locator('[data-envelope-channel]').selectOption('spread');
   await page.locator('[data-envelope-invert]').click();
@@ -22,11 +56,22 @@ test('Envelope workspace exposes the shared modulation targets and persists V1 c
   const state = await page.evaluate(() => window.EnvelopeMode.getState().envelopeSources[0]);
   expect(state).toMatchObject({
     id: 'envelope.1', enabled: true, detectorMode: 'rms', attack: 35, release: 700,
-    sensitivity: 180, targetId: 'filterbank.band.3.gainDb', channel: 'spread', invert: true
+    sensitivity: 180, thresholdDb: -18, targetId: 'filterbank.band.3.gainDb', channel: 'spread', invert: true
   });
   expect(await page.locator('[data-envelope-wave-path]').getAttribute('d')).toContain('M');
+  expect(await page.locator('[data-envelope-raw-wave-path]').getAttribute('d')).toContain('M');
+  const thresholdPosition = await page.locator('[data-envelope-threshold-line]').evaluate(line => Number(line.getAttribute('y1')));
+  expect(thresholdPosition).toBeCloseTo(114 - (10 ** (-18 / 20)) * 108, 2);
+  expect(thresholdPosition).not.toBeCloseTo(defaultThresholdY, 1);
+  expect(await page.locator('[data-envelope-threshold-output]').textContent()).toBe('-18 dB');
   expect(await page.locator('[data-envelope-mode="rms"]').getAttribute('aria-pressed')).toBe('true');
   expect(await page.locator('[data-envelope-enable]').getAttribute('aria-pressed')).toBe('true');
+  await page.evaluate(() => window.EnvelopeMode.getAudioEngine().onEnvelopeTelemetry({
+    type: 'envelope-telemetry', sourceId: 'envelope.1', enabled: true, detectorMode: 'rms',
+    rawLevel: .6, value: .3, thresholdLevel: 10 ** (-18 / 20)
+  }));
+  expect(await page.locator('[data-envelope-raw-wave-path]').getAttribute('d')).toContain('49.20');
+  expect(await page.locator('[data-envelope-wave-path]').getAttribute('d')).toContain('81.60');
   const targets = await page.evaluate(() => window.EnvelopeMode.getTargetRegistry().map(target => target.id));
   expect(targets).toContain('global.resonance');
   expect(targets).toContain('dynamicEq.thresholdDb');
@@ -43,7 +88,7 @@ test('Envelope detector runs in the Worklet, reports telemetry, and removes modu
       ...source, enabled: true, detectorMode: 'peak', attack: 20, release: 20,
       sensitivity: 100, amount: 50, targetId: 'filterbank.band.5.gainDb', channel: 'both'
     }));
-    const modulation = { ...engine.getModulationState(), envelopeSources };
+    const modulation = { ...engine.getModulationState(), envelopeModuleEnabled: true, envelopeSources };
     engine.setModulationState(modulation);
     const options = engine.getFilterbankState();
     options.bandFrequencies = [...window.Filterbank.BAND_FREQUENCIES];
@@ -58,6 +103,10 @@ test('Envelope detector runs in the Worklet, reports telemetry, and removes modu
     const graph = new Graph(48000, options, 'linear', false);
     const messages = [];
     graph.onTelemetry = message => messages.push(message);
+    graph.bank.setModulationState({ ...modulation, envelopeSources: [{ ...envelopeSources[0], thresholdDb: -6 }] });
+    for (let block = 0; block < 6; block += 1) graph.process([new Float32Array(128).fill(.4), new Float32Array(128).fill(.4)]);
+    const gatedOffset = graph.bank.modulationDirectBandOffsetsDb[5];
+    graph.bank.setModulationState(modulation);
     for (let block = 0; block < 30; block += 1) {
       const left = new Float32Array(128);
       const right = new Float32Array(128);
@@ -76,10 +125,19 @@ test('Envelope detector runs in the Worklet, reports telemetry, and removes modu
     const silenceValue = graph.bank.envelopeSources[0].value;
     const silencePacket = messages.filter(message => message.type === 'envelope-telemetry').at(-1) || null;
     const baseGainAfter = graph.bank.controlToGainDb(graph.bank.bandControls.left[5]);
+    graph.bank.setModulationState({ ...modulation, envelopeModuleEnabled: false });
+    for (let block = 0; block < 4; block += 1) graph.process([new Float32Array(128).fill(.4), new Float32Array(128).fill(.4)]);
+    const moduleOffOffset = graph.bank.modulationDirectBandOffsetsDb[5];
+    const sourceStillEnabled = graph.bank.envelopeSources[0].enabled;
+    graph.bank.setModulationState(modulation);
+    for (let block = 0; block < 4; block += 1) graph.process([new Float32Array(128).fill(.4), new Float32Array(128).fill(.4)]);
+    const moduleRestoredOffset = graph.bank.modulationDirectBandOffsetsDb[5];
     graph.bank.setModulationState({ ...modulation, envelopeSources: [{ ...envelopeSources[0], enabled: false }] });
     for (let block = 0; block < 4; block += 1) graph.process([new Float32Array(128).fill(.4), new Float32Array(128).fill(.4)]);
     return {
       activeValue, activeOffset, silenceValue, disabledValue: graph.bank.envelopeSources[0].value,
+      gatedOffset,
+      moduleOffOffset, moduleRestoredOffset, sourceStillEnabled,
       baseGainBefore, baseGainAfter, disabledOffset: graph.bank.modulationDirectBandOffsetsDb[5],
       envelopePacket: envelopePackets.at(-1) || null,
       silencePacket,
@@ -89,12 +147,20 @@ test('Envelope detector runs in the Worklet, reports telemetry, and removes modu
 
   expect(result.activeValue).toBeGreaterThan(.25);
   expect(result.activeOffset).toBeGreaterThan(0);
+  expect(result.gatedOffset).toBe(0);
+  expect(result.moduleOffOffset).toBe(0);
+  expect(result.sourceStillEnabled).toBe(true);
+  expect(result.moduleRestoredOffset).toBeGreaterThan(0);
   expect(result.silenceValue).toBeLessThan(result.activeValue);
   expect(result.disabledValue).toBe(0);
   expect(result.disabledOffset).toBe(0);
   expect(result.baseGainAfter).toBe(result.baseGainBefore);
   expect(result.envelopePacket).toMatchObject({ type: 'envelope-telemetry', sourceId: 'envelope.1', enabled: true });
   expect(result.envelopePacket.value).toBeGreaterThan(0);
+  expect(result.envelopePacket.rawLevel).toBeGreaterThanOrEqual(0);
+  expect(result.envelopePacket.rawLevel).toBeLessThanOrEqual(1);
+  expect(result.envelopePacket.value).toBeLessThanOrEqual(1);
+  expect(result.envelopePacket.thresholdLevel).toBeCloseTo(10 ** (-48 / 20), 8);
   expect(result.silencePacket.value).toBeLessThan(result.envelopePacket.value);
   expect(result.finite).toBe(true);
 });
@@ -107,12 +173,17 @@ test('Envelope workspace follows the LFO responsive split at the requested viewp
     const layout = await page.evaluate(() => {
       const graph = document.querySelector('.envelope-response').getBoundingClientRect();
       const controls = document.querySelector('.envelope-controls').getBoundingClientRect();
-      return { graph: { x: graph.x, y: graph.y, width: graph.width, height: graph.height }, controls: { x: controls.x, y: controls.y, width: controls.width, height: controls.height } };
+      const panel = document.querySelector('.envelope-controls');
+      const threshold = document.querySelector('[data-envelope-threshold]').getBoundingClientRect();
+      return { graph: { x: graph.x, y: graph.y, width: graph.width, height: graph.height }, controls: { x: controls.x, y: controls.y, width: controls.width, height: controls.height }, threshold: { width: threshold.width, height: threshold.height }, controlOverflow: panel.scrollWidth > panel.clientWidth };
     });
     expect(layout.graph.width).toBeGreaterThan(0);
     expect(layout.graph.height).toBeGreaterThan(0);
     expect(layout.controls.width).toBeGreaterThan(0);
     expect(layout.controls.height).toBeGreaterThan(0);
+    expect(layout.threshold.width).toBeGreaterThan(0);
+    expect(layout.threshold.height).toBeGreaterThan(0);
+    expect(layout.controlOverflow).toBe(false);
     if (viewport.width <= 1050) expect(layout.graph.y + layout.graph.height).toBeLessThanOrEqual(layout.controls.y + 1);
     else expect(layout.graph.x + layout.graph.width).toBeLessThanOrEqual(layout.controls.x + 1);
   }
