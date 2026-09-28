@@ -1639,7 +1639,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 }
 
 .lfo-mode-panel { min-height: 0; }
-.lfo-response .lfo-visualizer { min-height: 0; margin: 5px 0 0; overflow: hidden; background-image: linear-gradient(to bottom, color-mix(in srgb, var(--secondary-text) 8%, transparent) 1px, transparent 1px); background-size: 100% 45%; }
+.lfo-response .lfo-visualizer { min-height: 0; margin: 5px 0 0; overflow: hidden; }
 .lfo-visualizer svg { overflow: hidden; }
 .lfo-grid-line { stroke: color-mix(in srgb, var(--secondary-text) 20%, transparent); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .lfo-grid-line:nth-child(2) { stroke: color-mix(in srgb, var(--secondary-text) 32%, transparent); stroke-dasharray: 2 4; }
@@ -1734,7 +1734,6 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .envelope-response .envelope-visualizer { min-height: 0; background-size: 100% 45%; }
 .envelope-wave-path { stroke-width: 3.5; }
 .envelope-raw-wave-path { stroke-width: 1.5; opacity: .48; filter: none; }
-.envelope-visualizer .envelope-grid-midline { stroke-dasharray: none; }
 .envelope-threshold-line { stroke: var(--active-color, #f4d35e); opacity: .82; }
 .envelope-controls { grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; overflow: auto; }
 .envelope-detector-row { grid-template-columns: minmax(105px, .7fr) minmax(0, 1fr); align-items: end; gap: 8px; }

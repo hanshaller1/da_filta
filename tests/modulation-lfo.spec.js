@@ -1,6 +1,19 @@
 const { test, expect } = require('playwright/test');
 const { browserBundle } = require('./helpers/input-character-full-graph.cjs');
 
+test('LFO graph keeps one bipolar zero line and removes its duplicate horizontal background guide', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-mode="lfo"]').click();
+  const middleLines = page.locator('[data-lfo-visualizer] line.lfo-grid-line[y1="60"]');
+  await expect(middleLines).toHaveCount(1);
+  const graph = await page.locator('[data-lfo-visualizer]').evaluate(element => ({
+    linePositions: [...element.querySelectorAll('line.lfo-grid-line')].map(line => Number(line.getAttribute('y1'))),
+    backgroundImage: getComputedStyle(element).backgroundImage
+  }));
+  expect(graph.linePositions).toEqual([6, 60, 114]);
+  expect(graph.backgroundImage).not.toContain('to bottom');
+});
+
 test('worklet modulation keeps base values and evaluates FILTER, resonance, filterbank, and Dynamic EQ targets', async ({ page }) => {
   await page.goto('/');
   const bundle = browserBundle('http://localhost:3000');

@@ -41,6 +41,16 @@ test('Envelope workspace exposes the shared modulation targets and persists V1 c
   await expect(page.locator('[data-envelope-sensitivity]')).toBeVisible();
   await expect(page.locator('[data-envelope-threshold]')).toBeVisible();
   await expect(page.locator('[data-envelope-amount]')).toBeVisible();
+  await expect(page.locator('[data-envelope-visualizer] .envelope-raw-wave-path')).toHaveCount(1);
+  await expect(page.locator('[data-envelope-visualizer] .envelope-wave-path')).toHaveCount(1);
+  const thresholdStyle = await page.locator('[data-envelope-visualizer] .envelope-threshold-line').evaluate(line => ({
+    stroke: getComputedStyle(line).stroke, opacity: getComputedStyle(line).opacity
+  }));
+  expect(thresholdStyle.stroke).not.toBe('none');
+  expect(Number(thresholdStyle.opacity)).toBeGreaterThan(0);
+  await expect(page.locator('[data-envelope-visualizer] line.lfo-grid-line[y1="60"]')).toHaveCount(0);
+  const fixedGridPositions = await page.locator('[data-envelope-visualizer] line.lfo-grid-line').evaluateAll(lines => lines.map(line => Number(line.getAttribute('y1'))));
+  expect(fixedGridPositions).toEqual([6, 114]);
 
   await page.locator('[data-envelope-mode="rms"]').click();
   const defaultThresholdY = Number(await page.locator('[data-envelope-threshold-line]').getAttribute('y1'));
