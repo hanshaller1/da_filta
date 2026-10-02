@@ -262,6 +262,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       right: Array(this.bandCount).fill(0)
     };
     this.mainCommonFeedbackReturns = { left: 0, right: 0 };
+    this.mainSaturationOutput = 0;
     this.mainCommonSaturationOutputs = { left: 0, right: 0 };
     this.mainCommonNonFiniteResetCounts = { left: 0, right: 0 };
     this.zdfReturn = { left: 0, right: 0 };
@@ -1679,7 +1680,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.modulationControlCounter += 1;
     if (this.modulationControlCounter >= MODULATION_CONTROL_INTERVAL) {
       this.modulationControlCounter = 0;
-      this.updateModulationTargets();
+      // Static bases are applied by state/parameter messages. With no
+      // assignments there is no sample-varying registry contribution;
+      // clocks, sources and held Clock Mod updates still advance above.
+      if (this.modulationCore.assignments.length) this.updateModulationTargets();
     }
   }
 
@@ -1824,10 +1828,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       && this.commonBusSaturationMode === 'current';
     if (!experimentActive) {
       const feedbackReturn = this.applyCommonBusSaturation(drive);
-      return feedbackReturn === null ? null : { saturationOutput: feedbackReturn, feedbackReturn };
+      this.mainSaturationOutput = feedbackReturn === null ? 0 : feedbackReturn;
+      return feedbackReturn;
     }
     const saturationOutput = Math.tanh(4 * drive);
-    return { saturationOutput, feedbackReturn: 0.2 * saturationOutput };
+    this.mainSaturationOutput = saturationOutput;
+    return 0.2 * saturationOutput;
   }
 
   feedbackAllSoftKneeGain(resonance) {
@@ -2475,8 +2481,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         this.mainCommonSaturationOutputs[channel] = 0;
         this.mainCommonNonFiniteResetCounts[channel] += 1;
       } else {
-        this.mainCommonFeedbackReturns[channel] = saturation.feedbackReturn;
-        this.mainCommonSaturationOutputs[channel] = saturation.saturationOutput;
+        this.mainCommonFeedbackReturns[channel] = saturation;
+        this.mainCommonSaturationOutputs[channel] = this.mainSaturationOutput;
       }
     } else if (!zdfActive) {
       this.mainCommonFeedbackReturns[channel] = 0;

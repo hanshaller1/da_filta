@@ -7,15 +7,18 @@ assertions or tolerances; contract corrections are documented below.
 
 ## Profiles
 
-- Standard: `npm run test:browser` (241 active cases).
+- Standard: `npm run test:browser` (246 active cases).
 - Quarantine: `npm run test:browser:quarantine` (14 cases; failures keep exit code 1).
-- Full: `npm run test:browser:full` (255 cases, the disjoint union of both profiles).
+- Full: `npm run test:browser:full` (260 cases, the disjoint union of both profiles).
 - Smoke: `npm run test:browser:smoke` (ten individual active cases).
 
 On PowerShell use `npm.cmd`. Each profile writes to its own directory under
 `tests/artifacts/test-results/`. Tags are Playwright test metadata:
 `@quarantine` plus `@baseline-broken`. Only the individual cases below are tagged;
 other cases in the same specs remain active.
+
+P2 adds five active DSP/performance cases. The fourteen quarantine cases remain
+unchanged; P2 neither retires nor adds quarantine tags.
 
 ## Evidence and exact cases
 

@@ -22,15 +22,17 @@ for (let i = 0; i < CHARACTER_TAPS; i += 1) {
 for (let i = 0; i < CHARACTER_TAPS; i += 1) characterKernel[i] /= characterKernelSum;
 
 class CharacterUp2 {
-  constructor() { this.ring = new Float64Array(256); this.position = 0; }
+  // Mirrored finite history removes a wrap mask from every FIR tap. The
+  // coefficient and accumulation order remain the P1-C sample contract.
+  constructor() { this.ring = new Float64Array(512); this.position = 0; }
   process(input, output, length) {
     for (let i = 0; i < length; i += 1) {
-      this.ring[this.position] = input[i];
+      this.ring[this.position] = this.ring[this.position + 256] = input[i];
       for (let phase = 0; phase < 2; phase += 1) {
-        let sum = 0, position = this.position;
+        let sum = 0, position = this.position + 256;
         for (let tap = phase; tap < CHARACTER_TAPS; tap += 2) {
           sum += characterKernel[tap] * this.ring[position];
-          position = (position - 1) & 255;
+          position -= 1;
         }
         output[2 * i + phase] = sum * 2;
       }
@@ -39,15 +41,15 @@ class CharacterUp2 {
   }
 }
 class CharacterDown2 {
-  constructor() { this.ring = new Float64Array(512); this.position = 0; }
+  constructor() { this.ring = new Float64Array(1024); this.position = 0; }
   process(input, output, length) {
     for (let i = 0; i < length; i += 1) {
-      this.ring[this.position] = input[i];
+      this.ring[this.position] = this.ring[this.position + 512] = input[i];
       if (!(i & 1)) {
-        let sum = 0, position = this.position;
+        let sum = 0, position = this.position + 512;
         for (let tap = 0; tap < CHARACTER_TAPS; tap += 1) {
           sum += characterKernel[tap] * this.ring[position];
-          position = (position - 1) & 511;
+          position -= 1;
         }
         output[i / 2] = sum;
       }

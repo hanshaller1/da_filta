@@ -344,6 +344,7 @@
     }
 
     setPreDynamicGainDb(index, left, right) {
+      if (Object.is(this.preDynamicGainDbLeft[index], left) && Object.is(this.preDynamicGainDbRight[index], right)) return;
       this.preDynamicGainDbLeft[index] = left;
       this.preDynamicGainDbRight[index] = right;
       if (!this.disposed) this.workletNode.port.postMessage({ type: 'set-pre-dynamic-gain-db', index, left, right });
@@ -355,6 +356,7 @@
       const normalizedChannel = normalizeChannel(channel);
       const target = normalizedChannel === 'left' ? this.feedbackBandLeft : this.feedbackBandRight;
       const nextValue = Boolean(enabled);
+      if (target[index] === nextValue) return nextValue;
       target[index] = nextValue;
       this.workletNode.port.postMessage({
         type: 'set-band-feedback',
@@ -369,6 +371,7 @@
       if (this.disposed) return;
       const normalizedChannel = normalizeChannel(channel);
       const nextValue = Boolean(enabled);
+      if ((normalizedChannel === 'left' ? this.feedbackAllLeft : this.feedbackAllRight) === nextValue) return nextValue;
       if (normalizedChannel === 'left') this.feedbackAllLeft = nextValue;
       else this.feedbackAllRight = nextValue;
       this.workletNode.port.postMessage({

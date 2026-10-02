@@ -159,8 +159,17 @@ test('AudioEngine runtime controls drive the real Master → Guard → Safety pa
   await page.locator('[data-control="volume"]').fill('0');
   await page.locator('[data-audio-start]').click();
   await expect(page.locator('[data-audio-status]')).toHaveText('ON', { timeout: 15000 });
-  await page.waitForFunction(() => window.FilterbankDebugConsole.getOutputGuard()?.gainReductionDb > 0, null, { timeout: 5000 });
-  const fullDrums = await page.evaluate(() => window.FilterbankDebugConsole.getOutputGuard());
+  // Release can retain reduction in a later, quiet telemetry window. Wait
+  // for the loud drum window and assert that same packet, rather than reading
+  // another 15 Hz packet after the reduction-only wait has returned.
+  const fullDrumsPacket = await page.waitForFunction(() => {
+    const packet = window.FilterbankDebugConsole.getOutputGuard();
+    return packet?.gainReductionDb > 0 && packet.inPeakLeft > .5
+      && packet.outPeakLeft < packet.inPeakLeft && packet.activePercent > 0
+      ? { ...packet } : false;
+  }, null, { timeout: 5000 });
+  const fullDrums = await fullDrumsPacket.jsonValue();
+  await fullDrumsPacket.dispose();
   expect(fullDrums.inPeakLeft).toBeGreaterThan(.5);
   expect(fullDrums.outPeakLeft).toBeLessThan(fullDrums.inPeakLeft);
   expect(fullDrums.activePercent).toBeGreaterThan(0);

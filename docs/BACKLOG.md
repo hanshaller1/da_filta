@@ -60,9 +60,7 @@ Nach Implementierung von Envelope Follower V1:
 
 ## DSP / Audio
 
-- Optional später: 96-kHz Input-Character-Transition-Performance untersuchen/optimieren.
 - Legacy PHASE-2 bleibt LAB-Vergleich: spätere Promotion/Entfernung nur mit finalem Klang-/Kalibriervertrag und Audio-/CPU-Vergleich der bestehenden Cores entscheiden.
-- `feedbackAllEngine = legacy` prüfen und entfernen, falls endgültig unnötig.
 - Feedback-/Resonanzarchitektur langfristig weiter bewerten:
   - Common Bus als eigener da_filta-Charakter
   - lokale / Per-Band / ZDF-Varianten gezielt vergleichen
@@ -95,7 +93,7 @@ Nach Implementierung von Envelope Follower V1:
 
 - Produktiver Input-Character-FIR-Differenzpfad mit adaptiver 1×/2×/4×-Matrix,
   festen 192 Samples Latenz, warmem Stage-Handover und stummem Start integriert.
-  Native 96-kHz-Gesamtgraph-Reserve bleibt der separate Performance-Punkt oben;
+  Native 96-kHz-Gesamtgraph-Reserve ist im P2-Bericht unten quantifiziert;
   auch der alte 1×-Pfad zeigt im aktuellen Gesamtlastvergleich Budgetausreißer.
 - PHASE-2 fachlich eingeordnet: vorhandenen isolierten LOCAL-LAB-Vergleich
   behalten; keine zusätzliche, unkalibrierte Resonatorarchitektur erfinden.
@@ -105,6 +103,28 @@ Nach Implementierung von Envelope Follower V1:
 - Obsoleten MOD-Platzhalter entfernt; alte `modulated`-Werte bleiben beim Laden
   folgenlos. Aktive LFO-/Envelope-Assignments und Clock Mod sind unverändert.
 - P1-B MIDI bleibt vollständig offen; keine Mapping-/Learn-/Encoder-Arbeit.
+
+## Erledigt – P2 DSP / Performance (2026-10-02)
+
+- 48-/96-kHz-Input-Character-, Stage-Transition-, AudioWorklet-, Telemetrie-
+  und Feedback-Core-Kosten gegen den gemergten P1-C-Stand gemessen.
+  FIR-History, leere Assignment-Auswertung, MAIN-Ergebnisobjekte und redundante
+  reine Parameter-Targets verhaltensneutral optimiert; Audio-/State-Parität
+  bleibt samplegenau. Messmethodik und Grenzen: [P2-Bericht](p2-dsp-performance.md).
+- CURRENT Common/Local, Unified und Per-Band ZDF einschließlich Solver-
+  Iterationen/Fallbacks, positiver/negativer Resonanz und Band-Skalierung verglichen.
+  Bestehende Defaults und Klangverträge bleiben erhalten.
+- `feedbackAllEngine = legacy` geprüft und bewusst behalten: erreichbarer LAB-,
+  Snapshot- und eigener verzögerter MAIN-Klangvertrag. Eine spätere Entfernung
+  braucht eine ausdrückliche Produkt-/Kompatibilitätsentscheidung.
+- Native Heavy-/Worst-Case-Reserve quantifiziert. Browser-/Host-Ausreißer und
+  96-kHz-Heavy-/DEV-Budgetrisiken bleiben dokumentiert; keine allgemeine
+  Realtime-Garantie und keine Qualitätsreduktion eingeführt.
+- Im unveränderten P1-C-Stand reproduzierte Guard-Test-Race behoben: bestehende
+  Bedingungen an ein gemeinsames Telemetrie-Packet gebunden, alle Grenzwerte
+  und Guard-/Safety-DSP erhalten.
+- P1-B MIDI, Cross-Modulation/P2-Modulation, allgemeiner Architektur-Ausbau
+  und die langfristige Klangentscheidung zwischen den Cores bleiben offen.
 
 ## Status prüfen / möglicherweise bereits erledigt oder überholt
 
