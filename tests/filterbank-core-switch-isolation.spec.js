@@ -54,6 +54,11 @@ const CurrentProcessor = loadProcessor(fs.readFileSync(path.join(root, 'filterba
 const PreZdfProcessor = loadProcessor(execFileSync('git', ['show', 'd39cbb5^:filterbank-processor.js'], {
   cwd: root, encoding: 'utf8'
 }));
+// fa1c306 deliberately enabled signed CURRENT common/local/MAIN returns.
+// The pre-ZDF snapshot predates that contract and remains the positive reference.
+const SignedNegativeProcessor = loadProcessor(execFileSync('git', ['show', 'fa1c306:filterbank-processor.js'], {
+  cwd: root, encoding: 'utf8'
+}));
 
 function options(overrides = {}) {
   return {
@@ -91,7 +96,7 @@ function currentReturns(processor) {
   };
 }
 
-test('CURRENT remains bit-identical to the pre-ZDF processor across established configurations', { tag: ['@quarantine', '@baseline-broken'] }, () => {
+test('CURRENT preserves the pre-ZDF positive and signed-negative reference contracts', () => {
   const configurations = [
     {}, { feedbackTap: 'pre-gain' },
     { feedbackBandLeft: Array(10).fill(false), feedbackAllLeft: true },
@@ -106,20 +111,16 @@ test('CURRENT remains bit-identical to the pre-ZDF processor across established 
     { commonBusSaturationMode: 'constant-ceiling', commonBusDrive: 4, commonBusCeiling: 2 },
     { bandGainLeft: Array.from({ length: 10 }, (_, index) => index === 5 ? 100 : 0), feedbackTap: 'post-gain' }
   ];
-  let maxDifference = 0;
-  let maxDifferenceConfiguration = null;
   for (const configuration of configurations) {
-    const before = new PreZdfProcessor({ processorOptions: options(configuration) });
+    const ReferenceProcessor = configuration.resonance < 0 ? SignedNegativeProcessor : PreZdfProcessor;
+    const before = new ReferenceProcessor({ processorOptions: options(configuration) });
     const current = new CurrentProcessor({ processorOptions: options(configuration) });
     const input = frame => frame < 1500 ? 0.02 * Math.sin(2 * Math.PI * 777 * frame / 48000) : 0;
     const beforeOutput = run(before, 8192, input);
     const currentOutput = run(current, 8192, input);
-    for (let frame = 0; frame < currentOutput.length; frame += 1) {
-      const difference = Math.abs(beforeOutput[frame] - currentOutput[frame]);
-      if (difference > maxDifference) { maxDifference = difference; maxDifferenceConfiguration = configuration; }
-    }
+    expect(currentOutput.every(Number.isFinite), JSON.stringify(configuration)).toBe(true);
+    expect(currentOutput, JSON.stringify(configuration)).toEqual(beforeOutput);
   }
-  expect(maxDifference, JSON.stringify(maxDifferenceConfiguration)).toBe(0);
 });
 
 test('CURRENT to ZDF to CURRENT preserves CURRENT returns and does not reset shared base filters', () => {

@@ -1635,7 +1635,8 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .lfo-response .lfo-visualizer { min-height: 0; margin: 5px 0 0; overflow: hidden; }
 .lfo-visualizer svg { overflow: hidden; }
 .lfo-grid-line { stroke: color-mix(in srgb, var(--secondary-text) 20%, transparent); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.lfo-grid-line:nth-child(2) { stroke: color-mix(in srgb, var(--secondary-text) 32%, transparent); stroke-dasharray: 2 4; }
+.lfo-grid-line[data-lfo-zero-line], [data-envelope-visualizer] .lfo-grid-line:nth-child(2) { stroke: color-mix(in srgb, var(--secondary-text) 32%, transparent); stroke-dasharray: 2 4; }
+.lfo-value-axis { position: absolute; top: 5%; bottom: 5%; left: 7px; display: flex; flex-direction: column; justify-content: space-between; color: var(--secondary-text); font-size: var(--text-micro); pointer-events: none; }
 .lfo-wave-path { fill: none; stroke: var(--cyan); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--cyan) 28%, transparent)); }
 .lfo-phase-line { stroke: var(--active-color, #f4d35e); stroke-width: 1.5; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
 .lfo-phase-dot { fill: var(--active-color, #f4d35e); stroke: var(--graph-background); stroke-width: 2; vector-effect: non-scaling-stroke; }

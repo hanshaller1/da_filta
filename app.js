@@ -1607,6 +1607,9 @@ const lfoRateInput = document.querySelector('[data-lfo-rate]');
 const lfoAmountInput = document.querySelector('[data-lfo-amount]');
 const lfoPhaseInput = document.querySelector('[data-lfo-phase]');
 const lfoWavePath = document.querySelector('[data-lfo-wave-path]');
+const lfoVisualizer = document.querySelector('[data-lfo-visualizer]');
+const lfoAxisLabels = [...document.querySelectorAll('[data-lfo-axis-value]')];
+const lfoGridLines = [...document.querySelectorAll('[data-lfo-visualizer] .lfo-grid-line')];
 const lfoPhaseLine = document.querySelector('[data-lfo-phase-line]');
 const lfoPhaseDot = document.querySelector('[data-lfo-phase-dot]');
 const lfoPhaseReadout = document.querySelector('[data-lfo-phase-readout]');
@@ -2199,17 +2202,36 @@ const lfoDisplaySample = (source, phase) => {
   const polarityValue = source.polarity === 'unipolar' ? (raw + 1) / 2 : raw;
   return source.invert ? -polarityValue : polarityValue;
 };
+const getLfoDisplayDomain = source => source.polarity === 'unipolar'
+  ? (source.invert ? { min: -1, max: 0 } : { min: 0, max: 1 })
+  : { min: -1, max: 1 };
+const lfoDisplayY = (value, domain) => 114 - (value - domain.min) / (domain.max - domain.min) * 108;
+const renderLfoAxis = domain => {
+  if (!lfoVisualizer) return;
+  lfoVisualizer.dataset.valueMin = String(domain.min);
+  lfoVisualizer.dataset.valueMax = String(domain.max);
+  const values = [domain.max, (domain.min + domain.max) / 2, domain.min];
+  const label = value => value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : '0';
+  lfoAxisLabels.forEach((element, index) => { element.textContent = label(values[index]); });
+  lfoGridLines.forEach((line, index) => {
+    line.dataset.lfoValue = String(values[index]);
+    line.toggleAttribute('data-lfo-zero-line', values[index] === 0);
+  });
+  lfoVisualizer.querySelector('svg')?.setAttribute('aria-label',
+    `Selected LFO waveform and audio-thread phase, range ${label(domain.min)} to ${label(domain.max)}`);
+};
 const renderLfoWaveform = () => {
   if (!lfoWavePath) return;
   const source = getSelectedLfo();
   if (!source) return;
+  const domain = getLfoDisplayDomain(source);
+  renderLfoAxis(domain);
   const count = 128;
   let path = '';
   for (let index = 0; index <= count; index += 1) {
     const phase = index / count;
     const value = lfoDisplaySample(source, phase);
-    const unipolarView = source.polarity === 'unipolar' && !source.invert;
-    const y = unipolarView ? 114 - value * 102 : 60 - value * 48;
+    const y = lfoDisplayY(value, domain);
     path += `${index ? 'L' : 'M'}${(phase * 1000).toFixed(2)} ${y.toFixed(2)} `;
   }
   lfoWavePath.setAttribute('d', path.trim());
@@ -2223,12 +2245,12 @@ const renderLfoPhase = () => {
   const x = phase * 1000;
   const telemetrySample = lfoTelemetrySampleValue(telemetry);
   const sample = telemetrySample ?? lfoDisplaySample(source, phase);
-  const unipolarView = source.polarity === 'unipolar' && !source.invert;
-  const y = unipolarView ? 114 - sample * 102 : 60 - sample * 48;
+  const y = lfoDisplayY(sample, getLfoDisplayDomain(source));
   lfoPhaseLine.setAttribute('x1', x.toFixed(2));
   lfoPhaseLine.setAttribute('x2', x.toFixed(2));
   lfoPhaseDot.setAttribute('cx', x.toFixed(2));
   lfoPhaseDot.setAttribute('cy', y.toFixed(2));
+  lfoPhaseDot.dataset.value = String(sample);
   const clockRate = source.rateMode === 'sync' ? `${source.syncDivision} · ${getMidiStatusText()}` : lfoFormatRate(source.rateHz);
   const sampleReadout = telemetrySample === null ? '' : ` · ${telemetrySample > 0 ? '+' : ''}${telemetrySample.toFixed(2)}`;
   if (lfoPhaseReadout) lfoPhaseReadout.textContent = `${Math.round(phase * 360)}° · ${clockRate}${sampleReadout}`;

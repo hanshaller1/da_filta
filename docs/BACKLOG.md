@@ -1,6 +1,6 @@
 # da_filta Backlog
 
-Stand: 2026-09-28
+Stand: 2026-10-02
 
 Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungsthemen. Erledigte Punkte sollen aus dem offenen Backlog entfernt oder in einen kurzen Abschnitt „Erledigt“ verschoben werden. Neue bestätigte Aufgaben sollen hier ergänzt werden.
 
@@ -31,7 +31,6 @@ Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungstheme
   - kleiner Status-/Warnindikator am LFO-Eintrag im Modusauswahlpanel.
   - bei erneut gültigem Target automatisch reaktivieren.
   - Beispiel: LFO targetet FILTER Frequency; FILTER wird auf Formant/Vowel gewechselt und Frequency ist dort nicht verfügbar.
-- Unipolar-LFO-Visualisierung korrigieren: 0…+1 statt −1…+1 darstellen.
 
 ## Envelope Follower / Modulation
 
@@ -80,8 +79,6 @@ Nach Implementierung von Envelope Follower V1:
 
 - Produktives Input-Character-Oversampling integrieren.
 - Optional später: 96-kHz Input-Character-Transition-Performance untersuchen/optimieren.
-- `filterbank-core-switch-isolation.spec.js` genauer untersuchen.
-- `filterbank-feedback.spec.js` genauer untersuchen.
 - PHASE-2 Resonatorpfad fachlich entscheiden.
 - `feedbackAllEngine = legacy` prüfen und entfernen, falls endgültig unnötig.
 - `spreadCurve` / `spreadMode` sinnvoll implementieren, migrieren oder entfernen.
@@ -89,7 +86,6 @@ Nach Implementierung von Envelope Follower V1:
 - Feedback-/Resonanzarchitektur langfristig weiter bewerten:
   - Common Bus als eigener da_filta-Charakter
   - lokale / Per-Band / ZDF-Varianten gezielt vergleichen
-- Negative Resonanz erneut gezielt prüfen: Nutzerbericht war, dass bei erstmaligem Hörtest keine hörbare Auswirkung bei beliebigen Parametereinstellungen feststellbar war.
 
 ## Code / Architektur / Wartbarkeit
 
@@ -101,6 +97,19 @@ Nach Implementierung von Envelope Follower V1:
   - DSP
 - Modulation Core weiter als allgemeines `Source → Assignment → Target → Effective Value`-System ausbauen.
 - AudioWorklet-/Parameterverwaltung bei passenden Umbauten weiter aufräumen.
+
+## Erledigt – P0 Quality (2026-10-02)
+
+- Negative Resonanz über UI, State, AudioEngine, Wrapper, Worklet und geschützten
+  Output geprüft. Audiovergleiche für CURRENT, Common Bus, Local Loop, Unified ZDF
+  und Per-Band ZDF bei 44,1/48/96 kHz belegen signed DSP-Wirkung. Geschlossene Gates
+  und FILTERBANK OFF bleiben neutral; kein bestätigter DSP-Bug, keine Klangänderung.
+- Core-Switch-Quarantäne aufgelöst: positive Pre-ZDF- und bewusst geänderte negative
+  CURRENT-Verträge behalten jeweils exakte historische Sample-Identität.
+- Feedback-Quarantäne aufgelöst: produktiver CURRENT-Bus, gepaarte Audiovergleiche
+  und Tail-Energie in vier Zeitfenstern ersetzen Annahmen des alten Resonatorpfads.
+- LFO-Visualisierung: Achse, Nulllinie, Preview und finaler Live-Marker verwenden
+  bipolar −1…+1, unipolar 0…+1 und mit INVERT −1…0. LFO-DSP unverändert.
 
 ## Status prüfen / möglicherweise bereits erledigt oder überholt
 

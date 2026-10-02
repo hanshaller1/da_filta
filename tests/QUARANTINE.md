@@ -2,13 +2,14 @@
 
 Quarantine keeps established baseline failures executable and visible while
 excluding them from ordinary active runs. It does not fix them or accept their
-DSP/UI behavior as correct. No tests, assertions or tolerances were removed.
+DSP/UI behavior as correct. Quarantine tags do not remove test bodies or change
+assertions or tolerances; contract corrections are documented below.
 
 ## Profiles
 
-- Standard: `npm run test:browser` (226 active cases).
-- Quarantine: `npm run test:browser:quarantine` (16 cases; failures keep exit code 1).
-- Full: `npm run test:browser:full` (242 cases, the disjoint union of both profiles).
+- Standard: `npm run test:browser` (231 active cases).
+- Quarantine: `npm run test:browser:quarantine` (14 cases; failures keep exit code 1).
+- Full: `npm run test:browser:full` (245 cases, the disjoint union of both profiles).
 - Smoke: `npm run test:browser:smoke` (ten individual active cases).
 
 On PowerShell use `npm.cmd`. Each profile writes to its own directory under
@@ -30,9 +31,7 @@ The focused baseline log is locally available at
 | Spec | Exact test title | Reproduced failure |
 | --- | --- | --- |
 | `band-value-display.spec.js` | band value displays mirror the configured asymmetric dB mapping | DEV limit select is hidden in the initial workspace; action times out. |
-| `filterbank-core-switch-isolation.spec.js` | CURRENT remains bit-identical to the pre-ZDF processor across established configurations | CURRENT vs historical processor max difference 0.6003350987939212; exact-zero assertion retained. |
 | `filterbank-debug-console.spec.js` | DEV LAB structured debug console opens and remains an internal, passive surface | Tooltip remains hidden after the old focus interaction. |
-| `filterbank-feedback.spec.js` | AudioWorklet feedback, FB ALL and resonance remain finite, stereo-isolated and additive | Feedback tail 2.314693575700133e-12 vs required >1e-9. |
 | `filterbank-local-loop-exp.spec.js` | LOCAL LOOP EXP keeps individual feedback returns local and coexists with MAIN | Old COMMON BUS label vs current COMMON BUS ? DA_FILTA-ORIGINAL. |
 | `filterbank-local-loop-tuning.spec.js` | DEV LOCAL LOOP TUNING is a CURRENT-by-default LOCAL FEEDBACK control | Old test setup selects a disabled LOCAL LOOP TUNING control. |
 | `filterbank-response-alignment.spec.js` | FILTERBANK response uses FILTER panel and graph surfaces across desktop sizes | Graph tick count is 10 vs required >10. |
@@ -45,6 +44,31 @@ The focused baseline log is locally available at
 | `slider-touch-targets.spec.js` | compact tablet keeps every fader hit zone in its own card | Old all-fader query counts 30 L/R/base rails vs expected ten. |
 | `ui-layout-formatting.spec.js` | compact UI keeps normalized resonance and spread display formatting | Old output format expects 0 vs current 0.0 dB. |
 | `ui-viewport-regression.spec.js` | desktop viewport contains the complete open DEV/LAB layout | Old DOM/layout probe dereferences a removed element. |
+
+## P0 retirements (2026-10-02)
+
+Both exact DSP failures reproduced at the clean cleanup base `fe81d3f` before
+their test contracts were corrected. No DSP implementation or tolerance changed.
+
+- Core switch: the pre-ZDF reference `dfbb30f` predates the intentional signed
+  negative CURRENT paths in `fa1c306`. All ten positive configurations still
+  match the original reference exactly; all three negative configurations match
+  `fa1c306` exactly. The 0.6003350987939212 difference began at frame 1 in the old
+  legacy MAIN audition/dispatch, with identical base filter states at that frame.
+  The active test retains exact sample equality and both historical contracts.
+- Feedback: implicit wrapper defaults selected isolated TPT/reference-delta/legacy
+  MAIN. The cold impulse measured a tiny nonlinear-minus-linear audition residual,
+  not production CURRENT common-bus feedback. The active test explicitly selects
+  AudioEngine defaults, uses band-centred bursts, pairs identical sample rates,
+  and checks audio/tail differences against resonance zero. Four post-excitation
+  windows retain energy evidence; finite output, LOCAL+MAIN coexistence, stereo
+  isolation and constants remain checked. Tail differences still must exceed
+  1e-9; first-sample audition and monotonic signed-tail assumptions were replaced
+  by the applicable rendered-audio contract.
+
+The two tags were removed only from these cases after focused verification.
+Three new active cases cover signed rendered audio, the UI-to-protected-output
+path and LFO display domains. The other fourteen quarantine cases are unchanged.
 
 ## Admission and retirement
 

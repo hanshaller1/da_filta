@@ -12,6 +12,59 @@ test('LFO graph keeps one bipolar zero line and removes its duplicate horizontal
   }));
   expect(graph.linePositions).toEqual([6, 60, 114]);
   expect(graph.backgroundImage).not.toContain('to bottom');
+  // Envelope shares this grid class; its existing lower guide stays dashed.
+  const envelopeGuide = await page.locator('[data-envelope-visualizer] .lfo-grid-line').nth(1)
+    .evaluate(line => getComputedStyle(line).strokeDasharray);
+  expect(envelopeGuide).toBe('2px, 4px');
+});
+
+test('LFO preview, axis and final live samples use bipolar, unipolar and inverted-unipolar domains', async ({ page }) => {
+  await page.setViewportSize({ width: 1914, height: 907 });
+  await page.goto('/');
+  await page.locator('[data-mode="lfo"]').click();
+  await page.locator('[data-lfo-source-enable]').click();
+  await page.locator('[data-module-power="lfo"]').click();
+  const graph = () => page.locator('[data-lfo-visualizer]').evaluate(element => ({
+    min: Number(element.dataset.valueMin), max: Number(element.dataset.valueMax),
+    labels: [...element.querySelectorAll('[data-lfo-axis-value]')].map(label => label.textContent),
+    grid: [...element.querySelectorAll('.lfo-grid-line')].map(line => ({ value: Number(line.dataset.lfoValue), y: Number(line.getAttribute('y1')) })),
+    zero: [...element.querySelectorAll('[data-lfo-zero-line]')].map(line => Number(line.getAttribute('y1'))),
+    ys: [...element.querySelector('[data-lfo-wave-path]').getAttribute('d').matchAll(/[ML][\d.]+ ([\d.-]+)/g)].map(match => Number(match[1])),
+    markerY: Number(element.querySelector('[data-lfo-phase-dot]').getAttribute('cy')),
+    markerValue: Number(element.querySelector('[data-lfo-phase-dot]').dataset.value)
+  }));
+  const emit = value => page.evaluate(value => window.LfoMode.getAudioEngine().onLfoTelemetry({
+    sourceId: 'lfo.1', enabled: true, phase: .25, rateHz: 1, value
+  }), value);
+  const bipolar = await graph();
+  expect([bipolar.min, bipolar.max]).toEqual([-1, 1]);
+  expect(bipolar.labels).toEqual(['+1', '0', '−1']);
+  expect(bipolar.zero).toEqual([bipolar.grid[1].y]);
+  expect(Math.min(...bipolar.ys)).toBeLessThan(bipolar.zero[0]);
+  expect(Math.max(...bipolar.ys)).toBeGreaterThan(bipolar.zero[0]);
+
+  await page.locator('[data-lfo-polarity="unipolar"]').click();
+  for (const invert of [false, true]) {
+    if (invert) await page.locator('[data-lfo-invert]').click();
+    for (const waveform of ['sine', 'triangle', 'saw-up', 'saw-down', 'square', 'pulse', 'sample-hold', 'noise']) {
+      await page.locator(`[data-lfo-waveform="${waveform}"]`).click();
+      const view = await graph();
+      expect([view.min, view.max]).toEqual(invert ? [-1, 0] : [0, 1]);
+      expect(view.labels).toEqual(invert ? ['0', '−0.5', '−1'] : ['+1', '+0.5', '0']);
+      expect(view.grid.map(line => line.value)).toEqual(invert ? [0, -.5, -1] : [1, .5, 0]);
+      expect(view.zero).toEqual([view.grid[invert ? 0 : 2].y]);
+      expect(view.ys.length).toBeGreaterThan(100);
+      expect(Math.min(...view.ys)).toBeGreaterThanOrEqual(view.grid[0].y);
+      expect(Math.max(...view.ys)).toBeLessThanOrEqual(view.grid[2].y);
+      for (const value of invert ? [0, -.25, -1] : [0, .25, 1]) {
+        await emit(value);
+        const live = await graph();
+        expect(live.markerValue).toBe(value);
+        const fraction = invert ? -value : 1 - value;
+        expect(live.markerY).toBeCloseTo(live.grid[0].y + fraction * (live.grid[2].y - live.grid[0].y), 2);
+      }
+    }
+  }
 });
 
 test('worklet modulation keeps base values and evaluates FILTER, resonance, filterbank, and Dynamic EQ targets', async ({ page }) => {
@@ -397,17 +450,17 @@ test('LFO live marker and readout use the final worklet sample for every wavefor
     await page.locator(`[data-lfo-waveform="${waveform}"]`).click();
     await emit(.6);
     const positive = await marker();
-    expect(positive.y).toBeCloseTo(31.2, 1);
+    expect(positive.y).toBeCloseTo(27.6, 1);
     expect(positive.readout).toContain('+0.60');
     expect(positive.path).toMatch(/^M0\.00 /);
     await page.locator('[data-lfo-invert]').click();
     await emit(-.6);
     const negative = await marker();
-    expect(negative.y).toBeCloseTo(88.8, 1);
+    expect(negative.y).toBeCloseTo(92.4, 1);
     expect(negative.readout).toContain('-0.60');
     await emit(-.4);
     const changedLiveValue = await marker();
-    expect(changedLiveValue.y).toBeCloseTo(79.2, 1);
+    expect(changedLiveValue.y).toBeCloseTo(81.6, 1);
     expect(changedLiveValue.readout).toContain('-0.40');
     expect(changedLiveValue.path).toBe(negative.path);
     await page.locator('[data-lfo-invert]').click();
@@ -416,17 +469,17 @@ test('LFO live marker and readout use the final worklet sample for every wavefor
   for (const waveform of ['sine', 'triangle', 'saw-up', 'saw-down', 'square', 'pulse']) {
     await page.locator(`[data-lfo-waveform="${waveform}"]`).click();
     await emit(.25);
-    expect((await marker()).y).toBeCloseTo(48, 1);
+    expect((await marker()).y).toBeCloseTo(46.5, 1);
     await page.locator('[data-lfo-invert]').click();
     await emit(-.25);
-    expect((await marker()).y).toBeCloseTo(72, 1);
+    expect((await marker()).y).toBeCloseTo(73.5, 1);
     await page.locator('[data-lfo-invert]').click();
     await page.locator('[data-lfo-polarity="unipolar"]').click();
     await emit(.75);
-    expect((await marker()).y).toBeCloseTo(37.5, 1);
+    expect((await marker()).y).toBeCloseTo(33, 1);
     await page.locator('[data-lfo-invert]').click();
     await emit(-.75);
-    expect((await marker()).y).toBeCloseTo(96, 1);
+    expect((await marker()).y).toBeCloseTo(87, 1);
     await page.locator('[data-lfo-invert]').click();
     await page.locator('[data-lfo-polarity="bipolar"]').click();
   }
