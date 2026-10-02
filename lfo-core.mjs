@@ -1,3 +1,5 @@
+import { normalizeModulationAssignments } from './modulation-core.mjs';
+
 export const LFO_WAVEFORMS = Object.freeze(['sine', 'triangle', 'saw-up', 'saw-down', 'square', 'pulse', 'sample-hold', 'noise']);
 export const LFO_MIN_RATE_HZ = 0.01;
 export const LFO_MAX_RATE_HZ = 20;
@@ -22,8 +24,15 @@ export function normalizeLfoSourceState(source = {}, index = 0, legacy = false) 
   const enabled = source.enabled ?? (legacy ? source.lfoEnabled : undefined);
   const amount = source.amount ?? (legacy ? source.lfoAmount : undefined);
   const seed = source.seed ?? (legacy ? source.lfoSeed : undefined);
+  const id = `lfo.${index + 1}`;
+  const assignments = normalizeModulationAssignments(Array.isArray(source.assignments) ? source.assignments : [{
+    targetId, amount: clamp(amount, 0, 100, 25), channel: source.channel,
+    // Legacy LFO invert is already applied by the oscillator, not the route.
+    invert: false
+  }], id);
+  const first = assignments[0];
   return {
-    id: `lfo.${index + 1}`,
+    id,
     enabled: enabled === true,
     waveform: LFO_WAVEFORMS.includes(waveform) ? waveform : 'sine',
     rateMode: source.rateMode === 'sync' ? 'sync' : 'free',
@@ -31,24 +40,26 @@ export function normalizeLfoSourceState(source = {}, index = 0, legacy = false) 
     syncDivision: LFO_SYNC_DIVISIONS.includes(source.syncDivision) ? source.syncDivision : '1/4',
     polarity: source.polarity === 'unipolar' || (legacy && source.lfoPolarity === 'unipolar') ? 'unipolar' : 'bipolar',
     phaseOffsetDeg: clamp(phase, 0, 360, 0),
-    amount: clamp(amount, 0, 100, 25),
-    targetId: typeof targetId === 'string' ? targetId.trim() : '',
-    channel: ['left', 'right'].includes(source.channel) ? source.channel : 'both',
+    assignments,
+    // Read aliases for old snapshots/API consumers. Assignments own routing.
+    amount: first?.amount ?? 0,
+    targetId: first?.targetId ?? '',
+    channel: first?.channel ?? 'both',
     invert: source.invert === true,
     seed: normalizeSeed(seed)
   };
 }
 
 export function createLfoSources(count = LFO_DEFAULT_COUNT, initialSource = {}) {
-  const safeCount = Math.max(0, Math.floor(clamp(count, 0, 256, LFO_DEFAULT_COUNT)));
+  const safeCount = Math.max(0, Math.floor(clamp(count, 0, LFO_DEFAULT_COUNT, LFO_DEFAULT_COUNT)));
   return Array.from({ length: safeCount }, (_, index) => normalizeLfoSourceState(
     index === 0 ? initialSource : {}, index, index === 0 && Object.keys(initialSource).some(key => key.startsWith('lfo'))
   ));
 }
 
-export function normalizeLfoSources(source = {}, requestedCount) {
+export function normalizeLfoSources(source = {}) {
   const supplied = Array.isArray(source.lfoSources) ? source.lfoSources : null;
-  const count = Math.max(1, Math.floor(clamp(requestedCount ?? source.lfoCount ?? supplied?.length ?? LFO_DEFAULT_COUNT, 1, 256, LFO_DEFAULT_COUNT)));
+  const count = LFO_DEFAULT_COUNT;
   return Array.from({ length: count }, (_, index) => supplied
     ? normalizeLfoSourceState(supplied[index] || {}, index)
     : normalizeLfoSourceState(source, index, index === 0));

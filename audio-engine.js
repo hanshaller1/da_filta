@@ -439,13 +439,11 @@
     getModulationState() {
       const lfo = window.ResonantState.normalizeModulationState(this);
       const envelope = window.ResonantState.normalizeEnvelopeState(this);
-      const assignments = lfo.lfoSources.filter(item => item.targetId).map(item => ({
+      const assignments = lfo.lfoSources.flatMap(item => item.assignments.filter(assignment => assignment.targetId))
+        .concat(envelope.envelopeSources.filter(item => item.targetId).map(item => ({
+        id: `${item.id}.assignment.1`,
         sourceId: item.id, targetId: item.targetId, amount: item.amount,
-        ...(item.channel && item.channel !== 'both' ? { channel: item.channel } : {})
-      })).concat(envelope.envelopeSources.filter(item => item.targetId).map(item => ({
-        sourceId: item.id, targetId: item.targetId, amount: item.amount,
-        ...(item.channel && item.channel !== 'both' ? { channel: item.channel } : {}),
-        ...(item.invert ? { invert: true } : {})
+        channel: item.channel || 'both', invert: item.invert === true, enabled: true
       })));
       return {
         ...lfo,

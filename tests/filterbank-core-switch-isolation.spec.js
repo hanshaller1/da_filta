@@ -25,7 +25,7 @@ function loadProcessor(source) {
     moduleSource('tpt-svf.js', ['LinearTptSvf', 'OversampledPositiveTptResonator']),
     moduleSource('dynamic-eq-core.mjs', ['normalizeDynamicEq', 'targetGainDb', 'smoothGain', 'timeCoefficient']),
     moduleSource('filter-shape-core.mjs', ['FilterShape'], true),
-    moduleSource('modulation-core.mjs', ['ModulationCore']),
+    moduleSource('modulation-core.mjs', ['ModulationCore', 'normalizeModulationAssignments']),
     moduleSource('lfo-core.mjs', ['LfoOscillator', 'normalizeModulationState', 'LFO_MIN_RATE_HZ', 'LFO_MAX_RATE_HZ', 'LFO_SYNC_DIVISIONS']),
     moduleSource('envelope-core.mjs', ['EnvelopeFollower', 'normalizeEnvelopeSources']),
     moduleSource('clock-core.mjs', ['ClockCore', 'SYNC_DIVISION_BEATS']),

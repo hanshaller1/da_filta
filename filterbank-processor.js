@@ -38,6 +38,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
     const processorOptions = options?.processorOptions || {};
     this.modulationCore = new ModulationCore();
+    // Direct band contributions join Clock Mod/FILTER/spread before the
+    // existing final band-gain clamp. No intermediate saturation of routes.
+    this.deferModulationBandClamp = true;
     this.lfoModuleEnabled = false;
     this.envelopeModuleEnabled = false;
     this.lfoSources = [new LfoOscillator()];
@@ -1554,16 +1557,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     for (let index = 0; index < this.lfoSources.length; index += 1) {
       const oscillator = this.lfoSources[index];
       const active = this.lfoModuleEnabled && oscillator.enabled;
-      this.modulationCore.setSourceValue(`lfo.${index + 1}`, active
-        ? { value: oscillator.sampleValue, range: oscillator.polarity }
-        : { value: 0, range: 'bipolar' });
+      this.modulationCore.setSourceValue(oscillator.sourceId, active ? oscillator.sampleValue : 0, oscillator.polarity, active);
     }
     for (let index = 0; index < this.envelopeSources.length; index += 1) {
       const follower = this.envelopeSources[index];
-      this.modulationCore.setSourceValue(follower.sourceId, {
-        value: this.envelopeModuleEnabled && follower.enabled ? follower.value : 0,
-        range: 'unipolar'
-      });
+      const active = this.envelopeModuleEnabled && follower.enabled;
+      this.modulationCore.setSourceValue(follower.sourceId, active ? follower.value : 0, 'unipolar', active);
     }
     this.modulationCore.evaluate(this);
     if (this.hasFilterParameterModulation) {
@@ -1593,7 +1592,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   }
 
   setModulationBandGainTarget(index) {
-    for (const channel of ['left', 'right']) {
+    for (let channelIndex = 0; channelIndex < 2; channelIndex += 1) {
+      const channel = channelIndex === 0 ? 'left' : 'right';
       const baseDb = this.controlToGainDb(this.bandControls[channel][index]);
       const offsetDb = this.modulationBandOffsetsByChannel[channel][index];
       const effectiveDb = Math.min(this.maxBandBoostDb, Math.max(-this.maxBandCutDb, baseDb + offsetDb));
@@ -1632,6 +1632,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const oscillator = this.lfoSources.find(item => item.sourceId === sourceState.id) || new LfoOscillator();
       oscillator.sourceId = sourceState.id;
       oscillator.configure({ ...sourceState, moduleEnabled: this.lfoModuleEnabled });
+      this.modulationCore.setSourceValue(sourceState.id, 0, sourceState.polarity, false);
       return oscillator;
     });
     this.lfo = this.lfoSources[0] || new LfoOscillator();
@@ -1639,6 +1640,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       const follower = this.envelopeSources.find(item => item.sourceId === sourceState.id) || new EnvelopeFollower();
       follower.configure(sourceState);
       follower.updateTimeConstants(sampleRate);
+      this.modulationCore.setSourceValue(sourceState.id, 0, 'unipolar', false);
       return follower;
     });
     if (wasEnvelopeModuleEnabled && !this.envelopeModuleEnabled) {
@@ -1650,15 +1652,12 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       if ((lfoSource && Number(lfoSource[1]) > this.lfoSources.length)
         || (envelopeSource && Number(envelopeSource[1]) > this.envelopeSources.length)) this.modulationCore.removeSource(sourceId);
     }
-    this.modulationCore.assignments = this.modulationCore.assignments.filter(item => !/^(lfo|envelope)\.\d+$/.test(item.sourceId));
-    const suppliedAssignments = Array.isArray(source.assignments) ? source.assignments : [];
-    const assignments = suppliedAssignments.length ? suppliedAssignments : [
-      ...modulationState.lfoSources.filter(item => item.targetId)
-        .map(item => ({ sourceId: item.id, targetId: item.targetId, amount: item.amount, channel: item.channel })),
+    const assignments = Array.isArray(source.assignments) ? source.assignments : [
+      ...modulationState.lfoSources.flatMap(item => item.assignments.filter(assignment => assignment.targetId)),
       ...envelopeSources.filter(item => item.targetId)
-        .map(item => ({ sourceId: item.id, targetId: item.targetId, amount: item.amount, channel: item.channel, invert: item.invert }))
+        .map(item => ({ id: `${item.id}.assignment.1`, sourceId: item.id, targetId: item.targetId, amount: item.amount, channel: item.channel, invert: item.invert }))
     ];
-    for (const assignment of assignments) this.modulationCore.setAssignment(assignment);
+    this.modulationCore.setAssignments(assignments);
     this.hasFilterParameterModulation = this.modulationCore.assignments.some(item => item.targetId.startsWith('filter.'));
     this.hasFilterbankBandModulation = this.modulationCore.assignments.some(item => item.targetId.startsWith('filterbank.band.'));
     this.updateModulationTargets();

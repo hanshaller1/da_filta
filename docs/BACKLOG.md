@@ -6,17 +6,6 @@ Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungstheme
 
 ## LFO / Modulation
 
-- Bei 4 LFOs bleiben; statt weiterer LFOs mehrere Assignments pro LFO unterstützen.
-- Mehrere Targets pro LFO.
-- Pro Assignment:
-  - Target
-  - Amount
-  - Channel: BOTH | LEFT | RIGHT | SPREAD (nur bei stereo-fähigen Targets)
-  - Invert als Checkbox
-  - Remove
-  - optional später Enable/Mute
-- Per-Band Spread für stereo-fähige Band-Gain-Targets über `CHANNEL = SPREAD`, ohne zusätzliche `Band N Spread`-Targets.
-  - Semantik: gegenläufige Modulation von L/R, z. B. `L += value`, `R -= value`.
 - Andere LFO-Parameter als Modulations-Targets verfügbar machen, z. B.:
   - LFO Rate
   - LFO Amount
@@ -25,12 +14,6 @@ Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungstheme
 - LFO ↔ LFO Cross-Modulation ermöglichen.
   - Selbstmodulation zunächst nicht erlauben.
   - Modulationszyklen erkennen und für V1 blockieren.
-- Lost-Target-Indikator im Modusauswahl-/LFO-Panel:
-  - Assignment bleibt gespeichert, wenn ein Target temporär ungültig wird.
-  - Assignment wird als inactive/unavailable markiert, nicht gelöscht.
-  - kleiner Status-/Warnindikator am LFO-Eintrag im Modusauswahlpanel.
-  - bei erneut gültigem Target automatisch reaktivieren.
-  - Beispiel: LFO targetet FILTER Frequency; FILTER wird auf Formant/Vowel gewechselt und Frequency ist dort nicht verfügbar.
 
 ## Envelope Follower / Modulation
 

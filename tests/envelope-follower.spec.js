@@ -158,8 +158,8 @@ test('Envelope detector runs in the Worklet, reports telemetry, and removes modu
       sensitivity: 100, amount: 50,
       targetId: index === 0 ? 'filterbank.band.5.gainDb' : index === 1 ? 'filterbank.band.4.gainDb' : '', channel: 'both'
     }));
-    const modulation = { ...engine.getModulationState(), envelopeModuleEnabled: true, envelopeSources };
-    engine.setModulationState(modulation);
+    engine.setModulationState({ ...engine.getModulationState(), envelopeModuleEnabled: true, envelopeSources });
+    const modulation = engine.getModulationState();
     const options = engine.getFilterbankState();
     options.bandFrequencies = [...window.Filterbank.BAND_FREQUENCIES];
     options.bandQs = [...window.Filterbank.BAND_QS];

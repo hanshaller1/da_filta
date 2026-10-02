@@ -187,10 +187,10 @@ test('global resonance base edits are sent through the modulation layer', async 
   });
   expect(result.base).toBe(.6);
   expect(result.activeResonance.update.baseResonance).toBe(.4);
-  expect(result.activeResonance.update.assignments).toEqual([{ sourceId: 'lfo.1', targetId: 'global.resonance', amount: 25 }]);
+  expect(result.activeResonance.update.assignments).toEqual([{ id: 'lfo.1.assignment.1', sourceId: 'lfo.1', targetId: 'global.resonance', amount: 25, channel: 'both', invert: false, enabled: true }]);
   expect(result.activeResonance.direct).toEqual([]);
   expect(result.otherTarget.baseResonance).toBe(.6);
-  expect(result.otherTarget.assignments).toEqual([{ sourceId: 'lfo.1', targetId: 'filter.frequencyHz', amount: 25 }]);
+  expect(result.otherTarget.assignments).toEqual([{ id: 'lfo.1.assignment.1', sourceId: 'lfo.1', targetId: 'filter.frequencyHz', amount: 25, channel: 'both', invert: false, enabled: true }]);
   expect(result.directResonanceWrites).toEqual([.6]);
 });
 
@@ -229,7 +229,7 @@ test('formant assignments survive inactive FILTER types and become active again'
   expect(result.activeValue).toBeCloseTo(2.5, 8);
   expect(result.inactiveValue).toBe(2);
   expect(result.reactivatedValue).toBeCloseTo(2.5, 8);
-  expect(result.preserved).toEqual([{ sourceId: 'lfo.1', targetId: 'filter.formantVowel', amount: 25 }]);
+  expect(result.preserved).toEqual([{ id: 'lfo.1.assignment.1', sourceId: 'lfo.1', targetId: 'filter.formantVowel', amount: 25, channel: 'both', invert: false, enabled: true }]);
 });
 
 test('four LFOs concurrently modulate FILTER, stereo band gains, and dry/wet without changing bases', async ({ page }) => {
@@ -356,7 +356,7 @@ test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsi
       panelWidth: document.querySelector('[data-mode-panel="lfo"]').clientWidth,
       graphHeight: document.querySelector('[data-lfo-visualizer]').getBoundingClientRect().height,
       separator: getComputedStyle(document.querySelector('.lfo-editor'), '::before').display,
-      assignmentControls: ['[data-lfo-target]', '[data-lfo-channel]', '[data-lfo-invert]', '[data-lfo-reset]'].map(selector => {
+      assignmentControls: ['[data-lfo-target]', '[data-lfo-channel]', '[data-lfo-assignment-invert]', '[data-lfo-assignment-remove]'].map(selector => {
         const rect = document.querySelector(selector).getBoundingClientRect();
         return { top: rect.top, height: rect.height };
       }),
@@ -426,8 +426,8 @@ test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsi
   expect(ui.x).toBeLessThan(560);
   expect(ui.wave.startsWith('M0.00 ')).toBe(true);
   expect(ui.graphHeight).toBeGreaterThan(100);
-  expect(ui.pageCountForTwenty).toBe(5);
-  expect(ui.pageSizesForTwenty).toEqual([4, 4, 4, 4, 4]);
+  expect(ui.pageCountForTwenty).toBe(1);
+  expect(ui.pageSizesForTwenty).toEqual([4]);
   expect(pageErrors).toEqual([]);
 });
 

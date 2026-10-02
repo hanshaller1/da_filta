@@ -1,27 +1,49 @@
-# Modulation Core and LFO V1.5
+# Modulation Core and LFO assignments
 
 ## Sources, assignments, and base/effective values
 
-The existing `Source → Assignment → Target` core remains the modulation path.
-Four independent LFO sources are active in the product: `lfo.1` through
-`lfo.4`. The state factory is count based and normalizes source IDs from their
-array index, so increasing the count does not require per-LFO fields or changes
-to the core. Old flat single-LFO snapshots migrate to `lfo.1`; the previous
-enable value initializes both module power and source 1. Added sources default
-off.
+The path is `Source → Assignments → Target Registry → Mapping → Effective → DSP`.
+Exactly four independent LFO sources exist: `lfo.1` through `lfo.4`.
+Each source can own any number of independently editable assignments, including
+several routes to the same target. There is no small row limit and no LFO 5–20.
+Old flat single-LFO snapshots migrate to `lfo.1`; the previous enable value
+initializes both module power and source 1. The other sources default off.
 
 Each source owns enable, waveform, free/sync mode, free rate, sync division,
-polarity, phase offset, amount, target, channel, invert, and random seed. Runtime
+polarity, phase offset, source invert, and random seed. Each assignment owns
+`id`, `sourceId`, `targetId`, `amount`, `channel`, `invert`, and `enabled`.
+Runtime
 phase and random state belong to its independent audio-thread oscillator. The
 module power switch gates every LFO contribution while preserving each source's
 configuration. Slot selection only changes which source the editor displays.
+The compact editor lists target, amount, channel, invert, ON/OFF and remove per
+row. New rows start with no target and amount zero. Removing the final row keeps
+an empty array; legacy aliases cannot recreate a deleted route.
+
+Legacy source-level target/amount/channel migrate to one stable assignment. The
+old LFO invert remains at the oscillator, so its migrated assignment invert is
+false. New assignment invert negates only that route's final source sample;
+source invert and assignment invert are independent. Read aliases mirror the
+first assignment for old API consumers. Assignment arrays are authoritative.
+IDs, unknown targets and empty arrays round-trip through existing version-1
+DEV/LAB snapshots; there is no new snapshot schema.
 
 Base values remain the values stored by controls and snapshots. The worklet
 evaluates assignments into temporary effective values and never writes them
 back into filter, band, Dynamic EQ, spread, dry/wet, or feedback base state.
-Multiple LFOs assigned to one target sum in a stable assignment order and clamp
-to that target's current range. Assignments remain present when their target is
-inactive; they are not redirected.
+Contributions from LFOs and Envelope Followers sum deterministically, then clamp
+to the target's current range. Frequency contributions add in logarithmic
+coordinates; dB and normalized parameters use their registry ranges. Band-gain
+contributions join the existing dedicated Clock Mod, FILTER and global spread
+layers before the final band-gain clamp. No intermediate per-route clamp loses
+opposing contributions. Disabling/removing all contributions restores the base.
+
+Assignment normalization and compilation happen on configuration updates,
+outside sample processing. The compiled target links hold mutable source
+references and aggregate coefficients per source/channel. Runtime cost depends
+on sources and targets, not duplicate editor rows; evaluation creates no arrays,
+objects or target-ID strings and does not scan the assignment list. The existing
+32-sample control interval and audio-thread smoothing remain unchanged.
 
 ## Registered targets
 
@@ -38,6 +60,19 @@ Filter slope is active for low-pass, high-pass, band-pass, and notch. Bandwidth
 is active for band-pass and notch. Dynamic EQ attack and release use the
 existing time parameters. Target activity follows powered modules and active
 filter type, while stored assignments stay attached to their original target.
+Frequency is unavailable in Formant/Vowel mode. Registry `channels` capability
+lists drive the editor: mono targets allow BOTH; stereo band gains allow BOTH,
+LEFT, RIGHT and SPREAD. SPREAD adds the contribution to L and subtracts it from
+R; assignment invert reverses both signs. No new band-spread target IDs exist.
+
+Availability/status is derived centrally, independently from persistence:
+`active`, `source-disabled`, `assignment-disabled`, `target-unavailable`,
+`target-invalid`, or `no-target`. Unknown/removed IDs remain invalid and saved.
+An unavailable assignment contributes zero and automatically reactivates with
+the same ID and settings when its target returns (LP → Formant → LP, for
+example). A compact row status and slot warning show any unavailable/invalid
+route, even when another source is selected. Source OFF alone is not a lost
+target warning.
 
 Dry/wet uses its existing 0–100% linear base control. The filterbank worklet
 publishes a smoothed mono gain-delta signal on its second output; the existing
@@ -72,7 +107,7 @@ oscillator phase. Thus inverted unipolar samples may be negative by design.
 
 ## Stereo routing
 
-Assignments support BOTH, LEFT, and RIGHT when a target has channel routing.
+Assignments support BOTH, LEFT, RIGHT and SPREAD when a target has channel routing.
 Filterbank band-gain targets are channel-aware: BOTH evaluates against both
 channel bases, while LEFT or RIGHT updates only that channel's temporary
 effective offset. Global targets, including resonance, dry/wet, spread, and FB
@@ -103,10 +138,9 @@ are cheap per-sample calculations; target descriptors are evaluated together
 at the existing control rate. Waveform shape, phase, polarity, and invert are
 display-only; UI animation does not drive modulation.
 
-The editor shows four slots at a time with page size four. It creates the
-required number of slots from the state array and adds page navigation only
-when there are more than four, so 20 sources form five pages without CSS tied
-to source IDs. Only the selected source has a waveform graph. The graph is
+The editor shows the four source slots. Additional rows extend a source's
+assignment list rather than adding source pages. Only the selected source has
+a waveform graph. The graph is
 approximately 110–145 px high; other slots show a compact state, waveform, and
 target summary.
 
@@ -117,9 +151,10 @@ public description includes 20 LFOs, 20 envelope followers, multiple waveform
 families, clock sync, stereo routing, and invert. This is not a claim that
 undocumented Erica behavior was reproduced one to one.
 
-da_filta V1.5 ships four LFOs on a count-based path scalable to at least 20,
-with its own Filter, Filterbank, and Dynamic EQ targets and the existing
-modulation core. Clock Mod remains a future workspace.
+da_filta ships four LFOs with multiple assignments and the existing FILTER,
+Filterbank and Dynamic EQ targets. Cross-modulation, source-parameter targets,
+cycle handling and V2 UI remain future work. Clock Mod keeps its dedicated
+workspace and held band layer; it is not rebuilt as a registry source.
 
 ## Envelope follower V1
 

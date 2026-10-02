@@ -210,7 +210,7 @@ test('stereo channel assignments support BOTH, LEFT, RIGHT, and opposite SPREAD'
     if (channel === 'spread') assert.ok(left > 0 && right < 0 && left === -right);
   }
   core.setAssignment({ sourceId: 'envelope.1', targetId: 'global.resonance', amount: 100, channel: 'spread' });
-  assert.equal(core.getAssignments().find(item => item.targetId === 'global.resonance').channel, undefined);
+  assert.equal(core.getAssignments().find(item => item.targetId === 'global.resonance').channel, 'both');
 });
 
 test('invert reverses the unipolar envelope contribution once at the assignment', () => {

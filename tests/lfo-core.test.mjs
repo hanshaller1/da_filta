@@ -12,20 +12,22 @@ import {
   waveformSample
 } from '../lfo-core.mjs';
 import { ClockCore, SYNC_DIVISION_BEATS } from '../clock-core.mjs';
+import { ModulationCore, getModulationTarget, mapModulationValue } from '../modulation-core.mjs';
 
-test('legacy flat state migrates to lfo.1 while additional sources default off and count scales to 20', () => {
+test('legacy flat state migrates to lfo.1 and the product keeps exactly four sources', () => {
   const legacy = normalizeModulationState({ lfoEnabled: true, lfoWaveform: 'triangle', lfoRateHz: 2.5,
     lfoPolarity: 'unipolar', lfoPhase: 90, lfoTargetId: 'filter.frequencyHz', lfoAmount: 55, lfoSeed: 123 });
   assert.equal(legacy.lfoModuleEnabled, true);
   assert.deepEqual(legacy.lfoSources[0], {
     id: 'lfo.1', enabled: true, waveform: 'triangle', rateMode: 'free', rateHz: 2.5, syncDivision: '1/4',
-    polarity: 'unipolar', phaseOffsetDeg: 90, amount: 55, targetId: 'filter.frequencyHz', channel: 'both', invert: false, seed: 123
+    polarity: 'unipolar', phaseOffsetDeg: 90, amount: 55, targetId: 'filter.frequencyHz', channel: 'both', invert: false, seed: 123,
+    assignments: [{ id: 'lfo.1.assignment.1', sourceId: 'lfo.1', targetId: 'filter.frequencyHz', amount: 55, channel: 'both', invert: false, enabled: true }]
   });
   assert.deepEqual(legacy.lfoSources.slice(1).map(source => [source.id, source.enabled]), [['lfo.2', false], ['lfo.3', false], ['lfo.4', false]]);
-  assert.deepEqual(createLfoSources(20).map(source => source.id), Array.from({ length: 20 }, (_, index) => `lfo.${index + 1}`));
+  assert.deepEqual(createLfoSources(20).map(source => source.id), ['lfo.1', 'lfo.2', 'lfo.3', 'lfo.4']);
   const sources = normalizeModulationState({ lfoSources: createLfoSources(20) }).lfoSources;
-  assert.equal(sources.length, 20);
-  assert.deepEqual(paginateLfoSources(sources, 4).map(page => page.length), [4, 4, 4, 4, 4]);
+  assert.equal(sources.length, 4);
+  assert.deepEqual(paginateLfoSources(sources, 4).map(page => page.length), [4]);
 });
 
 test('legacy normalizer and source settings clamp malformed values safely', () => {
@@ -36,6 +38,48 @@ test('legacy normalizer and source settings clamp malformed values safely', () =
   const malformed = normalizeLfoState({ lfoEnabled: 1, lfoWaveform: 'not-a-wave', lfoRateHz: NaN,
     lfoPolarity: 'mono', lfoPhase: Infinity, lfoTargetId: {}, lfoAmount: -4 });
   assert.deepEqual(malformed, { ...normalizeLfoState({}), lfoAmount: 0 });
+});
+
+test('legacy single routes migrate without double invert and round-trip as independent assignments', () => {
+  for (const waveform of LFO_WAVEFORMS) for (const polarity of ['bipolar', 'unipolar']) for (const invert of [false, true]) {
+    const legacy = { enabled: true, waveform, polarity, invert, targetId: 'global.resonance', amount: 55,
+      phaseOffsetDeg: 90, seed: 234, rateHz: 2 };
+    const migrated = normalizeModulationState({ lfoModuleEnabled: true, lfoSources: [legacy] });
+    const source = migrated.lfoSources[0];
+    assert.equal(source.invert, invert);
+    assert.equal(source.assignments[0].invert, false);
+    const before = new LfoOscillator(legacy);
+    const after = new LfoOscillator(source);
+    const core = new ModulationCore();
+    core.setAssignments(source.assignments);
+    for (let frame = 0; frame < 12000; frame += 1) {
+      const a = before.advance(48000); const b = after.advance(48000);
+      assert.equal(a, b);
+      if (frame % 128 !== 0) continue;
+      core.setSourceValue(source.id, b, polarity);
+      assert.ok(Math.abs(core.getEffectiveValue('global.resonance', { filterbankEnabled: true, baseResonance: .1 })
+        - mapModulationValue(getModulationTarget('global.resonance'), .1, a, 55)) < 1e-12);
+    }
+    assert.deepEqual(normalizeModulationState(JSON.parse(JSON.stringify(migrated))), migrated);
+  }
+});
+
+test('assignment arrays are authoritative, preserve unknown IDs and do not resurrect removed legacy targets', () => {
+  const state = normalizeModulationState({ lfoModuleEnabled: true, lfoSources: [{
+    enabled: true, targetId: 'global.resonance', amount: 95, channel: 'right', invert: true,
+    assignments: [{ id: 'stable', targetId: 'removed.target', amount: 12, channel: 'spread', invert: true },
+      { id: 'second', targetId: 'global.dryWet', amount: 22, channel: 'left', enabled: false }]
+  }] });
+  const source = state.lfoSources[0];
+  assert.deepEqual(source.assignments.map(item => [item.id, item.targetId, item.channel, item.invert]),
+    [['stable', 'removed.target', 'spread', true], ['second', 'global.dryWet', 'both', false]]);
+  assert.equal(source.invert, true);
+  source.assignments = [];
+  const emptied = normalizeModulationState(state);
+  assert.deepEqual(emptied.lfoSources[0].assignments, []);
+  assert.equal(emptied.lfoTargetId, '');
+  assert.equal(emptied.lfoAmount, 0);
+  assert.equal(emptied.lfoSources.length, 4);
 });
 
 test('eight waveform generators remain finite and expose distinct expected points', () => {

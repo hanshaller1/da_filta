@@ -1,7 +1,8 @@
 # Current runtime architecture
 
-Reference baseline: `56caa74` with Clock Mod V1. This map describes existing
-behavior; it does not change DSP or supersede historical measurement reports.
+Reference baseline: `e525331`; the working implementation adds P1-A modulation
+assignments. This map describes behavior; it does not change DSP or supersede
+historical measurement reports.
 
 ## Signal flow
 
@@ -44,6 +45,15 @@ Worklet runtime phase, detector history and Clock Mod held values remain runtime
 data. Stored base fields and IDs are compatibility contracts. Telemetry is
 rate-limited (typically 15 Hz) and may miss short audio transitions; a diagnostics
 packet is not a replacement for rendered-sample assertions.
+
+Modulation follows `Source → Assignments → Target Registry → Mapping → Effective
+→ DSP`. Four LFOs own stable assignment lists; the shared core compiles routes
+per target/source/channel on state updates. Runtime sums contributions without
+changing stored bases. Registry capabilities and availability drive both UI and
+DSP. Unavailable/invalid routes persist and valid targets automatically
+reactivate them. Clock Mod remains its dedicated additive band layer and joins
+other contributions before the existing final band-gain clamp. See
+[`modulation-core.md`](modulation-core.md) for migration and channel contracts.
 
 `tests/helpers/input-character-architecture*.cjs` and related measurement bundles
 are experiments, including frozen comparison variants. They are deliberately
