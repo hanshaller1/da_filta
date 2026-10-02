@@ -161,7 +161,7 @@ test('P2 paired production timings, allocation sampling and empty route gating',
     allocations: Object.fromEntries(Object.entries(report.allocations).map(([name, data]) => [name, data.slice(0, 5)])) }));
 });
 
-test('P2 changes preserve P1-C audio, solver and continuous source state at all rates', async ({ page }) => {
+test('unchanged P2 paths preserve P1-C parity and the corrected coupled solver preserves finite source state', async ({ page }) => {
   test.setTimeout(240_000);
   await p.loadHarnesses(page);
   const rows = await page.evaluate(({ features, cores }) => {
@@ -258,16 +258,35 @@ test('P2 changes preserve P1-C audio, solver and continuous source state at all 
       const finalState = state(next);
       delete finalState.lastMessage;
       const allFinite = value => typeof value === 'number' ? Number.isFinite(value) : value && typeof value === 'object' ? Object.values(value).every(allFinite) : true;
+      const oldState = state(old), nextState = state(next);
       return { name: config.name, rate: config.rate, maximum, rmsDifference: Math.sqrt(squareDifference / (blocks * 256)), finite, stateFinite: allFinite(finalState), peak, tailEnergy,
+        // Only the Per-Band MAIN Newton trajectory changed. Its old chord
+        // iteration is not the reference for the corrected implicit solution.
+        coupledSolverChanged: config.core === 'zdf-per-band' && Boolean(config.main) && config.resonance !== 0,
+        sourceStateEqual: ['clock', 'lfo', 'envelope'].every(key => JSON.stringify(oldState[key]) === JSON.stringify(nextState[key])),
         stateEqual: JSON.stringify(state(old)) === JSON.stringify(state(next)), beforeSolver, afterSolver,
         fallback: plain(next.bank.zdfSolverFallbackCount), perBandFallback: plain(next.bank.zdfPerBandSolverFallbackCounts),
         coupledFallback: plain(next.bank.zdfPerBandCoupledFallbackCounts), resets: plain(next.bank.zdfNonFiniteResetCount) };
     });
   }, { features: p.featureCases(), cores: p.coreCases() });
   fs.writeFileSync(test.info().outputPath('p2-parity.json'), JSON.stringify(rows, null, 2));
-  expect(rows.filter(row => row.maximum !== 0 || !row.stateEqual || !row.finite || !row.stateFinite), 'audio/state parity failures').toEqual([]);
-  for (const row of rows) { expect(row.rmsDifference).toBe(0); expect(row.afterSolver).toEqual(row.beforeSolver); }
-  console.log('P2_PARITY=' + JSON.stringify({ cases: rows.length, maximum: Math.max(...rows.map(row => row.maximum)), stateEqual: rows.every(row => row.stateEqual) }));
+  const unchanged = rows.filter(row => !row.coupledSolverChanged);
+  expect(unchanged.filter(row => row.maximum !== 0 || !row.stateEqual), 'unchanged audio/state parity failures').toEqual([]);
+  for (const row of unchanged) { expect(row.rmsDifference).toBe(0); expect(row.afterSolver).toEqual(row.beforeSolver); }
+  for (const row of rows) {
+    expect(row.finite).toBe(true); expect(row.stateFinite).toBe(true); expect(row.sourceStateEqual).toBe(true);
+    expect(row.resets).toEqual({ left: 0, right: 0 });
+    if (row.coupledSolverChanged && row.name !== 'worst') {
+      expect(row.afterSolver.coupled.maxResidual).toBeLessThan(1e-8);
+      expect(row.coupledFallback).toEqual({ left: 0, right: 0 });
+    }
+    // The established RAW-level, resonance=1, impulse/DESTROY stress case
+    // retains its existing safeguarded fallback contract. Product settings
+    // have the stronger zero-fallback/residual checks in resonator-production.
+  }
+  console.log('P2_PARITY=' + JSON.stringify({ cases: rows.length, unchangedCases: unchanged.length,
+    maximum: Math.max(...unchanged.map(row => row.maximum)), stateEqual: unchanged.every(row => row.stateEqual),
+    changedCoupledCases: rows.length - unchanged.length, sourceStateEqual: rows.every(row => row.sourceStateEqual) }));
 });
 
 test('P2 redundant parameter traffic preserves constructor, restore, panic and events', async ({ page }) => {

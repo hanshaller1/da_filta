@@ -75,8 +75,10 @@ test('PANIC resets feedback safely while audio stays on and German-layout shortc
     await dryWet.fill('80');
     await resonance.fill('0.8');
     await page.locator('[data-input-preamp-stage]').selectOption('tube');
+    if (feedbackAllEngine === 'legacy') await page.locator('[data-feedback-core]').selectOption('current');
     await page.locator('[data-feedback-topology]').selectOption('common-bus');
-    await page.locator('[data-feedback-all-engine]').selectOption(feedbackAllEngine);
+    if (feedbackAllEngine === 'legacy') await page.locator('[data-feedback-all-engine]').selectOption('legacy');
+    else await expect(page.locator('[data-feedback-all-engine]')).toHaveValue('common-bus');
     await page.locator('[data-feedback-band="0"]').click();
     await page.locator('[data-feedback-band="3"]').click();
     await page.locator('.fb-all-toggle').click();

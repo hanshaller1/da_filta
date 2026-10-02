@@ -82,6 +82,7 @@ test('COMMON-BUS MAIN keeps a separate positive FB ALL return beside local feedb
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2,
         channelCountMode: 'explicit', channelInterpretation: 'discrete',
         processorOptions: {
+          feedbackCore: 'current',
           bandFrequencies: frequencies, bandQs: qs,
           bandGainLeft, bandGainRight: zeros(),
           feedbackBandLeft: local ? gate(4) : zeros(), feedbackBandRight: zeros(),

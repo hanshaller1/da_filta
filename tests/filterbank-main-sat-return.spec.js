@@ -36,6 +36,7 @@ test('MAIN common-bus drive/return A/B preserves non-MAIN paths and exact satura
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2,
         channelCountMode: 'explicit', channelInterpretation: 'discrete',
         processorOptions: {
+          feedbackCore: 'current',
           bandFrequencies: frequencies, bandQs: qs, bandGainLeft: zeros(), bandGainRight: zeros(),
           feedbackBandLeft, feedbackBandRight: zeros(), feedbackAllLeft: feedbackAll, feedbackAllRight: false,
           resonance, maxBandGainDb: 12, maxBandBoostDb: 12, maxBandCutDb: 12,

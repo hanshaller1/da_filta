@@ -84,6 +84,24 @@ test('structured events are bounded, timestamped, passive and survive the diagno
   await expect(overlay.locator('[data-debug-copy-state]')).toHaveText('COPIED');
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain('FILTERBANK DEBUG REPORT'); expect(copied).toContain('AUDIO START');
+  const perBandPacket = packet();
+  for (const channel of [perBandPacket.left, perBandPacket.right]) {
+    channel.feedbackCore = channel.feedbackCoreEffective = 'zdf-per-band';
+    channel.baseBandEnergy = channel.bandEnergy;
+    channel.baseBandPeak = channel.bandPeak;
+    channel.zdfPerBandLocalReturn = Array.from({ length: 10 }, (_, band) => band === 4 ? -.6 : 0);
+    channel.zdfPerBandLocalReturnPeak = Array.from({ length: 10 }, (_, band) => band === 4 ? .75 : 0);
+    channel.zdfPerBandLocalBus = Array.from({ length: 10 }, (_, band) => band === 4 ? .8 : 0);
+  }
+  await page.evaluate(packet => window.FilterbankDebugConsole.receive(packet), perBandPacket);
+  await expect(panel.locator('[data-dev-lab-summary]')).toContainText('LOCAL 5 RET L/R');
+  await expect(panel.locator('[data-dev-lab-summary] div').filter({ hasText: 'LOCAL 5 RET L/R' })).toContainText('-0.6000 / -0.6000');
+  await expect(panel.locator('[data-dev-lab-summary]')).not.toContainText('COMMON LOCAL');
+  await expect(panel.locator('[data-dev-lab-trace="common"]').locator('..')).toContainText('LOCAL RETURN MAX ABS');
+  await expect(panel.locator('[data-dev-lab-band-detail]')).toContainText('RETURN/TAP 0.75');
+  await expect(overlay.locator('[data-debug-max]')).toContainText('LOCAL 0.7500');
+  await page.evaluate(packet => window.FilterbankDebugConsole.receive(packet), packet());
+  await expect(panel.locator('[data-dev-lab-trace="common"]').locator('..')).toContainText('COMMON RETURN');
   const count = await page.evaluate(() => { for (let index = 0; index < 1005; index += 1) window.FilterbankDebugConsole.logEvent(`TEST ${index}`); return window.FilterbankDebugConsole.eventCount(); });
   expect(count).toBe(1000);
   await page.evaluate(() => window.FilterbankDebugConsole.setAudioOff());

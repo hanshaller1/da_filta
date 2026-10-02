@@ -18,6 +18,7 @@ test('LOCAL LOOP COMPENSATED retunes only the four scoped bands at the active sa
       const node = new AudioWorkletNode(context, 'da-filta-processor', {
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2],
         processorOptions: {
+          feedbackCore: 'current',
           bandFrequencies: frequencies, bandQs: qs,
           bandGainLeft: Array(10).fill(0), bandGainRight: Array(10).fill(0),
           feedbackBandLeft: Array.from({ length: 10 }, (_, index) => index === 5),

@@ -201,7 +201,7 @@ test('central state and the filterbank wrapper keep L/R base values separate', {
   expect(result.smoothingSeconds).toBe(0.015);
 });
 
-test('10-band filterbank DSP is neutral, bipolar and stereo-isolated', async ({ page }) => {
+test('retained reference-delta 10-band DSP is neutral, bipolar and stereo-isolated', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
 
   const result = await page.evaluate(async () => {
@@ -219,7 +219,7 @@ test('10-band filterbank DSP is neutral, bipolar and stereo-isolated', async ({ 
 
       const source = context.createBufferSource();
       source.buffer = input;
-      const filterbank = await window.Filterbank.create(context, { bandGainLeft: leftControls, bandGainRight: rightControls });
+      const filterbank = await window.Filterbank.create(context, { wetModel: 'reference-delta', bandGainLeft: leftControls, bandGainRight: rightControls });
       filterbank.applyState({ bandGainLeft: leftControls, bandGainRight: rightControls });
       source.connect(filterbank.input);
       filterbank.output.connect(context.destination);
@@ -725,6 +725,7 @@ test('audio I/O controls build and stop a mocked stereo pass-through', { tag: '@
   expect((await filterbankOptions()).processorOptions.positiveResonanceAuditionGainSmoothingTime).toBe(0.015);
   expect((await filterbankOptions()).processorOptions.feedbackAllNormalization).toBeCloseTo(1 / Math.sqrt(10), 12);
   expect(await page.evaluate(() => window.__audioTestState.nativeFilters)).toBe(0);
+  await page.locator('[data-feedback-core]').selectOption('current');
   await page.locator('[data-feedback-topology]').selectOption('isolated-tpt');
   await page.locator('[data-dev-lab-group="resonator"] .dev-lab-collapse-toggle').click();
   await page.locator('[data-positive-resonance-audition]').selectOption('0.40');

@@ -33,6 +33,7 @@ test.describe('DEV/LAB snapshots', () => {
     await page.locator('[data-feedback-band="0"]').click();
     await page.locator('.fb-all-toggle').click();
     await page.locator('[data-feedback-topology]').selectOption('common-bus');
+    await page.locator('[data-feedback-core]').selectOption('current');
     await page.locator('[data-feedback-all-engine]').selectOption('legacy');
     await page.locator('[data-feedback-core]').selectOption('zdf');
     await page.locator('[data-feedback-tap]').selectOption('pre-gain');
@@ -57,6 +58,7 @@ test.describe('DEV/LAB snapshots', () => {
     await openGroup(page, 'sweetspots');
     await openGroup(page, 'filterbank');
     await page.locator('[data-feedback-topology]').selectOption('common-bus');
+    await page.locator('[data-feedback-core]').selectOption('current');
     await page.locator('[data-feedback-all-engine]').selectOption('legacy');
     await page.locator('[data-feedback-core]').selectOption('zdf');
     await page.locator('[data-feedback-tap]').selectOption('pre-gain');

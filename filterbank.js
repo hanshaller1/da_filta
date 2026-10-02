@@ -146,20 +146,20 @@
       this.maxBandBoostDb = normalizeBandBoostDb(initialState?.maxBandBoostDb);
       this.maxBandCutDb = normalizeBandCutDb(initialState?.maxBandCutDb);
       this.positiveResonanceEngine = normalizePositiveResonanceEngine(initialState?.positiveResonanceEngine);
-      this.feedbackTopology = initialState?.feedbackTopology === 'common-bus'
+      this.feedbackTopology = (initialState?.feedbackTopology ?? 'common-bus') === 'common-bus'
         ? 'common-bus'
         : initialState?.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
-      this.feedbackCore = normalizeFeedbackCore(initialState?.feedbackCore);
+      this.feedbackCore = normalizeFeedbackCore(initialState?.feedbackCore ?? 'zdf-per-band');
       this.localLoopTuning = normalizeLocalLoopTuning(initialState?.localLoopTuning);
-      this.feedbackTap = initialState?.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
-      this.wetModel = initialState?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
+      this.feedbackTap = (initialState?.feedbackTap ?? 'post-gain') === 'post-gain' ? 'post-gain' : 'pre-gain';
+      this.wetModel = (initialState?.wetModel ?? 'filterbank-sum') === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
       this.commonBusSaturationMode = initialState?.commonBusSaturationMode === 'constant-ceiling' ? 'constant-ceiling' : 'current';
       this.commonBusDrive = [0.5, 1, 2, 4, 8, 16].includes(Number(initialState?.commonBusDrive)) ? Number(initialState.commonBusDrive) : 1;
       this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(initialState?.commonBusCeiling)) ? Number(initialState.commonBusCeiling) : 1;
-      this.feedbackAllEngine = initialState?.feedbackAllEngine === 'common-bus' ? 'common-bus' : 'legacy';
+      this.feedbackAllEngine = (initialState?.feedbackAllEngine ?? 'common-bus') === 'common-bus' ? 'common-bus' : 'legacy';
       this.feedbackAllSource = initialState?.feedbackAllSource === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum';
       this.postGainFeedbackWeight = normalizePostGainFeedbackWeight(initialState?.postGainFeedbackWeight);
-      this.feedbackAllLevel = normalizeFeedbackAllLevel(initialState?.feedbackAllLevel);
+      this.feedbackAllLevel = normalizeFeedbackAllLevel(initialState?.feedbackAllLevel ?? 'sqrt10');
       this.feedbackAllAmount = normalizeFeedbackAllAmount(initialState?.feedbackAllAmount);
       this.feedbackAllResonanceCurve = normalizeFeedbackAllResonanceCurve(initialState?.feedbackAllResonanceCurve);
       this.feedbackAllSaturationReturn = normalizeFeedbackAllSaturationReturn(initialState?.feedbackAllSaturationReturn);
@@ -499,15 +499,15 @@
       this.maxBandBoostDb = normalizeBandBoostDb(snapshot?.maxBandBoostDb ?? this.maxBandBoostDb);
       this.maxBandCutDb = normalizeBandCutDb(snapshot?.maxBandCutDb ?? this.maxBandCutDb);
       this.positiveResonanceEngine = normalizePositiveResonanceEngine(snapshot?.positiveResonanceEngine ?? this.positiveResonanceEngine);
-      this.feedbackTopology = snapshot?.feedbackTopology === 'common-bus'
+      this.feedbackTopology = (snapshot?.feedbackTopology ?? this.feedbackTopology) === 'common-bus'
         ? 'common-bus'
-        : snapshot?.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : this.feedbackTopology;
+        : (snapshot?.feedbackTopology ?? this.feedbackTopology) === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
       this.feedbackCore = normalizeFeedbackCore(snapshot?.feedbackCore ?? this.feedbackCore);
       this.localLoopTuning = normalizeLocalLoopTuning(snapshot?.localLoopTuning ?? this.localLoopTuning);
-      this.feedbackTap = snapshot?.feedbackTap === 'post-gain' ? 'post-gain' : this.feedbackTap;
-      this.wetModel = snapshot?.wetModel === 'filterbank-sum' ? 'filterbank-sum' : this.wetModel;
-      this.feedbackAllEngine = snapshot?.feedbackAllEngine === 'common-bus' ? 'common-bus' : this.feedbackAllEngine;
-      this.feedbackAllSource = snapshot?.feedbackAllSource === 'pre-gain-sum' ? 'pre-gain-sum' : this.feedbackAllSource;
+      this.feedbackTap = (snapshot?.feedbackTap ?? this.feedbackTap) === 'post-gain' ? 'post-gain' : 'pre-gain';
+      this.wetModel = (snapshot?.wetModel ?? this.wetModel) === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
+      this.feedbackAllEngine = (snapshot?.feedbackAllEngine ?? this.feedbackAllEngine) === 'common-bus' ? 'common-bus' : 'legacy';
+      this.feedbackAllSource = (snapshot?.feedbackAllSource ?? this.feedbackAllSource) === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum';
       this.postGainFeedbackWeight = normalizePostGainFeedbackWeight(snapshot?.postGainFeedbackWeight ?? this.postGainFeedbackWeight);
       if (snapshot?.feedbackAllLevel !== undefined) this.feedbackAllLevel = normalizeFeedbackAllLevel(snapshot.feedbackAllLevel);
       if (snapshot?.feedbackAllAmount !== undefined) this.feedbackAllAmount = normalizeFeedbackAllAmount(snapshot.feedbackAllAmount);

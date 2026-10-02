@@ -384,6 +384,9 @@ test('test-only positive residual audition-gain sweep quantifies broadband audib
         channelCountMode: 'explicit',
         channelInterpretation: 'discrete',
         processorOptions: {
+          // Explicit retained isolated/legacy comparison path.
+          feedbackCore: 'current', feedbackTopology: 'isolated-tpt', wetModel: 'reference-delta',
+          feedbackTap: 'pre-gain', feedbackAllEngine: 'legacy', feedbackAllLevel: 'raw',
           bandFrequencies: [...window.Filterbank.BAND_FREQUENCIES],
           bandQs: [...window.Filterbank.BAND_QS],
           bandGainLeft: Array(bandCount).fill(0),

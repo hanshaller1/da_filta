@@ -230,6 +230,9 @@ test('diagnostic nonlinear TPT state feedback converges, colors predictably, and
         channelCountMode: 'explicit',
         channelInterpretation: 'discrete',
         processorOptions: {
+          // Explicit retained isolated/legacy comparison path.
+          feedbackCore: 'current', feedbackTopology: 'isolated-tpt', wetModel: 'reference-delta',
+          feedbackTap: 'pre-gain', feedbackAllEngine: 'legacy', feedbackAllLevel: 'raw',
           bandFrequencies: frequencies,
           bandQs: qs,
           bandGainLeft: neutral(),

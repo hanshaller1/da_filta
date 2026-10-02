@@ -82,13 +82,14 @@ test('DEV FB ALL startup defaults, AMOUNT and POST GAIN FB WEIGHT survive the UI
     return {
       wetModel: processorOptions.wetModel,
       feedbackTopology: processorOptions.feedbackTopology,
+      feedbackCore: processorOptions.feedbackCore,
       feedbackTap: processorOptions.feedbackTap,
       feedbackAllEngine: processorOptions.feedbackAllEngine,
       feedbackAllLevel: processorOptions.feedbackAllLevel
     };
   });
   expect(initialDevDefaults).toEqual({
-    wetModel: 'filterbank-sum', feedbackTopology: 'common-bus', feedbackTap: 'post-gain',
+    wetModel: 'filterbank-sum', feedbackTopology: 'common-bus', feedbackCore: 'zdf-per-band', feedbackTap: 'post-gain',
     feedbackAllEngine: 'common-bus', feedbackAllLevel: 'sqrt10'
   });
   const initialWorkletNodeCount = await page.evaluate(() => window.__feedbackAllLevelTestState.nodes.length);

@@ -122,22 +122,22 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.referenceLevel = this.readReferenceLevel(processorOptions.referenceLevel);
     this.referenceLevelTarget = this.referenceLevel;
     this.positiveResonanceEngine = this.readPositiveResonanceEngine(processorOptions.positiveResonanceEngine);
-    this.feedbackTopology = processorOptions.feedbackTopology === 'common-bus'
+    this.feedbackTopology = (processorOptions.feedbackTopology ?? 'common-bus') === 'common-bus'
       ? 'common-bus'
       : processorOptions.feedbackTopology === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt';
-    this.feedbackCore = this.readFeedbackCore(processorOptions.feedbackCore);
+    this.feedbackCore = this.readFeedbackCore(processorOptions.feedbackCore ?? 'zdf-per-band');
     this.localLoopTuning = this.readLocalLoopTuning(processorOptions.localLoopTuning);
-    this.feedbackTap = processorOptions.feedbackTap === 'post-gain' ? 'post-gain' : 'pre-gain';
-    this.wetModel = processorOptions.wetModel === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
+    this.feedbackTap = (processorOptions.feedbackTap ?? 'post-gain') === 'post-gain' ? 'post-gain' : 'pre-gain';
+    this.wetModel = (processorOptions.wetModel ?? 'filterbank-sum') === 'filterbank-sum' ? 'filterbank-sum' : 'reference-delta';
     this.commonBusSaturationMode = processorOptions.commonBusSaturationMode === 'constant-ceiling' ? 'constant-ceiling' : 'current';
     this.commonBusDrive = this.readCommonBusDrive(processorOptions.commonBusDrive);
     this.commonBusDriveTarget = this.commonBusDrive;
     this.commonBusCeiling = this.readCommonBusCeiling(processorOptions.commonBusCeiling);
     this.commonBusCeilingTarget = this.commonBusCeiling;
-    this.feedbackAllEngine = this.readFeedbackAllEngine(processorOptions.feedbackAllEngine);
+    this.feedbackAllEngine = this.readFeedbackAllEngine(processorOptions.feedbackAllEngine ?? 'common-bus');
     this.feedbackAllSource = this.readFeedbackAllSource(processorOptions.feedbackAllSource);
     this.postGainFeedbackWeight = this.readPostGainFeedbackWeight(processorOptions.postGainFeedbackWeight);
-    this.feedbackAllLevel = this.readFeedbackAllLevel(processorOptions.feedbackAllLevel);
+    this.feedbackAllLevel = this.readFeedbackAllLevel(processorOptions.feedbackAllLevel ?? 'sqrt10');
     this.feedbackAllAmount = this.readFeedbackAllAmount(processorOptions.feedbackAllAmount);
     this.feedbackAllAmountTarget = this.feedbackAllAmount;
     this.baseFeedbackAllAmount = this.feedbackAllAmount;
@@ -1368,7 +1368,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
         const candidateMain = this.clampZdfPerBandReturn(workspace.main + lambda * deltaMain, mainCeiling);
         const candidateResidual = this.evaluateZdfPerBandCoupled(
           workspace, workspace.candidateLocals, candidateMain, localGain, mainGain, feedbackAllGate, level,
-          localCeiling, localScale, mainCeiling, mainScale, false
+          // The next Schur/Newton step needs the Jacobian at the accepted
+          // iterate. Reusing the initial Jacobian turns nonlinear trajectories
+          // into a chord iteration and unnecessarily exhausts the six steps.
+          localCeiling, localScale, mainCeiling, mainScale, true
         );
         this.considerZdfPerBandCoupledBest(workspace, workspace.candidateLocals, candidateMain, candidateResidual);
         if (Number.isFinite(candidateResidual) && candidateResidual < residual) {
@@ -2280,7 +2283,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const unifiedZdfActive = this.isUnifiedZdfCore() && this.feedbackTopology !== 'isolated-tpt';
     const perBandZdfSelected = this.isPerBandZdfCore();
     const perBandZdfActive = perBandZdfSelected && this.feedbackTopology !== 'isolated-tpt';
-    // Unlike the retained Unified core, the experimental Per-Band core must
+    // Unlike the retained Unified core, the product Per-Band core must
     // never fall through to a CURRENT feedback architecture when its topology
     // is inactive. It simply supplies no LOCAL return in that situation.
     const zdfActive = unifiedZdfActive || perBandZdfSelected;

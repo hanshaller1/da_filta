@@ -94,7 +94,7 @@
       this.spreadCurve = 'linear';
       this.spreadMaxOffsetDb = 6;
       this.positiveResonanceEngine = 'tpt';
-      this.feedbackTopology = 'common-bus'; this.feedbackCore = 'current'; this.localLoopTuning = 'current'; this.feedbackTap = 'post-gain'; this.wetModel = 'filterbank-sum';
+      this.feedbackTopology = 'common-bus'; this.feedbackCore = 'zdf-per-band'; this.localLoopTuning = 'current'; this.feedbackTap = 'post-gain'; this.wetModel = 'filterbank-sum';
       this.commonBusSaturationMode = 'current'; this.commonBusDrive = 1; this.commonBusCeiling = 1;
       this.feedbackAllEngine = 'common-bus'; this.feedbackAllSource = 'post-gain-sum';
       this.postGainFeedbackWeight = 'current';

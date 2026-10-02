@@ -53,9 +53,20 @@ Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungstheme
 ## DSP / Audio
 
 - Legacy PHASE-2 bleibt LAB-Vergleich: spätere Promotion/Entfernung nur mit finalem Klang-/Kalibriervertrag und Audio-/CPU-Vergleich der bestehenden Cores entscheiden.
-- Feedback-/Resonanzarchitektur langfristig weiter bewerten:
-  - Common Bus als eigener da_filta-Charakter
-  - lokale / Per-Band / ZDF-Varianten gezielt vergleichen
+- Resonator-Hardwarekalibrierung nach der LOCAL/MAIN-Topologiekorrektur:
+  - Q/Bandbreite gegen echte Hardwaremessung
+  - genaue LOCAL-/MAIN-Loop-Gains und MAIN-Normalisierung
+  - Sättigungskennlinie und tatsächlicher Feedback-Tap
+  - Self-Oscillation-Schwellen gegen Hardware abgleichen
+  - analoge Bauteiltoleranzen nur nach Referenzmessung modellieren
+  - CURRENT/Common Bus als eigenen da_filta-Charakter und Unified ZDF als DEV/LAB-Vergleich erhalten
+
+## Erledigt – Erica-style Resonator (2026-10-02)
+
+- Product LOCAL verwendet den vorhandenen Per-Band-ZDF-Core mit privaten impliziten Returns je Band.
+- MAIN/FB ALL bleibt eine separate Summenschleife am gemeinsamen Eingang, gekoppelt im vorhandenen ZDF-Solver; LOCAL und MAIN funktionieren gleichzeitig.
+- Signed Resonance steuert Stärke und Polarität beider Loops; null liefert keinen Feedbackbeitrag.
+- Defaults, Restore, Panic und DEV/LAB-Vergleiche sind konsistent. Messvertrag und Grenzen: [Resonator-Produktpfad](resonator-production.md).
 
 ## Code / Architektur / Wartbarkeit
 

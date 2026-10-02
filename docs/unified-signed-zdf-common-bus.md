@@ -1,5 +1,10 @@
 # Unified Signed ZDF Common Bus — DEV-A/B-Prototyp
 
+Historische Entwicklungsreferenz. Der aktuelle Produktstandard und der heutige
+Core-Switch-Vertrag stehen in [Resonator-Produktpfad](resonator-production.md):
+Per-Band ZDF mit privaten LOCALs, gekoppeltem MAIN und getrennten Return-Histories.
+Die folgenden Default-/Reset-Angaben beschreiben den damaligen Prototyp.
+
 Stand: Branch `feature/feedback-resonance`. `CURRENT` bleibt Default und Klangreferenz. `ZDF` ist nur bei `COMMON BUS` und `LOCAL LOOP EXP` aktiv; `ISOLATED TPT` verwendet weiterhin seinen bisherigen Pfad. Die DEV-Telemetrie kennzeichnet diesen Fall ausdrücklich. Bei einem Core-Wechsel werden die rekursiven Returns und die Base-TPT-Integratorzustände geleert; AudioContext und Worklet bleiben bestehen. Das ist ein diskreter A/B-Wechsel, kein Crossfade.
 
 ## Architektur und Herleitung

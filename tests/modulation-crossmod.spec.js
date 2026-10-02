@@ -136,6 +136,9 @@ test('existing ordinary assignments and Clock holds match P2 DSP audio; focused 
     const a = await load(before), b = await load(after), rows = [];
     for (const rate of [48000, 96000]) for (const clock of [false, true]) {
       const options = { bandFrequencies: [...window.Filterbank.BAND_FREQUENCIES], bandQs: [...window.Filterbank.BAND_QS],
+        // Freeze the P2 comparison path independently of product startup defaults.
+        feedbackCore: 'current', feedbackTopology: 'isolated-tpt', wetModel: 'reference-delta',
+        feedbackTap: 'pre-gain', feedbackAllEngine: 'legacy', feedbackAllLevel: 'raw',
         bandGainLeft: Array(10).fill(20), bandGainRight: Array(10).fill(15), resonance: .3,
         modulationState: { filterbankEnabled: true, lfoModuleEnabled: true, envelopeModuleEnabled: true,
           lfoSources: Array.from({ length: 4 }, (_, index) => ({ enabled: true, rateHz: .7 + index, waveform: 'sine',

@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('CURRENT remains sample-identical with an explicit CURRENT core option', async ({ page }) => {
+test('the product default is sample-identical with an explicit Per-Band ZDF core option', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   const difference = await page.evaluate(async () => {
     const render = async core => {
@@ -27,7 +27,7 @@ test('CURRENT remains sample-identical with an explicit CURRENT core option', as
       return (await context.startRendering()).getChannelData(0);
     };
     const oldDefault = await render(null);
-    const explicitCurrent = await render('current');
+    const explicitCurrent = await render('zdf-per-band');
     let maximum = 0;
     for (let i = 0; i < oldDefault.length; i += 1) maximum = Math.max(maximum, Math.abs(oldDefault[i] - explicitCurrent[i]));
     return maximum;
@@ -69,6 +69,7 @@ test('FEEDBACK CORE switches CURRENT to ZDF to CURRENT live without rebuilding t
     HTMLMediaElement.prototype.pause = function () {};
   });
   await page.goto('/', { waitUntil: 'networkidle' });
+  await page.locator('[data-feedback-core]').selectOption('current');
   await page.locator('[data-audio-input]').selectOption('input-1');
   await page.locator('[data-audio-output]').selectOption('output-1');
   await page.locator('[data-audio-start]').click();
@@ -107,7 +108,8 @@ test('signed ZDF core oscillates high bands with finite output and keeps CURRENT
   test.setTimeout(120000);
   await page.goto('/', { waitUntil: 'networkidle' });
   const core = page.locator('[data-feedback-core]');
-  await expect(core).toHaveValue('current');
+  await expect(core).toHaveValue('zdf-per-band');
+  await core.selectOption('current');
   await core.selectOption('zdf');
   await expect(core).toHaveValue('zdf');
 

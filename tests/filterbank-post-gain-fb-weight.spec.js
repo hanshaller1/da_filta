@@ -39,6 +39,7 @@ test('POST GAIN FB WEIGHT soft knee only changes the MAIN POST-GAIN sum', async 
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2,
         channelCountMode: 'explicit', channelInterpretation: 'discrete',
         processorOptions: {
+          feedbackCore: 'current',
           bandFrequencies: frequencies, bandQs: qs, bandGainLeft, bandGainRight: zeros(),
           feedbackBandLeft: local ? gate(4) : zeros(), feedbackBandRight: zeros(),
           feedbackAllLeft: feedbackAll, feedbackAllRight: false, resonance: .05,

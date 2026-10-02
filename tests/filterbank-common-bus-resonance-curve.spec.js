@@ -55,6 +55,7 @@ test('COMMON-BUS MAIN soft-knee resonance curve is bounded, live-switchable, and
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2,
         channelCountMode: 'explicit', channelInterpretation: 'discrete',
         processorOptions: {
+          feedbackCore: 'current',
           bandFrequencies: frequencies, bandQs: qs,
           bandGainLeft: zeros(), bandGainRight: zeros(),
           feedbackBandLeft, feedbackBandRight: zeros(),

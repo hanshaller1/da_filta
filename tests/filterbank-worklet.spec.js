@@ -46,6 +46,8 @@ test('stereo AudioWorklet filterbank matches the native Biquad reference', async
       const source = context.createBufferSource();
       source.buffer = createInput(context, signal, frequency);
       const filterbank = await window.Filterbank.create(context, {
+        // This reference deliberately checks the retained unity + delta model.
+        wetModel: 'reference-delta',
         bandGainLeft: leftControls,
         bandGainRight: rightControls
       });

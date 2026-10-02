@@ -44,6 +44,7 @@ test('COMMON BUS follows smoothed resonance through zero without seeding a digit
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2,
         channelCountMode: 'explicit', channelInterpretation: 'discrete',
         processorOptions: {
+          feedbackCore: 'current',
           bandFrequencies: frequencies, bandQs: qs,
           bandGainLeft: zeros(), bandGainRight: zeros(),
           feedbackBandLeft: gate411(), feedbackBandRight: zeros(),

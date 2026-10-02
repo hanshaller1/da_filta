@@ -94,6 +94,8 @@ function bankOptions(config, frequencies, qs) {
     feedbackBandRight: Array.from({ length: 10 }, (_, i) => i < (config.bands || 0)),
     feedbackAllLeft: Boolean(config.main), feedbackAllRight: Boolean(config.main), resonance: config.resonance || 0,
     feedbackTopology: config.topology || 'common-bus', feedbackCore: config.core || 'current',
+    // Freeze the P1-C benchmark contract; product startup now defaults to post-gain.
+    feedbackTap: 'pre-gain',
     feedbackAllEngine: config.legacy ? 'legacy' : 'common-bus', feedbackAllSource: 'post-gain-sum',
     feedbackAllLevel: 'raw', wetModel: 'filterbank-sum', spectralCoreRequired: !config.idle,
     collectResonatorDiagnostics: Boolean(config.diagnostics), collectNonlinearResonatorDiagnostics: Boolean(config.nonlinearDiagnostics),

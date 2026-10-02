@@ -7,9 +7,9 @@ assertions or tolerances; contract corrections are documented below.
 
 ## Profiles
 
-- Standard: `npm run test:browser` (255 active cases).
+- Standard: `npm run test:browser` (265 active cases).
 - Quarantine: `npm run test:browser:quarantine` (14 cases; failures keep exit code 1).
-- Full: `npm run test:browser:full` (269 cases, the disjoint union of both profiles).
+- Full: `npm run test:browser:full` (279 cases, the disjoint union of both profiles).
 - Smoke: `npm run test:browser:smoke` (eleven individual active cases).
 
 On PowerShell use `npm.cmd`. Each profile writes to its own directory under
@@ -20,6 +20,9 @@ other cases in the same specs remain active.
 P2 DSP adds five active performance cases; P2 Modulation adds nine active audio,
 graph, routing, native-cost and UI/restore cases (one also in Smoke). The fourteen
 quarantine cases remain unchanged; neither P2 task retires or adds quarantine tags.
+
+The Erica-style resonator task adds ten active topology, restore, parity, native
+audio, response, onset and performance cases. It adds or retires no quarantine tags.
 
 ## Evidence and exact cases
 

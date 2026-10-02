@@ -82,7 +82,20 @@ test('DEV LAB keeps telemetry and graph geometry stable for long live values', a
     const valueCells = [...document.querySelectorAll('.response-dev-summary b')].map(value => ({ text: value.textContent, height: value.getBoundingClientRect().height, wraps: value.scrollHeight > value.clientHeight, clipped: value.scrollWidth > value.clientWidth, textOverflow: getComputedStyle(value).textOverflow }));
     const visibleDiagnosticNodes = [...document.querySelectorAll('.response-dev-summary div, .response-dev-band-detail > *, .response-dev-bands em, .response-dev-bands small')].map(node => ({ clipped: node.scrollWidth > node.clientWidth, textOverflow: getComputedStyle(node).textOverflow }));
     const panel = document.querySelector('.response-dev-lab');
-    return { short, negative, long, summaryCells, valueCells, visibleDiagnosticNodes, horizontalOverflow: panel.scrollWidth > panel.clientWidth };
+    const horizontalOverflow = panel.scrollWidth > panel.clientWidth;
+    const perBandPacket = packet({ resonance: .7, scalar: .5 });
+    for (const channel of [perBandPacket.left, perBandPacket.right]) {
+      channel.feedbackCore = channel.feedbackCoreEffective = 'zdf-per-band';
+      channel.zdfPerBandLocalReturn = Array(10).fill(-.6123);
+      channel.zdfPerBandLocalBus = Array(10).fill(1.125);
+      channel.baseBandEnergy = channel.bandEnergy;
+      channel.baseBandPeak = channel.bandPeak;
+    }
+    window.FilterbankDebugConsole.receive(perBandPacket);
+    const privateCells = [...document.querySelectorAll('.response-dev-summary div')].filter(node => /^LOCAL \d+ (RET|BUS) L\/R/.test(node.textContent));
+    const privateGeometry = privateCells.map(node => ({ clipped: node.scrollWidth > node.clientWidth, valueClipped: node.querySelector('b').scrollWidth > node.querySelector('b').clientWidth }));
+    return { short, negative, long, summaryCells, valueCells, visibleDiagnosticNodes, horizontalOverflow,
+      privateGeometry, privateOverflow: panel.scrollWidth > panel.clientWidth };
   });
 
   for (const selector of ['.response-dev-traces', '.response-dev-bottom', '.response-dev-bands', '.response-dev-band-detail']) {
@@ -93,6 +106,9 @@ test('DEV LAB keeps telemetry and graph geometry stable for long live values', a
   expect(geometry.valueCells.every(value => value.height === 11 && !value.wraps && !value.clipped && value.textOverflow !== 'ellipsis')).toBeTruthy();
   expect(geometry.visibleDiagnosticNodes.every(node => !node.clipped && node.textOverflow !== 'ellipsis')).toBeTruthy();
   expect(geometry.horizontalOverflow).toBeFalsy();
+  expect(geometry.privateGeometry).toHaveLength(20);
+  expect(geometry.privateGeometry.every(node => !node.clipped && !node.valueClipped)).toBeTruthy();
+  expect(geometry.privateOverflow).toBeFalsy();
 });
 
 test('resonator diagnostics publish passive L/R telemetry at the bounded 15 Hz rate', async ({ page }) => {

@@ -1,11 +1,12 @@
 const { test, expect } = require('playwright/test');
 
-test('feedback labels explain the two buses and obsolete MOD is absent', async ({ page }) => {
+test('feedback labels explain private LOCAL and separate MAIN and obsolete MOD is absent', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   const fb = page.locator('[data-feedback-band="0"]');
   const main = page.locator('.fb-all-toggle');
   const mod = page.locator('[data-mod-band="0"]');
-  await expect(fb).toHaveAttribute('title', /alle zehn Bänder/);
+  await expect(fb).toHaveAttribute('title', /Eigene Rückkopplung dieses Bands/);
+  await expect(page.locator('[data-feedback-core]')).toHaveValue('zdf-per-band');
   await expect(main).toHaveAttribute('title', /Separater MAIN-Feedback-Bus/);
   await expect(mod).toHaveCount(0);
   await expect(page.locator('[data-feedback-topology] option[value="common-bus"]')).toHaveText(/DA_FILTA-ORIGINAL/);
@@ -46,6 +47,7 @@ test('DEV controls follow their audio topology without clearing stored values', 
   await page.locator('[data-wet-model]').selectOption('filterbank-sum');
   await expect(reference).toBeDisabled();
   await expect(reference).toHaveValue('0.5');
+  await page.locator('[data-feedback-core]').selectOption('current');
   await page.locator('[data-feedback-topology]').selectOption('isolated-tpt');
   await expect(tap).toBeDisabled();
   await expect(mainSource).toBeDisabled();

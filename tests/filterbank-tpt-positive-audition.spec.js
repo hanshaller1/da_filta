@@ -54,6 +54,8 @@ test('positive local TPT resonance is audible only as the controlled residual', 
       const input = createBurstInput(context, frequencies[index], leftOnly);
       source.buffer = input.buffer;
       const filterbank = await window.Filterbank.create(context, {
+        feedbackCore: 'current', feedbackTopology: 'isolated-tpt', wetModel: 'reference-delta',
+        feedbackTap: 'pre-gain', feedbackAllEngine: 'legacy', feedbackAllLevel: 'raw',
         bandGainLeft: neutral(),
         bandGainRight: neutral(),
         feedbackBandLeft: selectedGates(localIndices),

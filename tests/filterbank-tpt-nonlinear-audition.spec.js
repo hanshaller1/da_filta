@@ -64,6 +64,7 @@ test('the audible positive local path uses the 2x nonlinear residual and accepts
         channelCountMode: 'explicit',
         channelInterpretation: 'discrete',
         processorOptions: {
+          feedbackCore: 'current',
           bandFrequencies: frequencies,
           bandQs: qs,
           bandGainLeft: zeroes(),
