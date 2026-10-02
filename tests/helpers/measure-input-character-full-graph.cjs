@@ -116,9 +116,21 @@ async function measureFullGraph(page, { adaptive = false, cases = ['linear', 'ta
   }, { code, worklet, adaptive, cases, rates, durationMs });
   const complete = new Promise(resolve => cdp.once('Tracing.tracingComplete', resolve));
   await cdp.send('Tracing.end'); await complete;
+  result.nativeRender = summarizeNativeRender(result.live, traceEvents);
+  expect(result.options.bandFrequencies).toHaveLength(10);
+  expect(result.options.dynamicEqEnabled).toBe(true);
+  for (const row of result.nativeParity) expect(row.maximum).toBeLessThan(3e-6);
+  for (const row of result.live) {
+    expect(row.actualRate).toBe(row.rate); expect(row.nonfinite).toBe(0); expect(row.processorError).toBe(false);
+    expect(row.blocks).toBeGreaterThan(100); expect(row.analyzerReads).toBeGreaterThan(0); expect(row.telemetryMessages).toBeGreaterThan(0);
+    expect(row.peak).toBeGreaterThan(.001);
+  }
+  return result;
+}
+function summarizeNativeRender(live, traceEvents) {
   const starts = traceEvents.filter(event => event.name === 'AudioDestination::StartWithWorkletTaskRunner').sort((a, b) => a.ts - b.ts);
-  expect(starts).toHaveLength(result.live.length);
-  result.nativeRender = result.live.map((row, i) => {
+  expect(starts).toHaveLength(live.length);
+  return live.map((row, i) => {
     const all = traceEvents.filter(event => event.name === 'RealtimeAudioDestinationHandler::Render' && event.ph === 'X' && event.args?.frames === 128 && event.ts >= starts[i].ts && event.ts < (starts[i + 1]?.ts ?? Infinity));
     const durations = all.filter(event => event.ts > all[0].ts + 250000).map(event => event.dur / 1000).sort((a, b) => a - b);
     const quantile = q => durations[Math.min(durations.length - 1, Math.floor(durations.length * q))];
@@ -130,14 +142,84 @@ async function measureFullGraph(page, { adaptive = false, cases = ['linear', 'ta
     const switchP99 = switchTimes[Math.floor(switchTimes.length * .99)];
     return { rate: row.rate, stage: row.stage, blocks: durations.length, budgetMs, p50Ms: quantile(.5), p95Ms: quantile(.95), p99Ms: quantile(.99), maxMs: durations.at(-1), p99ReservePercent: 100 * (1 - quantile(.99) / budgetMs), overBudget: durations.filter(t => t > budgetMs).length, startupMaxMs: Math.max(...all.map(event => event.dur / 1000)), ...(switchTimes.length ? { switchWindow: { firstMs: 400, lastMs: 800, blocks: switchTimes.length, p99Ms: switchP99, maxMs: switchTimes.at(-1), p99ReservePercent: 100 * (1 - switchP99 / budgetMs), overBudget: switchTimes.filter(t => t > budgetMs).length } } : {}) };
   });
-  expect(result.options.bandFrequencies).toHaveLength(10);
-  expect(result.options.dynamicEqEnabled).toBe(true);
-  for (const row of result.nativeParity) expect(row.maximum).toBeLessThan(3e-6);
-  for (const row of result.live) {
-    expect(row.actualRate).toBe(row.rate); expect(row.nonfinite).toBe(0); expect(row.processorError).toBe(false);
-    expect(row.blocks).toBeGreaterThan(100); expect(row.analyzerReads).toBeGreaterThan(0); expect(row.telemetryMessages).toBeGreaterThan(0);
+}
+// Measure the installed AudioEngine graph with its separate production nodes,
+// source gates, MediaStream destination and real startup mute/ramp.
+async function measureProductionGraph(page, { rates = [48000, 96000], cases = ['linear', 'silk', 'tape', 'tube', 'console', 'crunch', 'destroy', 'tube->destroy', 'destroy->tube', 'tape->destroy', 'destroy->tape'] } = {}) {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const cdp = await page.context().newCDPSession(page), traceEvents = [];
+  cdp.on('Tracing.dataCollected', event => traceEvents.push(...event.value));
+  await cdp.send('Tracing.start', { categories: 'audio,webaudio,disabled-by-default-audio', transferMode: 'ReportEvents' });
+  const live = await page.evaluate(async ({ rates, cases }) => {
+    const NativeContext = window.AudioContext, originalPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () { this.muted = true; return originalPlay.call(this); };
+    const live = [];
+    try {
+      for (const rate of rates) for (const stage of cases) {
+        window.AudioContext = class extends NativeContext { constructor() { super({ sampleRate: rate, latencyHint: 'interactive' }); } };
+        let telemetryMessages = 0, processorError = false;
+        const engine = new window.AudioEngine({ onDynamicEqTelemetry() { telemetryMessages++; } });
+        engine.setFilterbankEnabled(true); engine.setResonance(.55);
+        engine.setDynamicEq({ dynamicEqEnabled: true, dynamicEqMode: 'cut', dynamicEqThresholdDb: -30 });
+        engine.setInputPreampStage(stage.split('->')[0]); engine.setInputCharacterAmount(50);
+        engine.setInputGainDb(6); engine.setDryWet(70); engine.setVolumeDb(-6);
+        for (const channel of ['left', 'right']) {
+          for (let i = 0; i < 10; i++) engine.setBandBaseGain(channel, i, 25);
+          for (const i of [2, 4, 6]) engine.setBandFeedback(channel, i, true);
+          engine.setFeedbackAll(channel, true);
+        }
+        engine.loadSampleBuffer = async () => {
+          const buffer = engine.context.createBuffer(2, rate, rate);
+          for (let c = 0; c < 2; c++) for (let i = 0; i < rate; i++) {
+            const t = i / rate, u = t % .25;
+            buffer.getChannelData(c)[i] = .11 * Math.sin(2 * Math.PI * 173 * t + c * .17) + .05 * Math.sin(2 * Math.PI * 2203 * t) + .04 * Math.exp(-u * 60) * Math.sin(2 * Math.PI * 7000 * t);
+          }
+          return buffer;
+        };
+        const start = performance.now();
+        await engine.start({ sourceMode: 'sample', sample: { id: 'p1c', path: 'generated-test-source' } });
+        const startupMs = performance.now() - start;
+        engine.inputPreampNode.onprocessorerror = () => { processorError = true; };
+        const analyzers = [];
+        for (const node of [engine.inputPreampNode, engine.filterbank.output]) {
+          const splitter = engine.context.createChannelSplitter(2); node.connect(splitter);
+          for (let c = 0; c < 2; c++) {
+            const analyzer = engine.context.createAnalyser(); analyzer.fftSize = 2048;
+            splitter.connect(analyzer, c); analyzers.push(analyzer);
+          }
+        }
+        let raf, analyzerReads = 0, nonfinite = 0, peak = 0;
+        const samples = new Float32Array(2048);
+        const draw = () => {
+          for (const analyzer of analyzers) {
+            analyzer.getFloatTimeDomainData(samples); analyzerReads++;
+            for (const value of samples) { if (!Number.isFinite(value)) nonfinite++; peak = Math.max(peak, Math.abs(value)); }
+          }
+          raf = requestAnimationFrame(draw);
+        };
+        draw();
+        if (stage.includes('->')) {
+          // AudioEngine.start includes the initial 250ms processing interval.
+          await new Promise(resolve => setTimeout(resolve, 240));
+          engine.setInputPreampStage(stage.split('->')[1]);
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        } else await new Promise(resolve => setTimeout(resolve, 1740));
+        live.push({ rate, actualRate: engine.context.sampleRate, stage, startupMs, analyzerReads, telemetryMessages, processorError, nonfinite, peak, startupMuted: engine.startupMuted });
+        cancelAnimationFrame(raf); await engine.stop();
+      }
+    } finally { window.AudioContext = NativeContext; HTMLMediaElement.prototype.play = originalPlay; }
+    return live;
+  }, { rates, cases });
+  const complete = new Promise(resolve => cdp.once('Tracing.tracingComplete', resolve));
+  await cdp.send('Tracing.end'); await complete;
+  const nativeRender = summarizeNativeRender(live, traceEvents);
+  for (const row of live) {
+    expect(row.actualRate).toBe(row.rate); expect(row.nonfinite).toBe(0);
+    expect(row.processorError).toBe(false); expect(row.startupMuted).toBe(false);
+    expect(row.startupMs).toBeGreaterThanOrEqual(250);
+    expect(row.analyzerReads).toBeGreaterThan(0); expect(row.telemetryMessages).toBeGreaterThan(0);
     expect(row.peak).toBeGreaterThan(.001);
   }
-  return result;
+  return { live, nativeRender };
 }
-module.exports = { measureFullGraph };
+module.exports = { measureFullGraph, summarizeNativeRender, measureProductionGraph };

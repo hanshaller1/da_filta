@@ -1,5 +1,10 @@
 # P3B.3 – Input Character: Produktionsarchitektur
 
+Historical architecture/measurement report. P1-C now integrates the later
+adaptive P3B.4/P3B.5 architecture into the real Worklet; the current contract and
+its measured limits are in [Productive Input Character](input-character-production.md).
+The original CPU decisions below refer to their historical prototype runs.
+
 Datum: 26.09.2026. Dies ist eine Architekturentscheidung mit ausführbarem Testprototyp. Die Anwendung lädt keinen der neuen Helfer. Produktions-DSP, P3B.1-Korrektur, Kennlinien, Input Gain, Filterbank, Dynamic EQ, Feedback und Schutzstufen wurden nicht geändert. Kein Commit, kein Push.
 
 ## Entscheidung: Differenzpfad C und Modell A

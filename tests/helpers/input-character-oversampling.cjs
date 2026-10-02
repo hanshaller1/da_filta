@@ -1,8 +1,8 @@
-// Test-only prototype. Production curves/process() are evaluated without copying them.
+// Historical prototype: evaluate the frozen, audited 1x baseline.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const source = fs.readFileSync(path.resolve(__dirname, '../../input-preamp-processor.js'), 'utf8');
+const source = fs.readFileSync(path.resolve(__dirname, 'input-character-legacy-processor.js'), 'utf8');
 const classes = new Map();
 function productionClass(rate) {
   if (!classes.has(rate)) {

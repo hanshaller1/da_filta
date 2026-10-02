@@ -1,5 +1,40 @@
 const { test, expect } = require('playwright/test');
 
+test('legacy spread metadata and MOD snapshots restore without changing P1-A assignments or effective bands', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('[data-mod-band]')).toHaveCount(0);
+  await expect(page.locator('[data-spread-curve]')).toHaveCount(0);
+  const report = await page.evaluate(() => {
+    const engine = window.FilterMode.getAudioEngine();
+    engine.setBandBaseGain('left', 0, 20); engine.setBandBaseGain('right', 0, -10);
+    engine.setModulationState({ lfoEnabled: true, lfoSources: [{ id: 'lfo.1', enabled: true, assignments: [
+      { id: 'saved-spread', targetId: 'filterbank.band.0.gainDb', amount: 30, channel: 'spread', invert: true, enabled: true }
+    ] }] });
+    const before = engine.getState(), bandsBefore = engine.getEffectiveBandGains(0), packetBefore = engine.getModulationState();
+    engine.applyState({ ...before, spreadCurve: 'quadratic', spreadMode: 'CLASSIC', modulated: Array(10).fill(true), unknownLegacyField: true });
+    const after = engine.getState(), bandsAfter = engine.getEffectiveBandGains(0);
+    engine.setSpreadCurve('smoothstep');
+    const curveBands = engine.getEffectiveBandGains(0), packetAfter = engine.getModulationState();
+    engine.applyState({ ...after, spreadMode: 'FB_CH_SELECT' });
+    const legacyMode = engine.getModulationState();
+    engine.applyState({ ...after, spreadMode: 'invalid', spreadCurve: 'invalid' });
+    return { before, after, bandsBefore, bandsAfter, curveBands, packetBefore, packetAfter,
+      legacyMode: legacyMode.spreadMode, invalidMode: engine.spreadMode, invalidCurve: engine.spreadCurve };
+  });
+  expect(report.after.spreadCurve).toBe('quadratic');
+  expect(report.bandsAfter).toEqual(report.bandsBefore);
+  expect(report.curveBands).toEqual(report.bandsBefore);
+  expect(report.packetAfter).toEqual(report.packetBefore);
+  expect(report.packetAfter).not.toHaveProperty('spreadCurve');
+  expect(report.packetAfter).not.toHaveProperty('modulated');
+  expect(report.after.lfoSources).toEqual(report.before.lfoSources);
+  expect(report.after.modulated).toBeUndefined();
+  expect(report.after.unknownLegacyField).toBeUndefined();
+  expect(report.legacyMode).toBe('FB_CH_SELECT');
+  expect(report.invalidMode).toBe('CLASSIC');
+  expect(report.invalidCurve).toBe('linear');
+});
+
 test('SPREAD uses concrete dB and materializes the authoritative L/R pair', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   const spread = page.locator('[data-control="spread"]');
@@ -151,7 +186,8 @@ test('DEV max changes the dB range, clamps SPREAD and leaves SPREAD CURVE compat
   const pair = await page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(0).display);
   expect(pair.leftDb).toBeCloseTo(-3, 8);
   expect(pair.rightDb).toBeCloseTo(3, 8);
-  await page.locator('[data-spread-curve]').evaluate(select => { select.value = 'quadratic'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect(page.locator('[data-spread-curve]')).toHaveCount(0);
+  await page.evaluate(() => window.FilterMode.getAudioEngine().setSpreadCurve('quadratic'));
   await expect(spread).toHaveValue('3');
   expect(await page.evaluate(() => window.FilterbankAnalyzer.getBandInfo(0).display)).toEqual(pair);
 });

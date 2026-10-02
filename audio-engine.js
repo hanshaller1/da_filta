@@ -75,6 +75,7 @@
       this.clockMod = window.ResonantState.normalizeClockModState();
       this.envelopeModuleEnabled = false;
       this.status = 'OFF';
+      this.startupMuted = false;
       this.inputGainDb = 0;
       this.inputPreampStage = 'linear';
       this.inputCharacterAmount = 50;
@@ -219,7 +220,7 @@
 
     setVolumeDb(value) {
       this.volumeDb = Math.max(-60, Math.min(0, Number(value)));
-      this.setSmoothedParam(this.volumeGainNode?.gain, this.bypass ? 0 : dbToGain(this.volumeDb));
+      this.setSmoothedParam(this.volumeGainNode?.gain, this.startupMuted || this.bypass ? 0 : dbToGain(this.volumeDb));
     }
 
     setOutputGuardEnabled(value) {
@@ -291,8 +292,8 @@
 
     setBypass(enabled, smoothingTime = 0.015) {
       this.bypass = Boolean(enabled);
-      this.setSmoothedParam(this.bypassGainNode?.gain, this.bypass ? 1 : 0, smoothingTime);
-      this.setSmoothedParam(this.volumeGainNode?.gain, this.bypass ? 0 : dbToGain(this.volumeDb), smoothingTime);
+      this.setSmoothedParam(this.bypassGainNode?.gain, !this.startupMuted && this.bypass ? 1 : 0, smoothingTime);
+      this.setSmoothedParam(this.volumeGainNode?.gain, this.startupMuted || this.bypass ? 0 : dbToGain(this.volumeDb), smoothingTime);
       return this.bypass;
     }
 
@@ -359,7 +360,8 @@
     setSpread(value) { this.spread = clampSpread(value, this.spreadMaxOffsetDb); this.syncModulationState(); return this.spread; }
     setPerChannelBands(value) { this.perChannelBands = Boolean(value); this.applyEffectiveBandGains(); this.syncModulationState(); return this.perChannelBands; }
     setSpreadMode(value) { this.spreadMode = value === 'FB_CH_SELECT' ? 'FB_CH_SELECT' : 'CLASSIC'; this.applyEffectiveBandGains(); this.syncModulationState(); return this.spreadMode; }
-    setSpreadCurve(value) { this.spreadCurve = normalizeSpreadCurve(value); this.applyEffectiveBandGains(); return this.spreadCurve; }
+    // Snapshot compatibility only; the live spread is already a concrete dB offset.
+    setSpreadCurve(value) { this.spreadCurve = normalizeSpreadCurve(value); return this.spreadCurve; }
     setSpreadMaxOffsetDb(value) { this.spreadMaxOffsetDb = normalizeSpreadMaxOffsetDb(value); this.spread = clampSpread(this.spread, this.spreadMaxOffsetDb); this.syncModulationState(); return this.spreadMaxOffsetDb; }
     setPositiveResonanceEngine(value) { this.positiveResonanceEngine = value === 'phase2' ? value : 'tpt'; this.filterbank?.setPositiveResonanceEngine(this.positiveResonanceEngine); return this.positiveResonanceEngine; }
     setFeedbackTopology(value) { this.feedbackTopology = value === 'common-bus' ? 'common-bus' : value === 'local-loop-exp' ? 'local-loop-exp' : 'isolated-tpt'; this.filterbank?.setFeedbackTopology(this.feedbackTopology); return this.feedbackTopology; }
@@ -844,8 +846,8 @@
       const gains = dryWetGains(this.dryWet);
       this.setAudioParam(this.dryGainNode?.gain, gains.dry, immediate);
       this.setAudioParam(this.wetGainNode?.gain, gains.wet, immediate);
-      this.setAudioParam(this.volumeGainNode?.gain, this.bypass ? 0 : dbToGain(this.volumeDb), immediate);
-      this.setAudioParam(this.bypassGainNode?.gain, this.bypass ? 1 : 0, immediate);
+      this.setAudioParam(this.volumeGainNode?.gain, this.startupMuted || this.bypass ? 0 : dbToGain(this.volumeDb), immediate);
+      this.setAudioParam(this.bypassGainNode?.gain, !this.startupMuted && this.bypass ? 1 : 0, immediate);
     }
 
     setGateGain(gate, value, time = this.context?.currentTime || 0, rampSeconds = 0) {
@@ -977,6 +979,7 @@
     async start({ inputDeviceId, outputDeviceId, sourceMode = 'device', sample = null }) {
       if (this.status === 'STARTING' || this.status === 'ON') return;
       this.setStatus('STARTING');
+      this.startupMuted = true;
       try {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (!AudioContextClass) throw new Error('AudioContext ist in diesem Browser nicht verfügbar.');
@@ -1014,6 +1017,7 @@
         }
         this.mixBus = this.context.createGain();
         this.volumeGainNode = this.context.createGain();
+        this.volumeGainNode.gain.value = 0;
         this.outputGuardNode = new AudioWorkletNode(this.context, 'da-filta-output-guard', {
           numberOfInputs: 1,
           numberOfOutputs: 1,
@@ -1090,6 +1094,14 @@
         if (typeof this.outputElement.setSinkId === 'function') await this.outputElement.setSinkId(outputDeviceId || '');
         else if (outputDeviceId) throw new Error('Dieses Chrome-Setup unterstützt keine Audio-Auswahl.');
         await this.outputElement.play();
+        // Fill the fixed Character histories and allow startup JIT before sound.
+        // Both global dry/wet branches already share the same Character delay.
+        const startupContext = this.context;
+        await new Promise(resolve => setTimeout(resolve, 250));
+        if (this.context !== startupContext || this.status !== 'STARTING') return;
+        this.startupMuted = false;
+        this.setGateGain(this.volumeGainNode, this.bypass ? 0 : dbToGain(this.volumeDb), this.context.currentTime, 0.01);
+        this.setGateGain(this.bypassGainNode, this.bypass ? 1 : 0, this.context.currentTime, 0.01);
         this.setStatus('ON');
       } catch (error) {
         await this.cleanup();
@@ -1104,6 +1116,7 @@
     }
 
     async cleanup() {
+      this.startupMuted = false;
       this.stopInputNodes({ immediate: true });
       if (this.filterbank) { this.filterbank.dispose(); this.filterbank = null; }
       [this.sourceBus, this.inputGainNode, this.inputPreampNode, this.dryGainNode, this.wetGainNode, this.modulationDryInvertNode, this.bypassGainNode, this.inputSpectrumSplitterNode, this.inputSpectrumAnalyserLeft, this.inputSpectrumAnalyserRight, this.spectrumSplitterNode, this.spectrumAnalyserLeft, this.spectrumAnalyserRight, this.mixBus, this.volumeGainNode, this.outputGuardNode, this.outputProtectionNode].forEach(node => this.disconnectNode(node));

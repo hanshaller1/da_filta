@@ -60,12 +60,9 @@ Nach Implementierung von Envelope Follower V1:
 
 ## DSP / Audio
 
-- Produktives Input-Character-Oversampling integrieren.
 - Optional später: 96-kHz Input-Character-Transition-Performance untersuchen/optimieren.
-- PHASE-2 Resonatorpfad fachlich entscheiden.
+- Legacy PHASE-2 bleibt LAB-Vergleich: spätere Promotion/Entfernung nur mit finalem Klang-/Kalibriervertrag und Audio-/CPU-Vergleich der bestehenden Cores entscheiden.
 - `feedbackAllEngine = legacy` prüfen und entfernen, falls endgültig unnötig.
-- `spreadCurve` / `spreadMode` sinnvoll implementieren, migrieren oder entfernen.
-- Alten `MOD`-Button-State sinnvoll mit dem neuen Modulation Core verbinden oder entfernen.
 - Feedback-/Resonanzarchitektur langfristig weiter bewerten:
   - Common Bus als eigener da_filta-Charakter
   - lokale / Per-Band / ZDF-Varianten gezielt vergleichen
@@ -93,6 +90,21 @@ Nach Implementierung von Envelope Follower V1:
   und Tail-Energie in vier Zeitfenstern ersetzen Annahmen des alten Resonatorpfads.
 - LFO-Visualisierung: Achse, Nulllinie, Preview und finaler Live-Marker verwenden
   bipolar −1…+1, unipolar 0…+1 und mit INVERT −1…0. LFO-DSP unverändert.
+
+## Erledigt – P1-C DSP / Legacy (2026-10-02)
+
+- Produktiver Input-Character-FIR-Differenzpfad mit adaptiver 1×/2×/4×-Matrix,
+  festen 192 Samples Latenz, warmem Stage-Handover und stummem Start integriert.
+  Native 96-kHz-Gesamtgraph-Reserve bleibt der separate Performance-Punkt oben;
+  auch der alte 1×-Pfad zeigt im aktuellen Gesamtlastvergleich Budgetausreißer.
+- PHASE-2 fachlich eingeordnet: vorhandenen isolierten LOCAL-LAB-Vergleich
+  behalten; keine zusätzliche, unkalibrierte Resonatorarchitektur erfinden.
+  Bereits implementierter Per-Band-ZDF-Phase-2-MAIN bleibt unabhängig erhalten.
+- `spreadCurve` / `spreadMode` ausdrücklich interne Kompatibilitätsfelder;
+  inaktiven Curve-Selector entfernt, vorhandene Audio-/Restore-Semantik bewahrt.
+- Obsoleten MOD-Platzhalter entfernt; alte `modulated`-Werte bleiben beim Laden
+  folgenlos. Aktive LFO-/Envelope-Assignments und Clock Mod sind unverändert.
+- P1-B MIDI bleibt vollständig offen; keine Mapping-/Learn-/Encoder-Arbeit.
 
 ## Status prüfen / möglicherweise bereits erledigt oder überholt
 

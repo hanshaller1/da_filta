@@ -41,7 +41,14 @@ test('the INPUT combobox switches between one device source and one integrated l
   await expect(inputSelect.locator('option')).toHaveText(['Full Drums 145 BPM', 'Loop 140 BPM']);
   expect(await inputRow.evaluate(element => element.getBoundingClientRect().height)).toBe(initialHeight);
   await page.locator('[data-audio-start]').click();
+  await expect(page.locator('[data-audio-status]')).toHaveText('STARTING');
+  await expect(inputSelect).toBeDisabled();
+  await expect(page.locator('[data-audio-source="device"]')).toBeDisabled();
+  await expect(page.locator('[data-audio-source="sample"]')).toBeDisabled();
   await expect(page.locator('[data-audio-status]')).toHaveText('ON');
+  await expect(inputSelect).toBeEnabled();
+  await expect(page.locator('[data-audio-source="device"]')).toBeEnabled();
+  await expect(page.locator('[data-audio-source="sample"]')).toBeEnabled();
   let graph = await page.evaluate(() => ({ ...window.__sampleGraph, source: window.__sampleGraph.sources.at(-1) && { loop: window.__sampleGraph.sources.at(-1).loop, starts: window.__sampleGraph.sources.at(-1).startTimes, stops: window.__sampleGraph.sources.at(-1).stopTimes, channels: window.__sampleGraph.sources.at(-1).buffer.numberOfChannels } }));
   expect(graph.deviceCalls).toBe(0);
   expect(graph.decodeCalls).toBe(1);
@@ -62,6 +69,8 @@ test('the INPUT combobox switches between one device source and one integrated l
   await expect(page.locator('[data-audio-status]')).toHaveText('OFF');
   expect(await page.evaluate(() => window.__sampleGraph.sources.at(-1).stopTimes.length)).toBe(1);
   await page.locator('[data-audio-start]').click();
+  await expect(inputSelect).toBeDisabled();
+  await expect(page.locator('[data-audio-status]')).toHaveText('ON');
   expect(await page.evaluate(() => window.__sampleGraph.sources.length)).toBe(3);
   expect(await page.evaluate(() => window.__sampleGraph.decodeCalls)).toBe(2);
   expect(await page.evaluate(() => window.__sampleGraph.sources.at(-1).loop)).toBeTruthy();

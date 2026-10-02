@@ -1,14 +1,13 @@
 const { test, expect } = require('playwright/test');
 
-test('feedback labels explain the two buses and MOD remains reserved', async ({ page }) => {
+test('feedback labels explain the two buses and obsolete MOD is absent', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   const fb = page.locator('[data-feedback-band="0"]');
   const main = page.locator('.fb-all-toggle');
   const mod = page.locator('[data-mod-band="0"]');
   await expect(fb).toHaveAttribute('title', /alle zehn Bänder/);
   await expect(main).toHaveAttribute('title', /Separater MAIN-Feedback-Bus/);
-  await expect(mod).toBeDisabled();
-  await expect(mod).toHaveAttribute('title', /keine Audiofunktion/);
+  await expect(mod).toHaveCount(0);
   await expect(page.locator('[data-feedback-topology] option[value="common-bus"]')).toHaveText(/DA_FILTA-ORIGINAL/);
   await expect(page.locator('[data-feedback-all-source] option[value="post-gain-sum"]')).toHaveText('STATIC POST-GAIN SUM');
 
@@ -36,8 +35,7 @@ test('DEV controls follow their audio topology without clearing stored values', 
   const resonatorDrive = page.locator('[data-positive-resonance-drive]');
   await expect(reference).toBeDisabled();
   await expect(reference.locator('..')).toHaveClass(/is-irrelevant/);
-  await expect(spreadCurve).toBeDisabled();
-  await expect(spreadCurve.locator('..')).toContainText('INACTIVE');
+  await expect(spreadCurve).toHaveCount(0);
   await expect(tap).toBeEnabled();
   await expect(mainSource).toBeEnabled();
   await expect(resonatorDrive).toBeDisabled();

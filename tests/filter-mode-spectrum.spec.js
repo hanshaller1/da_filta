@@ -79,7 +79,12 @@ test('FILTER graph toggles real pre/post filterbank FFT overlays without changin
   await page.locator('[data-filter-view="input"]').click();
   await page.locator('[data-filter-view="filter"]').click();
   await page.locator('[data-audio-start]').click();
-  await page.waitForTimeout(260);
+  await expect(page.locator('[data-audio-status]')).toHaveText('ON');
+  await expect.poll(() => canvas.evaluate(node => {
+    const pixels = node.getContext('2d').getImageData(0, 0, node.width, node.height).data;
+    for (let i = 3; i < pixels.length; i += 4) if (pixels[i]) return true;
+    return false;
+  })).toBe(true);
   const graph = await page.evaluate(() => {
     const canvas = document.querySelector('canvas.filter-response-spectrum');
     const context = canvas.getContext('2d');

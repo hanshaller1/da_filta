@@ -7,9 +7,9 @@ assertions or tolerances; contract corrections are documented below.
 
 ## Profiles
 
-- Standard: `npm run test:browser` (231 active cases).
+- Standard: `npm run test:browser` (241 active cases).
 - Quarantine: `npm run test:browser:quarantine` (14 cases; failures keep exit code 1).
-- Full: `npm run test:browser:full` (245 cases, the disjoint union of both profiles).
+- Full: `npm run test:browser:full` (255 cases, the disjoint union of both profiles).
 - Smoke: `npm run test:browser:smoke` (ten individual active cases).
 
 On PowerShell use `npm.cmd`. Each profile writes to its own directory under

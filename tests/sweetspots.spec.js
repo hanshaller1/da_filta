@@ -12,7 +12,6 @@ const openGroup = async (page, group) => {
 };
 const setCompatibilityCurve = (page, value) => page.evaluate(next => {
   window.FilterMode.getAudioEngine().setSpreadCurve(next);
-  document.querySelector('[data-spread-curve]').value = next;
 }, value);
 
 test.describe('DEV/LAB snapshots', () => {
@@ -100,7 +99,8 @@ test.describe('DEV/LAB snapshots', () => {
     await expect(page.locator('[data-wet-model]')).toHaveValue('reference-delta');
     await expect(page.locator('[data-feedback-all-engine]')).toHaveValue('legacy');
     await expect(page.locator('[data-feedback-all-level]')).toHaveValue('raw');
-    await expect(page.locator('[data-spread-curve]')).toHaveValue('smoothstep');
+    await expect(page.locator('[data-spread-curve]')).toHaveCount(0);
+    expect(await page.evaluate(() => window.FilterMode.getAudioEngine().spreadCurve)).toBe('smoothstep');
     await expect(page.locator('[data-spread-max-offset-db]')).toHaveValue('12');
     await expect(page.locator(normalControls.resonance)).toHaveValue('0.82');
     await expect(page.locator(normalControls.inputGain)).toHaveValue('6');
@@ -130,7 +130,8 @@ test.describe('DEV/LAB snapshots', () => {
     await page.locator('[data-sweetspot-load="A"]').click();
 
     await expect(page.locator('[data-feedback-core]')).toHaveValue('zdf');
-    await expect(page.locator('[data-spread-curve]')).toHaveValue('quadratic');
+    await expect(page.locator('[data-spread-curve]')).toHaveCount(0);
+    expect(await page.evaluate(() => window.FilterMode.getAudioEngine().spreadCurve)).toBe('quadratic');
     await expect(page.locator('[data-spread-max-offset-db]')).toHaveValue('9');
     for (const [key, value] of Object.entries({ resonance: '0.82', inputGain: '6', dryWet: '70', spread: '-0.3', volume: '-9', band: '-25' })) await expect(page.locator(normalControls[key])).toHaveValue(value);
   });

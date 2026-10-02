@@ -35,7 +35,6 @@ test('theme selector switches all themes and persists without resetting UI state
   const themeSelect = page.locator('[data-theme-select]');
   const fader = page.locator('.band-fader:not([data-channel])').nth(0);
   const fb = page.locator('[data-feedback-band]').nth(0);
-  const mod = page.locator('[data-mod-band]').nth(0);
   const themes = [
     'current', 'clean-modern', 'dark-studio', 'analog-inspired', 'minimal-dark', 'pro-console',
     'graphite', 'midnight', 'slate', 'forest', 'warm-studio',
@@ -49,7 +48,7 @@ test('theme selector switches all themes and persists without resetting UI state
   await expect(page.locator('body')).toHaveAttribute('data-theme', 'current');
   await fader.fill('40');
   await fb.click();
-  await expect(mod).toBeDisabled();
+  await expect(page.locator('[data-mod-band]')).toHaveCount(0);
 
   for (const theme of themes) {
     await themeSelect.selectOption(theme);
@@ -57,7 +56,7 @@ test('theme selector switches all themes and persists without resetting UI state
     await expect(themeSelect).toHaveValue(theme);
     await expect(fader).toHaveValue('40');
     await expect(fb).toHaveClass(/active/);
-    await expect(mod).toBeDisabled();
+    await expect(page.locator('[data-mod-band]')).toHaveCount(0);
   }
 
   await page.reload({ waitUntil: 'networkidle' });
@@ -383,7 +382,7 @@ test('double-click resets every slider through its default update path', async (
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });
 
-test('FB and band keyboard controls share state while MOD stays reserved', { tag: '@smoke' }, async ({ page }) => {
+test('FB and band keyboard controls share state after obsolete MOD removal', { tag: '@smoke' }, async ({ page }) => {
   const consoleErrors = [];
   const pageErrors = [];
   page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
@@ -391,7 +390,6 @@ test('FB and band keyboard controls share state while MOD stays reserved', { tag
   await page.goto('/', { waitUntil: 'networkidle' });
 
   const fb = page.locator('[data-feedback-band]');
-  const mod = page.locator('[data-mod-band]');
   const faders = page.locator('.band-fader:not([data-channel])');
   const analyzerBar = index => page.locator(`[data-analyzer-band="${index}"] i`).first();
 
@@ -402,11 +400,10 @@ test('FB and band keyboard controls share state while MOD stays reserved', { tag
   await page.keyboard.press('Digit0');
   await expect(fb.nth(9)).toHaveClass(/active/);
   await page.keyboard.press('Shift+Digit1');
-  await expect(mod.nth(0)).toBeDisabled();
-  await expect(mod.nth(0)).not.toHaveClass(/active/);
+  await expect(page.locator('[data-mod-band]')).toHaveCount(0);
   await expect(fb.nth(0)).not.toHaveClass(/active/);
   await page.keyboard.press('Shift+Digit0');
-  await expect(mod.nth(9)).toBeDisabled();
+  await expect(page.locator('[data-mod-band]')).toHaveCount(0);
 
   const initialBar = await analyzerBar(0).getAttribute('style');
   await page.keyboard.press('KeyQ');
@@ -509,7 +506,6 @@ test('keyboard shortcuts remain active after focusing a band range with the mous
 
   const fader = page.locator('.band-fader:not([data-channel])').nth(0);
   const fb = page.locator('[data-feedback-band]').nth(0);
-  const mod = page.locator('[data-mod-band]').nth(0);
 
   await fader.click();
   await expect(fader).toBeFocused();
@@ -520,8 +516,7 @@ test('keyboard shortcuts remain active after focusing a band range with the mous
   await page.keyboard.press('Digit1');
   await expect(fb).toHaveClass(/active/);
   await page.keyboard.press('Shift+Digit1');
-  await expect(mod).toBeDisabled();
-  await expect(mod).not.toHaveClass(/active/);
+  await expect(page.locator('[data-mod-band]')).toHaveCount(0);
   await expect(fb).toHaveClass(/active/);
 
   expect(consoleErrors, `Browser console errors:\n${consoleErrors.join('\n')}`).toEqual([]);
@@ -538,7 +533,6 @@ test('latest FB UI rules keep neutral keys and inactive modes correct', async ({
   const faders = page.locator('.band-fader:not([data-channel])');
   const modeButtons = page.locator('.mode-select');
   const fb = page.locator('[data-feedback-band]');
-  const mod = page.locator('[data-mod-band]');
 
   await page.keyboard.press('KeyQ');
   await expect(faders.nth(0)).toHaveValue('10');
@@ -567,8 +561,7 @@ test('latest FB UI rules keep neutral keys and inactive modes correct', async ({
   await page.keyboard.press('Digit1');
   await expect(fb.nth(0)).toHaveClass(/active/);
   await page.keyboard.press('Shift+Digit1');
-  await expect(mod.nth(0)).toBeDisabled();
-  await expect(mod.nth(0)).not.toHaveClass(/active/);
+  await expect(page.locator('[data-mod-band]')).toHaveCount(0);
   await expect(fb.nth(0)).toHaveClass(/active/);
 
   await expect(modeButtons).not.toHaveCount(0);

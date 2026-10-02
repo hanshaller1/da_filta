@@ -21,6 +21,7 @@ import { normalizeClockModState } from './clock-mod-core.mjs';
   const BAND_GAIN_MIN = -100;
   const BAND_GAIN_MAX = 100;
   const BAND_GAIN_NEUTRAL = 0;
+  // Internal legacy snapshot metadata; these names do not select DSP curves.
   const SPREAD_CURVES = Object.freeze(['linear', 'quadratic', 'smoothstep']);
   const SPREAD_MAX_OFFSET_VALUES = Object.freeze([3, 6, 9, 12]);
   const GLOBAL_CONTROL_DEFINITIONS = Object.freeze({
@@ -193,6 +194,8 @@ import { normalizeClockModState } from './clock-mod-core.mjs';
     filterBaxandallTrebleDb: 0,
     filterBaxandallCenterHz: 777,
     filterBaxandallSlope: 50,
+    // Legacy FB_CH_SELECT restores its original no-global-spread gate.
+    // Current UI channel authority is controlled by perChannelBands instead.
     spreadMode: 'CLASSIC',
     channelSelection: 'LR',
     inputGain: GLOBAL_CONTROL_DEFINITIONS.inputGain.defaultValue,

@@ -3,7 +3,7 @@ const { test, expect } = require('playwright/test');
 const expectedGroups = {
   input: ['DEV INPUT STAGE', 'DEV CHARACTER'],
   output: ['OUTPUT GUARD', 'GUARD THRESHOLD', 'ATTACK', 'RELEASE', 'FINAL SAFETY', 'SAFETY KNEE START', 'SOFTNESS'],
-  filterbank: ['DEV REFERENCE', 'DEV BAND BOOST', 'DEV BAND CUT', 'SPREAD CURVE · INACTIVE', 'DEV SPREAD MAX OFFSET', 'DEV WET MODEL'],
+  filterbank: ['DEV REFERENCE', 'DEV BAND BOOST', 'DEV BAND CUT', 'DEV SPREAD MAX OFFSET', 'DEV WET MODEL'],
   'local-feedback': ['DEV FB TOPOLOGY', 'FEEDBACK CORE', 'DEV LOCAL LOOP TUNING', 'DEV FB TAP', 'DEV FB SAT', 'DEV FB DRIVE', 'DEV FB CEILING'],
   main: ['DEV FB ALL ENGINE', 'DEV FB ALL SOURCE', 'DEV POST GAIN FB WEIGHT', 'DEV FB ALL LEVEL', 'FB ALL AMOUNT', 'DEV RESONANCE CURVE', 'DEV MAIN SAT/RETURN'],
   'negative-resonance': ['NEG MODE', 'NEG CURVE', 'NEG AMOUNT', 'NEG LOCAL', 'NEG MAIN', 'NEG PHASE'],
@@ -31,6 +31,7 @@ test('DEV-LAB exposes complete click-open group help, including OUTPUT', async (
     if (previousButton) await expect(previousButton).toHaveAttribute('aria-expanded', 'false');
     previousButton = button;
     for (const name of names) await expect(tooltip.getByRole('heading', { name, exact: true })).toBeVisible();
+    if (group === 'filterbank') await expect(tooltip).not.toContainText('SPREAD CURVE');
     await expect(tooltip).not.toContainText('Signalweg / Scope');
     await expect(tooltip).not.toContainText('Werte:');
     await expect(tooltip).not.toContainText('Default:');

@@ -148,7 +148,7 @@ devLabControls?.querySelectorAll('.dev-lab-collapse-toggle').forEach(button => {
 const groupForDevControl = control => {
   const attribute = control.querySelector('select')?.getAttributeNames().find(name => name.startsWith('data-')) ?? '';
   if (attribute === 'data-input-preamp-stage') return 'input';
-  if (attribute === 'data-reference-level' || attribute === 'data-band-boost-db' || attribute === 'data-band-cut-db' || attribute === 'data-spread-curve' || attribute === 'data-spread-max-offset-db' || attribute === 'data-wet-model') return 'filterbank';
+  if (attribute === 'data-reference-level' || attribute === 'data-band-boost-db' || attribute === 'data-band-cut-db' || attribute === 'data-spread-max-offset-db' || attribute === 'data-wet-model') return 'filterbank';
   if (attribute === 'data-feedback-topology' || attribute === 'data-feedback-tap' || attribute === 'data-local-loop-tuning' || attribute === 'data-feedback-core') return 'local-feedback';
   if (attribute === 'data-feedback-all-engine' || attribute === 'data-feedback-all-source' || attribute === 'data-post-gain-feedback-weight' || attribute === 'data-feedback-all-level') return 'main';
   return 'resonator';
@@ -812,7 +812,6 @@ const addDevLabSelector = (label, attribute, options) => {
     'data-reference-level': 'filterbank',
     'data-band-boost-db': 'filterbank',
     'data-band-cut-db': 'filterbank',
-    'data-spread-curve': 'filterbank',
     'data-spread-max-offset-db': 'filterbank',
     'data-wet-model': 'filterbank',
     'data-feedback-topology': 'local-feedback',
@@ -945,12 +944,10 @@ const outputSoftnessInput = addDevLabNumberControl({
   onChange: value => audioEngine?.setOutputProtectionSoftness(value), group: 'output'
 });
 const referenceLevelSelect = addDevLabSelector('DEV REFERENCE', 'data-reference-level', [['1', '100 %'], ['0.75', '75 %'], ['0.5', '50 %'], ['0.25', '25 %'], ['0', '0 % / BANDS ONLY']]);
-const resonanceEngineSelect = addDevLabSelector('DEV RES ENGINE', 'data-positive-resonance-engine', [['tpt', 'TPT'], ['phase2', 'PHASE 2']]);
+const resonanceEngineSelect = addDevLabSelector('DEV RES ENGINE', 'data-positive-resonance-engine', [['tpt', 'TPT'], ['phase2', 'PHASE 2 · LEGACY']]);
 const bandBoostSelect = addDevLabSelector('DEV BAND BOOST', 'data-band-boost-db', [['12', '+12 dB'], ['18', '+18 dB'], ['24', '+24 dB']]);
 const bandCutSelect = addDevLabSelector('DEV BAND CUT', 'data-band-cut-db', [['12', '-12 dB'], ['24', '-24 dB'], ['36', '-36 dB'], ['48', '-48 dB'], ['60', '-60 dB']]);
-const spreadCurveSelect = addDevLabSelector('SPREAD CURVE · INACTIVE', 'data-spread-curve', [['linear', 'LINEAR'], ['quadratic', 'QUADRATIC'], ['smoothstep', 'SMOOTHSTEP']]);
 const spreadMaxOffsetSelect = addDevLabSelector('DEV SPREAD MAX OFFSET', 'data-spread-max-offset-db', [['3', '3 dB'], ['6', '6 dB'], ['9', '9 dB'], ['12', '12 dB']]);
-if (spreadCurveSelect) spreadCurveSelect.value = 'linear';
 if (spreadMaxOffsetSelect) spreadMaxOffsetSelect.value = '6';
 const feedbackTopologySelect = addDevLabSelector('DEV FB TOPOLOGY', 'data-feedback-topology', [['isolated-tpt', 'ISOLATED TPT'], ['common-bus', 'COMMON BUS · DA_FILTA-ORIGINAL'], ['local-loop-exp', 'LOCAL LOOP EXP']]);
 const feedbackCoreSelect = addDevLabSelector('FEEDBACK CORE', 'data-feedback-core', [['current', 'CURRENT'], ['zdf', 'ZDF UNIFIED'], ['zdf-per-band', 'ZDF PER-BAND']]);
@@ -1120,12 +1117,6 @@ const DEV_LAB_HELP = {
     values: [['-12 dB', 'Fader -100 = -12 dB.'], ['-24 dB', 'Fader -100 = -24 dB.'], ['-36 dB', 'Fader -100 = -36 dB.'], ['-48 dB', 'Fader -100 = -48 dB.'], ['-60 dB', 'Fader -100 = -60 dB.']],
     default: '-12 dB', note: 'Experimenteller Kalibrierwert; kein bestätigter Erica-Hardwarewert.'
   },
-  'data-spread-curve': {
-    title: 'SPREAD CURVE · INACTIVE', what: 'Gespeicherter Kompatibilitätswert ohne Audiofunktion.',
-    scope: 'Der globale SPREAD-Regler liefert jetzt bereits den konkreten dB-Offset. Deshalb verformt diese Auswahl den angezeigten Wert aktuell nicht.',
-    values: [['LINEAR', 'Keine zusätzliche Transformation.'], ['QUADRATIC', 'Gespeichert, derzeit ohne zusätzliche Transformation.'], ['SMOOTHSTEP', 'Gespeichert, derzeit ohne zusätzliche Transformation.']],
-    default: 'LINEAR', note: 'Bewusst nicht entfernt, damit bestehende DEV/LAB-Snapshots kompatibel bleiben.'
-  },
   'data-spread-max-offset-db': {
     title: 'DEV SPREAD MAX OFFSET', what: 'Legt den maximalen CLASSIC-SPREAD-Offset pro Kanal fest.',
     scope: 'Legt unmittelbar Min/Max des globalen SPREAD-Reglers fest. Eine notwendige Bereichsklemmung materialisiert neue L/R-Bandwerte.',
@@ -1266,9 +1257,9 @@ const DEV_LAB_HELP = {
   'data-negative-resonance-phase': { title: 'NEG PHASE', what: 'Steuert ausschließlich den PHASE-Modus.', default: '90°' },
   'data-positive-resonance-engine': {
     title: 'DEV RES ENGINE', what: 'Wählt die Engine des positiven lokalen Resonators.',
-    scope: 'Nur positive lokale Resonance außerhalb des COMMON-BUS-Modus; negative Resonance und FB ALL bleiben im Legacy-Pfad.',
-    values: [['TPT', 'Nichtlinearer positiver TPT-Resonatorpfad mit dem aktuellen Residual-/Audition-Modell.'], ['PHASE 2', 'Ältere positive Phase-2-Resonator-/Prototyplösung.']],
-    default: 'TPT', note: 'Experimenteller Engine-Vergleich; im aktuellen COMMON-BUS-Core wirkungslos.'
+    scope: 'Positiver LOCAL-Vergleich in ISOLATED TPT ohne ZDF PER-BAND. Ein gespeichertes PHASE 2 sperrt außerdem die TPT-spezifische LOCAL LOOP COMPENSATED-Abstimmung. Negative Resonance und MAIN folgen ihren eigenen Feedback-Pfaden.',
+    values: [['TPT', 'Nichtlinearer positiver TPT-Resonatorpfad mit dem aktuellen Residual-/Audition-Modell.'], ['PHASE 2 · LEGACY', 'Erhaltener älterer LOCAL-Vergleichspfad; keine neue Produktarchitektur.']],
+    default: 'TPT', note: 'LAB-Vergleich; keine eigene COMMON-BUS- oder aktive ZDF-Engine. Unabhängig vom bereits implementierten Per-Band-ZDF-Phase-2-MAIN.'
   }
 };
 
@@ -1276,7 +1267,7 @@ const DEV_LAB_GROUP_HELP = {
   input: ['data-input-preamp-stage', 'data-input-character-amount'],
   output: ['data-output-guard-enabled', 'data-output-guard-threshold', 'data-output-guard-attack-ms', 'data-output-guard-release-ms', 'data-output-protection-enabled', 'data-output-protection-threshold', 'data-output-protection-softness'],
   keyboard: ['data-key-step-percent', 'data-key-speed-hz'],
-  filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-spread-curve', 'data-spread-max-offset-db', 'data-wet-model'],
+  filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-spread-max-offset-db', 'data-wet-model'],
   'local-feedback': ['data-feedback-topology', 'data-feedback-core', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
   main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-post-gain-feedback-weight', 'data-feedback-all-level', 'data-feedback-all-amount', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
   'negative-resonance': ['data-negative-resonance-mode', 'data-negative-resonance-curve', 'data-negative-resonance-amount', 'data-negative-resonance-local', 'data-negative-resonance-main', 'data-negative-resonance-phase'],
@@ -3487,7 +3478,7 @@ modeTabs.forEach((tab, index) => {
 });
 bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><i class="classic-channel-marker classic-channel-marker-left" data-classic-marker="${index}-left" aria-hidden="true"></i><i class="classic-channel-marker classic-channel-marker-right" data-classic-marker="${index}-right" aria-hidden="true"></i><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
 const filterbankBandControls = document.querySelector('.filterbank-band-controls');
-if (filterbankBandControls) filterbankBandControls.innerHTML = BAND_DEFINITIONS.map((band, index) => `<div class="filterbank-band-control" data-filterbank-band-control="${index}" aria-label="${band.label} Filterbank Controls"><button class="band-action" type="button" data-feedback-band="${index}" aria-pressed="false" title="COMMON BUS: Dieses Band speist den gemeinsamen Feedback-Bus; sein Return regt alle zehn Bänder dieses Kanals an.">FB</button><button class="band-action" type="button" data-mod-band="${index}" aria-label="MOD Band ${index + 1} reserviert, ohne Audiofunktion" title="MOD ist für spätere Modulation reserviert und hat derzeit keine Audiofunktion." disabled aria-disabled="true" aria-pressed="false">MOD</button></div>`).join('');
+if (filterbankBandControls) filterbankBandControls.innerHTML = BAND_DEFINITIONS.map((band, index) => `<div class="filterbank-band-control" data-filterbank-band-control="${index}" aria-label="${band.label} Filterbank Controls"><button class="band-action" type="button" data-feedback-band="${index}" aria-pressed="false" title="COMMON BUS: Dieses Band speist den gemeinsamen Feedback-Bus; sein Return regt alle zehn Bänder dieses Kanals an.">FB</button></div>`).join('');
 document.querySelectorAll('.band-card').forEach((card, index) => {
   card.querySelector('.fader-wrap')?.classList.add('center-fader');
   const channelFader = channel => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;
@@ -4119,6 +4110,10 @@ const updateAudioStatus = (status, message = '') => {
   audioStatus.textContent = status;
   audioMessage.textContent = message;
   audioStatus.dataset.status = status;
+  // The graph starts with one fixed source; keep its UI selection aligned
+  // throughout module loading and the Character warmup interval.
+  inputSourceButtons.forEach(button => { button.disabled = status === 'STARTING'; });
+  if (inputDeviceSelect) inputDeviceSelect.disabled = status === 'STARTING';
   if (audioToggleButton) {
     audioToggleButton.disabled = status === 'STARTING';
     audioToggleButton.textContent = status === 'ON' ? 'STOP AUDIO' : 'START AUDIO';
@@ -4257,7 +4252,6 @@ const updateDevControlRelevance = () => {
   setDevControlRelevance(outputThresholdInput, audioEngine.outputProtectionEnabled, 'Nur bei FINAL SAFETY ON aktiv.');
   setDevControlRelevance(outputSoftnessInput, audioEngine.outputProtectionEnabled, 'Nur bei FINAL SAFETY ON aktiv.');
   setDevControlRelevance(referenceLevelSelect, audioEngine.wetModel === 'reference-delta', 'Nur mit REFERENCE + DELTA aktiv.');
-  setDevControlRelevance(spreadCurveSelect, false, 'Inaktiv: gespeicherter Kompatibilitätswert ohne Audiofunktion.');
   setDevControlRelevance(spreadMaxOffsetSelect, !state.perChannelBands, 'Nur im CLASSIC-Spread-Modus aktiv.');
   setDevControlRelevance(feedbackCoreSelect, topology !== 'isolated-tpt', 'ZDF ist nur mit COMMON BUS oder LOCAL LOOP EXP aktiv.');
   setDevControlRelevance(localLoopTuningSelect, topology === 'local-loop-exp' && core === 'current' && audioEngine.positiveResonanceEngine === 'tpt', 'Nur mit LOCAL LOOP EXP + CURRENT + TPT aktiv.');
@@ -4295,10 +4289,6 @@ bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(va
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
 bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
 bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
-bindDevLabSelect(spreadCurveSelect, value => {
-  state.spreadCurve = audioEngine.setSpreadCurve(value);
-  renderBandSliderValues();
-}, 'linear');
 bindDevLabSelect(spreadMaxOffsetSelect, value => {
   state.spreadMaxOffsetDb = audioEngine.setSpreadMaxOffsetDb(value);
   configureSpreadControl(state.spreadMaxOffsetDb);
@@ -4457,7 +4447,7 @@ const syncUiFromAudioState = snapshot => {
     [outputGuardSelect, snapshot.outputGuardEnabled === undefined ? undefined : snapshot.outputGuardEnabled ? 'on' : 'off'],
     [outputProtectionSelect, snapshot.outputProtectionEnabled === undefined ? undefined : snapshot.outputProtectionEnabled ? 'on' : 'off'],
     [bandBoostSelect, snapshot.maxBandBoostDb], [bandCutSelect, snapshot.maxBandCutDb],
-    [spreadCurveSelect, snapshot.spreadCurve], [spreadMaxOffsetSelect, snapshot.spreadMaxOffsetDb],
+    [spreadMaxOffsetSelect, snapshot.spreadMaxOffsetDb],
     [referenceLevelSelect, snapshot.referenceLevel], [resonanceEngineSelect, snapshot.positiveResonanceEngine],
     [feedbackTopologySelect, snapshot.feedbackTopology], [feedbackCoreSelect, snapshot.feedbackCore], [localLoopTuningSelect, snapshot.localLoopTuning],
     [feedbackTapSelect, snapshot.feedbackTap], [wetModelSelect, snapshot.wetModel],

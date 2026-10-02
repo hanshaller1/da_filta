@@ -1,5 +1,10 @@
 # P3B.4 – Sample-Rate-adaptives Input-Character-Oversampling
 
+Historical prototype report. The rate/mix/state contract is now integrated by
+P1-C; see [Productive Input Character](input-character-production.md). The
+historical CPU-NO-GO below is retained as measurement evidence, not replaced by
+an assertion that the old 30% reserve criterion has been achieved.
+
 Datum: 26.09.2026. Prototyp, Messung und Architekturvalidierung; keine dauerhafte Produktionsänderung. Die P3B.3-Berichtsdatei und deren CPU-Datensatz bleiben als historische Vergleichsbasis erhalten. Der gemeinsame Testcontroller wurde um eine explizite Rate-Matrix erweitert; sein Default bleibt P3B.3. Der identische Gesamtpfad-Messer wird jetzt von beiden Tests verwendet.
 
 ## Kandidat und Zeitvertrag

@@ -1,7 +1,7 @@
 # Current runtime architecture
 
-Reference baseline: `e525331`; the working implementation adds P1-A modulation
-assignments. This map describes behavior; it does not change DSP or supersede
+Reference baseline: `279e7db` after P1-A; the working implementation adds P1-C
+Input Character oversampling and legacy cleanup. This map describes behavior and does not supersede
 historical measurement reports.
 
 ## Signal flow
@@ -37,7 +37,7 @@ taps have different positions; do not infer routing from a UI graph's location.
 | `clock-core.mjs` | Shared audio-sample clock and MIDI 24-PPQN transport/phase |
 | `clock-mod-core.mjs` | Dedicated held per-band additive layer; borrows LFO waveform code, uses independent step timing, is not a registry target/source |
 | `midi-device-manager.mjs` | Access, discovery, one selected input/listener and hotplug handling; UI requests access through ENABLE MIDI |
-| `input-preamp-processor.js` | Production input character/gain behavior; test oversampling controllers are not loaded by the application |
+| `input-preamp-processor.js` | Production Character curves, adaptive 1x/2x/4x FIR differential path, aligned stage handover and 192-sample delay; linear input gain is owned by the GainNode |
 | `output-guard-processor.js` | Independent gain-reduction guard before final soft protection |
 | `output-protection-processor.js` | Final bounded soft-protection transfer |
 
@@ -58,3 +58,39 @@ other contributions before the existing final band-gain clamp. See
 `tests/helpers/input-character-architecture*.cjs` and related measurement bundles
 are experiments, including frozen comparison variants. They are deliberately
 separate from production, even when a historical filename says "production".
+
+## P1-C DSP and compatibility decisions
+
+Input Character now runs the prepared adaptive FIR architecture in the actual
+Worklet. All stages, including LINEAR and Amount 0, share 192 host samples of
+delay before the global dry/wet split. Startup processes muted for 250 ms and
+then ramps the selected output over 10 ms. See
+[`input-character-production.md`](input-character-production.md) for rates,
+handover, measurements and the remaining 96-kHz performance watch item.
+
+The `phase2` positive-resonance selector is **RETAIN AS EXPERIMENT**. It selects
+the older LOCAL comparison in ISOLATED TPT, not a new production core. CURRENT
+Common Bus/local loop, Unified ZDF and Per-Band ZDF keep their current LOCAL and
+MAIN contracts. Per-Band ZDF already has Phase-1 local implicit returns and
+Phase-2 coupled MAIN returns; these are independent of the legacy selector.
+The isolated nonlinear TPT path supplies its matched 2x audition residual.
+No documented final calibration/interaction contract justifies another
+resonator architecture. Existing reachable comparison paths, residual telemetry,
+signed negative resonance and legacy MAIN selection are preserved; no resonator
+DSP was changed. A future promotion/removal requires a separate sound/CPU decision.
+The stored legacy engine also gates TPT-specific LOCAL LOOP COMPENSATED tuning:
+`phase2` retains the nominal loop frequencies. This compatibility side effect
+is covered by the existing local-loop tuning audio test and is preserved.
+
+`spreadCurve` and `spreadMode` follow **retain internal compatibility fields**.
+Curve names round-trip old snapshots without transforming the concrete dB
+offset; the inactive curve selector is removed. Legacy `FB_CH_SELECT` retains
+its no-global-spread gate in the worklet and registry. Current P/CH authority,
+L/R bases, anchors and assignment CHANNEL=SPREAD are unchanged. Invalid legacy
+values normalize to `linear`/`CLASSIC`.
+
+The obsolete MOD placeholder is removed. The old plan described clocked sine
+band modulation at 10% gain, but explicitly left hold/toggle/timing undecided;
+it never became a DSP path. Mapping it to LFO/Envelope/Clock Mod would invent
+that contract. Old `modulated` arrays are ignored by existing explicit restore
+paths; no MOD state or special case is added to the assignment core.

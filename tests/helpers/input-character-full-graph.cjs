@@ -3,7 +3,7 @@ const path = require('node:path');
 const read = filename => fs.readFileSync(path.resolve(__dirname, '../..', filename), 'utf8');
 
 function browserBundle(origin, worklet = false, { variant = 'p3b4', transformController } = {}) {
-  const input = read('input-preamp-processor.js');
+  const input = read('tests/helpers/input-character-legacy-processor.js');
   const bank = read('filterbank-processor.js').replace(/^import .*;\r?\n/gm, '');
   const helper = read('tests/helpers/input-character-oversampling.cjs');
   const kernel = helper.slice(helper.indexOf('function bessel0'), helper.indexOf('const filterFFTs'));

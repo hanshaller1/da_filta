@@ -56,22 +56,21 @@ test('desktop keeps permanent band controls aligned and stable across every work
   expect(contained.minimumInset).toBeGreaterThanOrEqual(7);
   await expect(page.locator('.filterbank-panel-header')).toHaveCount(0);
   await expect(page.locator('.filterbank-controls-panel')).toHaveCount(1);
-  await expect(page.locator('.filterbank-controls-header > strong')).toHaveText('BAND FEEDBACK / MODULATION');
+  await expect(page.locator('.filterbank-controls-header > strong')).toHaveText('BAND FEEDBACK');
   const filterbankControlGeometry = await page.evaluate(() => {
     const header = document.querySelector('.filterbank-controls-header').getBoundingClientRect();
     const firstFb = document.querySelector('[data-feedback-band="0"]').getBoundingClientRect();
-    const firstMod = document.querySelector('[data-mod-band="0"]').getBoundingClientRect();
     const fbAll = document.querySelector('.filterbank-controls-panel .fb-all-toggle').getBoundingClientRect();
-    return { panelHeight: document.querySelector('.filterbank-controls-panel').getBoundingClientRect().height, gap: firstFb.top - header.bottom, fb: { width: firstFb.width, height: firstFb.height }, fbAboveMod: firstFb.bottom <= firstMod.top, fbAllRight: fbAll.right <= header.right && fbAll.left > header.left + header.width / 2 };
+    return { panelHeight: document.querySelector('.filterbank-controls-panel').getBoundingClientRect().height, gap: firstFb.top - header.bottom, fb: { width: firstFb.width, height: firstFb.height }, fbAllRight: fbAll.right <= header.right && fbAll.left > header.left + header.width / 2 };
   });
-  expect(filterbankControlGeometry).toEqual({ panelHeight: 112, gap: 10, fb: { width: 42, height: 22 }, fbAboveMod: true, fbAllRight: true });
+  expect(filterbankControlGeometry).toEqual({ panelHeight: 112, gap: 10, fb: { width: 42, height: 22 }, fbAllRight: true });
   await expect(page.locator('.band-card .band-action')).toHaveCount(0);
   const alignment = await page.evaluate(() => [...document.querySelectorAll('.filterbank-band-control')].map((control, index) => {
     const center = selector => { const bounds = control.querySelector(selector).getBoundingClientRect(); return (bounds.left + bounds.right) / 2; };
     const card = document.querySelectorAll('.band-card')[index].getBoundingClientRect();
-    return { fb: center('[data-feedback-band]'), mod: center('[data-mod-band]'), fader: (card.left + card.right) / 2 };
+    return { fb: center('[data-feedback-band]'), fader: (card.left + card.right) / 2 };
   }));
-  expect(alignment.every(({ fb, mod, fader }) => Math.abs(fb - mod) < 1 && Math.abs(fb - fader) < 1)).toBeTruthy();
+  expect(alignment.every(({ fb, fader }) => Math.abs(fb - fader) < 1)).toBeTruthy();
   expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(907);
   const envelopeLabel = page.locator('[data-mode="envelope-follower"] span');
   await expect(envelopeLabel).toHaveCSS('white-space', 'nowrap');
@@ -159,7 +158,7 @@ test('desktop near the breakpoint keeps all ten bands and FILTER controls inside
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1280);
 });
 
-test('moved FB and FB ALL retain state while reserved MOD remains disabled', async ({ page }) => {
+test('moved FB and FB ALL retain state after obsolete MOD removal', async ({ page }) => {
   await page.goto('/');
   const feedback = page.locator('[data-feedback-band="3"]');
   const modulation = page.locator('[data-mod-band="3"]');
@@ -169,10 +168,9 @@ test('moved FB and FB ALL retain state while reserved MOD remains disabled', asy
   await expect(page.locator('.filterbank-controls-panel .fb-all-control > span')).toHaveCount(0);
   await expect(feedbackAll).toHaveText('FB ALL');
   await feedback.click();
-  await expect(modulation).toBeDisabled();
+  await expect(modulation).toHaveCount(0);
   await feedbackAll.click();
   await expect(feedback).toHaveAttribute('aria-pressed', 'true');
-  await expect(modulation).toHaveAttribute('aria-pressed', 'false');
   await expect(feedbackAll).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => {
     const engine = window.FilterMode.getAudioEngine();
@@ -186,6 +184,6 @@ test('moved FB and FB ALL retain state while reserved MOD remains disabled', asy
 
   await page.locator('[data-mode="filterbank"]').click();
   await expect(feedback).toHaveAttribute('aria-pressed', 'true');
-  await expect(modulation).toHaveAttribute('aria-pressed', 'false');
+  await expect(modulation).toHaveCount(0);
   await expect(feedbackAll).toHaveAttribute('aria-pressed', 'true');
 });

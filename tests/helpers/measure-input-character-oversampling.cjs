@@ -13,7 +13,7 @@ const amplitudes = [.03, .25, .8];
 const directory = path.resolve(__dirname, process.argv.includes('--fixtures') ? '../measurements' : '../artifacts/measurements');
 fs.mkdirSync(directory, { recursive: true });
 const report = { filter: p.filterQuality(), rates, stages, factors, amounts, frequencies, amplitudes, tones: [], signals: [], mix: [], tube: [], switches: [], cpu: [], convergence: [], validation: {} };
-report.productionHash = createHash('sha256').update(fs.readFileSync(path.resolve(__dirname, '../../input-preamp-processor.js'))).digest('hex');
+report.productionHash = createHash('sha256').update(fs.readFileSync(path.resolve(__dirname, 'input-character-legacy-processor.js'))).digest('hex');
 report.environment = { node: process.version, platform: process.platform, arch: process.arch };
 const db = ratio => 20 * Math.log10(Math.max(1e-15, ratio));
 const segment = (data, rate, factor, first = .25, duration = .1) => data.slice(Math.round(rate * first) + p.delay(factor), Math.round(rate * (first + duration)) + p.delay(factor));

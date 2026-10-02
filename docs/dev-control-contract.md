@@ -11,7 +11,6 @@ The UI dims and disables a stored control when the selected architecture cannot 
 | KEYBOARD | Key Step, Key Speed | Always; UI preference, not audio DSP |
 | FILTERBANK | Reference | Wet model is REFERENCE + DELTA |
 | FILTERBANK | Band Boost, Band Cut, Wet Model | Always configurable |
-| FILTERBANK | Spread Curve | Never affects audio; disabled as an INACTIVE compatibility value |
 | FILTERBANK | Spread Max Offset | CLASSIC spread mode |
 | LOCAL FEEDBACK | FB Topology | Always; architecture selector |
 | LOCAL FEEDBACK | Feedback Core | COMMON BUS or LOCAL LOOP EXP |
@@ -30,4 +29,9 @@ The UI dims and disables a stored control when the selected architecture cannot 
 | LEGACY / RESONATOR LAB | Resonator Engine | ISOLATED TPT without ZDF PER-BAND |
 | LEGACY / RESONATOR LAB | Audition, Drive, Floor, Output, Latency, Curve | ISOLATED TPT resonator engine without ZDF PER-BAND |
 
-In the default COMMON BUS topology, each FB band button selects a source tap. The local return then feeds all ten base filters in that channel. FB ALL controls a separate MAIN bus and does not switch those ten buttons. `STATIC POST-GAIN SUM` uses the static band gains; Dynamic EQ's time-varying gain does not enter that tap. MOD is visible but disabled because it has no audio path yet. Neither MOD nor SPREAD CURVE state is deleted.
+In the default COMMON BUS topology, each FB band button selects a source tap. The local return then feeds all ten base filters in that channel. FB ALL controls a separate MAIN bus and does not switch those ten buttons. `STATIC POST-GAIN SUM` uses the static band gains; Dynamic EQ's time-varying gain does not enter that tap.
+
+P1-C removes the obsolete MOD placeholder and inactive SPREAD CURVE selector.
+Old `modulated` arrays are ignored; spread curve names still round-trip as
+internal compatibility metadata. `PHASE 2 · LEGACY` remains an isolated-TPT LAB
+comparison, independent of Per-Band ZDF's already implemented coupled MAIN path.

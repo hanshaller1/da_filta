@@ -4,13 +4,13 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const p = require('./helpers/input-character-oversampling.cjs');
 
-test('test harness reproduces the actual browser worklet at host rate', async ({ page }) => {
+test('historical harness reproduces the frozen audited 1x browser worklet', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   const browser = await page.evaluate(async () => {
     const rows = [];
     for (const rate of [44100, 48000, 96000]) for (const stage of ['linear', 'silk', 'tape', 'tube', 'console', 'crunch', 'destroy']) {
       const length = 4096, context = new OfflineAudioContext(1, length, rate);
-      await context.audioWorklet.addModule(new URL('/input-preamp-processor.js', location.href));
+      await context.audioWorklet.addModule(new URL('/tests/helpers/input-character-legacy-processor.js', location.href));
       const buffer = context.createBuffer(1, length, rate);
       const input = buffer.getChannelData(0);
       for (let i = 0; i < length; i++) input[i] = .8 * Math.sin(2 * Math.PI * 1000 * i / rate);
@@ -67,7 +67,7 @@ test('measured matrix stays finite and oversampling reduces representative alias
   // Regenerate with: node tests/helpers/measure-input-character-oversampling.cjs
   const filename = path.join(__dirname, 'measurements/input-character-oversampling.json');
   const report = JSON.parse(fs.readFileSync(filename, 'utf8'));
-  expect(report.productionHash).toBe(createHash('sha256').update(fs.readFileSync(path.join(__dirname, '../input-preamp-processor.js'))).digest('hex'));
+  expect(report.productionHash).toBe(createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'helpers/input-character-legacy-processor.js'))).digest('hex'));
   expect(report.tones.length).toBe(3942);
   expect(report.signals.length).toBe(1944);
   expect(report.tones.every(row => row.finite)).toBe(true);

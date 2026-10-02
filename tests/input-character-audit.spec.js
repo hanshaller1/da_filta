@@ -164,8 +164,9 @@ test('audit production input character worklet across rates, levels, harmonics a
     }
     return { rates, stages, amounts, gainDbValues, frequencies, neutral, harmonic, levels, transient, stereoParity, amountTransitions,
       tubeHighpassHz: rates.map(rate => {
-        const pole = Math.pow(.9987, 48000 / rate);
-        return { rate, pole, hz: -Math.log(pole) * rate / (2 * Math.PI) };
+        const internalRate = rate === 96000 ? rate : rate * 2;
+        const pole = Math.pow(.9987, 48000 / internalRate);
+        return { rate, internalRate, pole, hz: -Math.log(pole) * internalRate / (2 * Math.PI) };
       }) };
   });
 
@@ -174,9 +175,10 @@ test('audit production input character worklet across rates, levels, harmonics a
   console.log(`INPUT_CHARACTER_AUDIT=${path}`);
   const neutralRows = report.neutral.filter(row => row.amount === 0);
   const neutralMaxDifference = Math.max(...neutralRows.map(row => {
-    const start = Math.floor(row.rate * .1);
+    const start = Math.floor(row.rate * .1) - 192;
     return Math.max(...row.samples.map((x, i) => Math.abs(x - .25 * Math.sin(2 * Math.PI * 1000 * (start + i) / row.rate))));
   }));
+  expect(neutralMaxDifference).toBeLessThan(1e-7);
   console.log('INPUT_CHARACTER_AUDIT_SUMMARY=' + JSON.stringify({
     neutralMaxDifference,
     thdMax: Object.fromEntries(report.stages.map(stage => [stage, Math.max(...report.harmonic.filter(row => row.stage === stage).map(row => row.thd))])),

@@ -7,7 +7,8 @@ test('TUBE DC blocker preserves its 48 kHz cutoff at all supported sample rates'
     const referencePole = .9987;
     const amplitude = .001;
     const biasDerivative = 1 / Math.cosh(1.3 * .18) ** 2;
-    const poleFor = rate => Math.pow(referencePole, 48000 / rate);
+    const internalRateFor = rate => rate === 96000 ? rate : rate * 2;
+    const poleFor = rate => Math.pow(referencePole, 48000 / internalRateFor(rate));
     const cutoffFor = (rate, pole) => Math.acos(2 * pole / (1 + pole * pole)) * rate / (2 * Math.PI);
     const toneResponse = [];
 
@@ -36,7 +37,7 @@ test('TUBE DC blocker preserves its 48 kHz cutoff at all supported sample rates'
         }
         const measuredRatio = (2 * Math.hypot(re, im) / count) / amplitude;
         const pole = poleFor(rate);
-        const omega = 2 * Math.PI * frequency / rate;
+        const omega = 2 * Math.PI * frequency / internalRateFor(rate);
         const highpassMagnitude = Math.sqrt((2 - 2 * Math.cos(omega)) / (1 + pole * pole - 2 * pole * Math.cos(omega)));
         toneResponse.push({ rate, frequency, measuredRatio, expectedRatio: biasDerivative * highpassMagnitude });
       }
@@ -68,17 +69,17 @@ test('TUBE DC blocker preserves its 48 kHz cutoff at all supported sample rates'
 
     return {
       rates,
-      poles: rates.map(rate => ({ rate, oldPole: referencePole, newPole: poleFor(rate) })),
-      cutoffs: rates.map(rate => ({ rate, oldCutoff: cutoffFor(rate, referencePole), newCutoff: cutoffFor(rate, poleFor(rate)) })),
+      poles: rates.map(rate => ({ rate, internalRate: internalRateFor(rate), oldPole: referencePole, newPole: poleFor(rate) })),
+      cutoffs: rates.map(rate => ({ rate, oldCutoff: cutoffFor(rate, referencePole), newCutoff: cutoffFor(internalRateFor(rate), poleFor(rate)) })),
       toneResponse,
       impulse
     };
   });
 
   for (const row of report.poles) {
-    expect(row.newPole).toBeCloseTo(Math.pow(.9987, 48000 / row.rate), 15);
+    expect(row.newPole).toBeCloseTo(Math.pow(.9987, 48000 / row.internalRate), 15);
   }
-  expect(report.poles.find(row => row.rate === 48000).newPole).toBe(.9987);
+  expect(report.poles.find(row => row.rate === 48000).newPole).toBe(Math.pow(.9987, .5));
   const referenceCutoff = report.cutoffs.find(row => row.rate === 48000).newCutoff;
   for (const row of report.cutoffs) {
     expect(Math.abs(row.newCutoff - referenceCutoff)).toBeLessThan(0.00001);
