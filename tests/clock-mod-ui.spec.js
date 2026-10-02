@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('Clock Mod workspace controls, state and progression visualization stay independent from audio power', async ({ page }) => {
+test('Clock Mod workspace controls, state and progression visualization stay independent from audio power', { tag: '@smoke' }, async ({ page }) => {
   await page.goto('/');
   const engineStatus = await page.evaluate(() => window.ClockModMode.getAudioEngine().status);
   await page.locator('[data-mode="clock-mod"]').click();

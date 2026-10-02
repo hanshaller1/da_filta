@@ -7,16 +7,14 @@ const p = require('./helpers/input-character-oversampling.cjs');
 const { CharacterArchitecture, ratesFor } = require('./helpers/input-character-architecture.cjs');
 const { measureAdaptive, source, spectral, variants } = require('./helpers/measure-input-character-adaptive.cjs');
 const { measureFullGraph } = require('./helpers/measure-input-character-full-graph.cjs');
-const filename = path.join(__dirname, 'measurements/input-character-adaptive-oversampling.json');
+const { createMeasurementReport } = require('./helpers/measurement-report.cjs');
+const measurementReport = createMeasurementReport('input-character-adaptive-oversampling.json', () => test.info());
 const stages = ['linear', 'silk', 'tape', 'tube', 'console', 'crunch', 'destroy'];
-function update(data) {
-  const report = fs.existsSync(filename) ? JSON.parse(fs.readFileSync(filename, 'utf8')) : {};
-  fs.writeFileSync(filename, JSON.stringify(Object.assign(report, data), null, 2) + '\n');
-}
+const update = data => measurementReport.update(data);
 
 test('adaptive alias matrix: paired host rates, transients, high-drive DESTROY and references', () => {
   test.setTimeout(240_000);
-  const previous = fs.existsSync(filename) ? JSON.parse(fs.readFileSync(filename, 'utf8')) : {};
+  const previous = measurementReport.read();
   const measurements = measureAdaptive();
   for (const row of [...measurements.tones, ...measurements.signals, ...measurements.stress]) {
     expect(row.finite).toBe(true); expect(Number.isFinite(row.referenceError.rms)).toBe(true);
@@ -26,7 +24,7 @@ test('adaptive alias matrix: paired host rates, transients, high-drive DESTROY a
   const sourceHashes = Object.fromEntries(['input-preamp-processor.js', 'filterbank-processor.js', 'tpt-svf.js', 'dynamic-eq-core.mjs', 'output-guard-processor.js', 'output-protection-processor.js'].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', file))).digest('hex')]));
   const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'measurements/input-character-production-architecture.json'), 'utf8'));
   const cpuRuns = previous.cpuRuns || (previous.nativeRender ? [{ date: previous.date, nativeRender: previous.nativeRender }] : []);
-  fs.writeFileSync(filename, JSON.stringify({ date: new Date().toISOString(), sourceHashes, baselineCpuDate: baseline.date, oldNativeRender: baseline.nativeRender, cpuRuns, ...measurements }, null, 2) + '\n');
+  measurementReport.write({ date: new Date().toISOString(), sourceHashes, baselineCpuDate: baseline.date, oldNativeRender: baseline.nativeRender, cpuRuns, ...measurements });
 });
 
 test('adaptive difference path stays neutral and matches offline curves for all amounts', () => {
@@ -116,7 +114,7 @@ test('adaptive switches, persistent TUBE and finite stereo legal extremes', () =
 test('adaptive full DSP native AudioWorklet budget, including both DESTROY switch directions', async ({ page }) => {
   test.setTimeout(300_000);
   const result = await measureFullGraph(page, { adaptive: true, cases: [...stages, 'tube->destroy', 'destroy->tube', 'tape->destroy', 'destroy->tape'] });
-  const cpuRuns = JSON.parse(fs.readFileSync(filename, 'utf8')).cpuRuns || [];
+  const cpuRuns = measurementReport.read().cpuRuns || [];
   cpuRuns.push({ date: new Date().toISOString(), nativeRender: result.nativeRender });
   update({ ...result, cpuRuns, machine: { cpu: os.cpus()[0]?.model, logicalCpus: os.cpus().length, platform: os.platform(), arch: os.arch(), node: process.version }, cpuCaveat: 'Native Chromium 128-frame render wall duration; real stereo Worklet full graph and native analyzers. First 250ms separated, 0.4-0.8s switch window. Tracing adds overhead. Main-thread replays are supporting data, not callback-budget evidence. currentFrame continuity does not prove absence of device underruns.' });
 });

@@ -282,7 +282,7 @@ test('MIDI transport START resets sync LFOs, CONTINUE preserves beat, and STOP f
   expect(result.restarted.freePhase).toBe(result.continued.freePhase);
 });
 
-test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsive', async ({ page }) => {
+test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsive', { tag: '@smoke' }, async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto('/');

@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('MODE panel is absent and its height is assigned exclusively to the response graph', async ({ page }) => {
+test('MODE panel is absent and its height is assigned exclusively to the response graph', { tag: ['@quarantine', '@baseline-broken'] }, async ({ page }) => {
   await page.setViewportSize({ width: 1914, height: 907 });
   const consoleErrors = [];
   const pageErrors = [];

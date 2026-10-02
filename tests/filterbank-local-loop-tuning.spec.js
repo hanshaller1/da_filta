@@ -75,7 +75,7 @@ test('LOCAL LOOP COMPENSATED retunes only the four scoped bands at the active sa
   expect(report.common480.mainCommonFeedbackReturnPeak).toBeGreaterThanOrEqual(0);
 });
 
-test('DEV LOCAL LOOP TUNING is a CURRENT-by-default LOCAL FEEDBACK control', async ({ page }) => {
+test('DEV LOCAL LOOP TUNING is a CURRENT-by-default LOCAL FEEDBACK control', { tag: ['@quarantine', '@baseline-broken'] }, async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   const tuning = page.locator('[data-local-loop-tuning]');
   await expect(tuning).toHaveValue('current');

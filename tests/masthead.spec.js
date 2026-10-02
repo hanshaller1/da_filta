@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('masthead keeps audio controls in primary and reserves an accessible MIDI setup slot', async ({ page }) => {
+test('masthead keeps audio controls in primary and reserves an accessible MIDI setup slot', { tag: '@smoke' }, async ({ page }) => {
   for (const [width, height] of [[1914, 907], [1440, 900], [1914, 768], [1024, 768]]) {
     await page.setViewportSize({ width, height });
     await page.goto('/');

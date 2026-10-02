@@ -18,6 +18,7 @@ Tests: `npm run test:browser`
 - `lfo-core.mjs` – LFO modulation source
 - `envelope-core.mjs` – Envelope Follower source, Peak/RMS detection, attack/release
 - `clock-core.mjs` – timing/clock
+- `clock-mod-core.mjs` – dedicated clocked per-band held modulation
 - `dynamic-eq-core.mjs` – Dynamic EQ
 - `midi-device-manager.mjs` – MIDI devices
 - `input-preamp-processor.js` – input/preamp DSP
@@ -41,6 +42,13 @@ Do not perform repository-wide audits for local tasks.
 Do not read large files completely unless necessary.
 Do not refactor unrelated code.
 Prefer existing architecture/state over parallel implementations.
+
+## Test policy
+- Normal tasks: run only directly relevant tests; use `npm run test:node` for core/unit checks and `npm run test:browser:smoke` for the tagged UI/core smoke profile.
+- Full Playwright runs are reserved for PRE-MERGE, RELEASE, BASELINE, or explicit user instruction; never run a full suite just "to be safe".
+- `npm run test:browser` excludes `@quarantine`; `test:browser:quarantine` runs only quarantine; `test:browser:full` includes both.
+- Never quarantine new failures automatically or weaken assertions. Record baseline cases in `tests/QUARANTINE.md`; do not reinvestigate them on every unrelated task.
+- Keep generated measurements under `tests/artifacts/`; tracked `tests/measurements/` files are historical reference fixtures.
 
 For FILTER tasks start with:
 `app.js`, `filter-shape-core.mjs` and relevant `tests/filter-*.spec.js`.

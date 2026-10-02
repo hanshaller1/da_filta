@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('the production TPT worklet preserves the Biquad base path and the hybrid feedback migration behaviour', async ({ page }) => {
+test('the production TPT worklet preserves the Biquad base path and the hybrid feedback migration behaviour', { tag: ['@quarantine', '@baseline-broken'] }, async ({ page }) => {
   test.setTimeout(120000);
   const consoleErrors = [];
   const pageErrors = [];

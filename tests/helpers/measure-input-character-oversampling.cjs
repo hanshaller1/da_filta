@@ -9,7 +9,8 @@ const factors = [1, 2, 4, 8];
 const amounts = [.25, .5, .75, 1];
 const frequencies = [100, 1000, 5000, 8000, 10000, 12000];
 const amplitudes = [.03, .25, .8];
-const directory = path.resolve(__dirname, '../measurements');
+// Historical fixtures are refreshed only by an explicit --fixtures invocation.
+const directory = path.resolve(__dirname, process.argv.includes('--fixtures') ? '../measurements' : '../artifacts/measurements');
 fs.mkdirSync(directory, { recursive: true });
 const report = { filter: p.filterQuality(), rates, stages, factors, amounts, frequencies, amplitudes, tones: [], signals: [], mix: [], tube: [], switches: [], cpu: [], convergence: [], validation: {} };
 report.productionHash = createHash('sha256').update(fs.readFileSync(path.resolve(__dirname, '../../input-preamp-processor.js'))).digest('hex');

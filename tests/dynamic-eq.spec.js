@@ -50,7 +50,7 @@ test('dynamic EQ V2 supports asymmetric ranges and relative dB detection', async
     [-12, -12, -12, -12, -12, -12, -12, -12, -12, -12])).toBe(3);
 });
 
-test('graph view toggles independently hide only their own layers without changing audio state', async ({ page }) => {
+test('graph view toggles independently hide only their own layers without changing audio state', { tag: '@smoke' }, async ({ page }) => {
   await page.goto('/');
   await page.locator('[data-mode="dynamic-eq"]').click();
   const stateBefore = await page.evaluate(() => {

@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('DEV LAB structured debug console opens and remains an internal, passive surface', async ({ page }) => {
+test('DEV LAB structured debug console opens and remains an internal, passive surface', { tag: ['@quarantine', '@baseline-broken'] }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');

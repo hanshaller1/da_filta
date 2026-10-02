@@ -257,12 +257,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .app-shell { align-items: stretch; width: calc(100vw - 28px); max-width: calc(100vw - 28px); min-width: 0; }
 .console { flex: 1 1 auto; width: auto; min-width: 0; padding-bottom: 0; }
 .dev-lab-panel { align-self: stretch; flex: 0 1 clamp(280px, 17vw, 320px); width: clamp(280px, 17vw, 320px); min-width: 280px; height: auto; max-height: none; overflow-y: auto; overflow-x: hidden; }
-.fb-workspace { height: clamp(300px, 34vh, 340px); }
-.bands { height: clamp(240px, 27vh, 270px); }
-.band-card { padding: 8px 5px 6px; }
 .band-actions { margin-top: 5px; margin-bottom: 5px; }
-.fader-wrap { flex-basis: 145px; height: 145px; }
-.fader-track { height: 135px; }
 .app-shell { margin-inline: auto; }
 .control-row output[data-output="volume"], .control-row output[data-output="inputGain"] { width: 92px; min-width: 92px; white-space: nowrap; }
 .control-row input, .control-row output { align-self: center; }
@@ -351,8 +346,6 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   height: 24px;
   padding: 0 5px;
 }
-.fader-wrap { flex-basis: 185px; height: 185px; }
-.fader-track { height: 175px; }
 .fader-track::after { left: 29px; }
 .fb-workspace { height: clamp(300px, 34vh, 340px); }
 .bands { height: clamp(240px, 27vh, 270px); }
@@ -1651,7 +1644,6 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .lfo-wave-control { padding-bottom: 7px; }
 .lfo-wave-buttons { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .lfo-wave-buttons button { min-width: 0; height: 23px; padding: 0 3px; overflow: hidden; text-align: center; text-overflow: ellipsis; }
-.lfo-wave-buttons button[aria-pressed=true] { border-color: var(--cyan); color: var(--cyan); background: var(--active-background); }
 .lfo-target-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; min-width: 0; padding: 0 0 8px; border-bottom: 1px solid var(--output-border); color: var(--muted-text); font-size: var(--text-control-label); letter-spacing: .7px; }
 .lfo-target-control select { grid-column: 1 / -1; width: 100%; min-width: 0; height: 27px; padding: 3px 7px; border: 1px solid var(--output-border); border-radius: 3px; color: var(--strong-text); background: var(--output-background); font: inherit; letter-spacing: normal; }
 .lfo-target-control > span { grid-column: 1 / -1; min-height: 10px; color: var(--secondary-text); font-size: var(--text-micro); letter-spacing: .3px; }

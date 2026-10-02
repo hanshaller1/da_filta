@@ -1,7 +1,7 @@
 const { test, expect } = require('playwright/test');
 const { browserBundle } = require('./helpers/input-character-full-graph.cjs');
 
-test('Envelope module power is independent from workspace selection and source enable', async ({ page }) => {
+test('Envelope module power is independent from workspace selection and source enable', { tag: '@smoke' }, async ({ page }) => {
   await page.goto('/');
   const power = page.locator('[data-module-power="envelope-follower"]');
   await expect(power).toBeEnabled();

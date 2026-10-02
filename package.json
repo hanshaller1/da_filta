@@ -4,7 +4,11 @@
   "description": "",
   "scripts": {
     "start": "node server.js",
-    "test:browser": "playwright test"
+    "test:node": "node --test tests/*.test.*",
+    "test:browser": "playwright test",
+    "test:browser:quarantine": "playwright test --config=tests/config/quarantine.config.cjs",
+    "test:browser:full": "playwright test --config=tests/config/full.config.cjs",
+    "test:browser:smoke": "playwright test --config=tests/config/smoke.config.cjs"
   },
   "keywords": [],
   "author": "",

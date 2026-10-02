@@ -3,7 +3,7 @@ const selectFilterType = async (page, type) => {
   await page.locator(`[data-filter-type="${type}"]`).click();
 };
 
-test('FILTER and FILTERBANK use flat inner workspaces with theme-aware separators', async ({ page }) => {
+test('FILTER and FILTERBANK use flat inner workspaces with theme-aware separators', { tag: '@smoke' }, async ({ page }) => {
   for (const theme of ['dark-studio', 'clean-modern']) {
     for (const width of [1440, 1024]) {
       await page.setViewportSize({ width, height: 900 });

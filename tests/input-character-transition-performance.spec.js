@@ -5,9 +5,10 @@ const { createHash } = require('node:crypto');
 const { measureFullGraph } = require('./helpers/measure-input-character-full-graph.cjs');
 const { microProfile } = require('./helpers/profile-input-character-transition.cjs');
 const { compare } = require('./helpers/compare-input-character-transition.cjs');
-const filename = path.join(__dirname, 'measurements/input-character-transition-performance.json');
+const { createMeasurementReport } = require('./helpers/measurement-report.cjs');
+const measurementReport = createMeasurementReport('input-character-transition-performance.json', () => test.info());
 const cases = ['linear', 'tape', 'tube', 'destroy', 'tube->destroy', 'destroy->tube', 'tape->destroy', 'destroy->tape'];
-function update(value) { const report = fs.existsSync(filename) ? JSON.parse(fs.readFileSync(filename, 'utf8')) : {}; fs.writeFileSync(filename, JSON.stringify(Object.assign(report, value), null, 2) + '\n'); }
+const update = value => measurementReport.update(value);
 
 test('profile unchanged P3B.4 before optimization: detailed constituents and native 96k render', async ({ page }) => {
   test.setTimeout(180_000);
@@ -23,7 +24,7 @@ for (const mode of ['shape', 'lean']) {
   test(`${mode}: numeric regression against frozen P3B.4 including handover and state`, () => {
     test.setTimeout(240_000);
     const result = compare(mode);
-    const report = fs.existsSync(filename) ? JSON.parse(fs.readFileSync(filename, 'utf8')) : {};
+    const report = measurementReport.read();
     update({ numeric: { ...report.numeric, [mode]: result } });
     for (const row of result.rows) { expect(row.maximum).toBe(0); expect(row.rms).toBe(0); expect(row.peakDifference).toBe(0); expect(row.bitDifferences).toBe(0); expect(row.dryMaximum).toBe(0); }
     expect(result.stateMaximum).toBe(0);
@@ -41,7 +42,7 @@ for (const mode of ['shape', 'lean']) {
 for (const repeat of [1, 2, 3]) test(`lean: native complete 96k repeat ${repeat}`, async ({ page }) => {
   test.setTimeout(180_000);
   const result = await measureFullGraph(page, { adaptive: true, cases, rates: [96000], variant: 'lean', durationMs: 4000 });
-  const report = JSON.parse(fs.readFileSync(filename, 'utf8'));
+  const report = measurementReport.read();
   // Keep every run. A failed release gate is a recorded measurement, not a test retry.
   update({ optimizedRuns: [...(report.optimizedRuns || []), { repeat, date: new Date().toISOString(), variant: 'lean', durationMs: 4000,
     p99GatePassed: result.nativeRender.every(row => (row.switchWindow?.p99Ms ?? row.p99Ms) <= .7 * 128000 / row.rate), ...result }] });

@@ -6,7 +6,8 @@ const { createHash } = require('node:crypto');
 const { CharacterArchitecture } = require('./helpers/input-character-architecture.cjs');
 const { measureFullGraph } = require('./helpers/measure-input-character-full-graph.cjs');
 const p = require('./helpers/input-character-oversampling.cjs');
-const filename = path.join(__dirname, 'measurements/input-character-production-architecture.json');
+const { createMeasurementReport } = require('./helpers/measurement-report.cjs');
+const measurementReport = createMeasurementReport('input-character-production-architecture.json', () => test.info());
 const switches = [['linear', 'tape'], ['tape', 'tube'], ['tube', 'destroy'], ['destroy', 'silk'], ['destroy', 'linear']];
 
 test('fixed and variable latency architecture: switches, partial amount, live TUBE state', () => {
@@ -62,7 +63,7 @@ test('fixed and variable latency architecture: switches, partial amount, live TU
   const report = { date: new Date().toISOString(), productionHash: createHash('sha256').update(fs.readFileSync(path.join(__dirname, '../input-preamp-processor.js'))).digest('hex'), switches: rows,
     delayComb: [128, 192, 64].map(samples => ({ samples, firstNullHz48k: 48000 / (2 * samples), firstNullHz96k: 96000 / (2 * samples), middleFadeGain: 0 })),
     tube: [44100, 48000, 96000].map(rate => ({ hostRate: rate, internalRate: rate * 2, pole: Math.pow(.9987, 48000 / (rate * 2)), cutoffHz: -48000 * Math.log(.9987) / (2 * Math.PI) })) };
-  fs.writeFileSync(filename, JSON.stringify(report, null, 2) + '\n');
+  measurementReport.write(report);
 });
 
 test('LINEAR neutrality, continuous inactive TUBE decay and moderate DESTROY drive', () => {
@@ -107,15 +108,15 @@ test('LINEAR neutrality, continuous inactive TUBE decay and moderate DESTROY dri
       destroy.push({ rate, sourcePeak: .25, gainDb, characterInputPeak: amplitude, frequency, amount: 1, factor, aliasFundamentalPercent: 100 * Math.sqrt(aliases / fundamentalPower), ...metric });
     }
   }
-  const report = JSON.parse(fs.readFileSync(filename, 'utf8'));
+  const report = measurementReport.read();
   Object.assign(report, { destroyModerate: destroy, linearNeutrality: neutral, inactiveTubeDc: dc });
-  fs.writeFileSync(filename, JSON.stringify(report, null, 2) + '\n');
+  measurementReport.write(report);
 });
 
 test('complete production DSP load in browser and real AudioWorklet, stereo 48/96 kHz', async ({ page }) => {
   test.setTimeout(240_000);
   const result = await measureFullGraph(page);
-  const report = JSON.parse(fs.readFileSync(filename, 'utf8'));
+  const report = measurementReport.read();
   Object.assign(report, result, { machine: { cpu: os.cpus()[0]?.model, logicalCpus: os.cpus().length, platform: os.platform(), arch: os.arch(), node: process.version }, caveat: 'nativeRender is Chromium trace wall duration of RealtimeAudioDestinationHandler::Render, frames=128, after 250ms warmup, including the Worklet and native branches. Replay p99 is main-thread complete-DSP timing, not callback timing. Live Date.now durations are millisecond-quantized; currentFrame continuity does not detect device underruns. Trace instrumentation adds overhead and 2-second runs do not prove long-session stability.' });
-  fs.writeFileSync(filename, JSON.stringify(report, null, 2) + '\n');
+  measurementReport.write(report);
 });

@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('LOCAL LOOP EXP keeps individual feedback returns local and coexists with MAIN', async ({ page }) => {
+test('LOCAL LOOP EXP keeps individual feedback returns local and coexists with MAIN', { tag: ['@quarantine', '@baseline-broken'] }, async ({ page }) => {
   test.setTimeout(120000);
   const pageErrors = [];
   const consoleErrors = [];

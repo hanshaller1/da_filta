@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('KEY STEP and KEY SPEED control only held keyboard band-fader movement', async ({ page }) => {
+test('KEY STEP and KEY SPEED control only held keyboard band-fader movement', { tag: ['@quarantine', '@baseline-broken'] }, async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   if (await page.locator('[data-dev-lab-panel]').isHidden()) await page.locator('[data-dev-lab-toggle]').click();
   const step = page.locator('[data-key-step-percent]');

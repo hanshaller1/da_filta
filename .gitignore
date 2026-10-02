@@ -2,3 +2,9 @@ node_modules/
 .DS_Store
 *.log
 tests/artifacts/
+
+# Local test runs and Playwright reporters.
+/.tmp-*/
+/test-results/
+/playwright-report/
+/blob-report/

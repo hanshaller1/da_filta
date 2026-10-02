@@ -1,6 +1,6 @@
 const { test, expect } = require('playwright/test');
 
-test('local webapp loads in Chromium without browser errors', async ({ page }) => {
+test('local webapp loads in Chromium without browser errors', { tag: '@smoke' }, async ({ page }) => {
   const consoleErrors = [];
   const pageErrors = [];
 
@@ -170,7 +170,7 @@ test('every theme provides a complete, distinct console palette', async ({ page 
   expect(new Set(palettes.map(palette => palette.join('|'))).size).toBe(themes.length);
 });
 
-test('central state and the filterbank wrapper keep L/R base values separate', async ({ page }) => {
+test('central state and the filterbank wrapper keep L/R base values separate', { tag: '@smoke' }, async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
 
   const result = await page.evaluate(() => {
@@ -383,7 +383,7 @@ test('double-click resets every slider through its default update path', async (
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });
 
-test('FB and band keyboard controls share state while MOD stays reserved', async ({ page }) => {
+test('FB and band keyboard controls share state while MOD stays reserved', { tag: '@smoke' }, async ({ page }) => {
   const consoleErrors = [];
   const pageErrors = [];
   page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
@@ -591,7 +591,7 @@ test('latest FB UI rules keep neutral keys and inactive modes correct', async ({
   expect(pageErrors, `JavaScript page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });
 
-test('audio I/O controls build and stop a mocked stereo pass-through', async ({ page }) => {
+test('audio I/O controls build and stop a mocked stereo pass-through', { tag: '@smoke' }, async ({ page }) => {
   await page.addInitScript(() => {
     const testState = {
       constraints: null,

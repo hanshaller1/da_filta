@@ -6,7 +6,7 @@ const desktopSizes = [
   { width: 1914, height: 768 }
 ];
 
-test('FILTERBANK response uses FILTER panel and graph surfaces across desktop sizes', async ({ page }) => {
+test('FILTERBANK response uses FILTER panel and graph surfaces across desktop sizes', { tag: ['@quarantine', '@baseline-broken'] }, async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
 
   for (const size of desktopSizes) {
