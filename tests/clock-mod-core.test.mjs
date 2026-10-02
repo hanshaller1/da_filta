@@ -10,6 +10,10 @@ const makeCore = (overrides = {}, limits = {}) => new ClockModCore({
 
 test('legacy and malformed state gets safe Clock Mod defaults without runtime arrays', () => {
   assert.deepEqual(normalizeClockModState({}), {
+    id: 'clockMod.1', assignments: Array.from({ length: 10 }, (_, band) => ({
+      id: `clockMod.1.assignment.band.${band}`, sourceId: `clockMod.1.band.${band}`,
+      targetId: `filterbank.band.${band}.gainDb`, amount: 100, channel: 'both', invert: false, enabled: true
+    })),
     enabled: false, waveform: 'sine', sourceFrequencyHz: 1, modulationGain: 0, midpointDb: 0,
     direction: 'forward', clockSource: 'internal', internalBpm: 120, clockScale: '1/4',
     rightInvert: false, lockedBands: Array(10).fill(false), oscillatorSeed: 0x6d2b79f5,

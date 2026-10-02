@@ -6,23 +6,15 @@ Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungstheme
 
 ## LFO / Modulation
 
-- Andere LFO-Parameter als Modulations-Targets verfügbar machen, z. B.:
-  - LFO Rate
-  - LFO Amount
-  - LFO Phase
-  - weitere kontinuierliche Parameter nach Prüfung
-- LFO ↔ LFO Cross-Modulation ermöglichen.
-  - Selbstmodulation zunächst nicht erlauben.
-  - Modulationszyklen erkennen und für V1 blockieren.
+- Kontinuierliche LFO-Phase erst mit eigenem Smoothing-/Cycle-Vertrag bewerten;
+  der bestehende Offset kann Waveform-Sprünge erzeugen und ist kein P2-Target.
+- Weitere kontinuierliche Modulator-Parameter nur nach fachlicher Prüfung.
+- LFO UI V2 bleibt offen; die kompakte P1-A-Bedienung bleibt maßgeblich.
 
 ## Envelope Follower / Modulation
 
-Nach Implementierung von Envelope Follower V1:
-
-- LFO kann Envelope-Follower-Parameter als Targets verwenden, z. B. Attack, Release, Amount.
-- Envelope Follower kann LFO-Parameter als Targets verwenden, z. B. Rate, Amount.
-- LFO ↔ Envelope Follower Cross-Modulation unterstützen.
-- Zyklische Modulationsrouten erkennen und für V1 blockieren.
+- Envelope UI V2 bleibt offen. P2 ergänzt das vorhandene Assignment-Layout.
+- Clock Mod Stereo Delay / Spread Delay bleibt ein späteres V2-Thema.
 
 ## MIDI
 
@@ -123,8 +115,29 @@ Nach Implementierung von Envelope Follower V1:
 - Im unveränderten P1-C-Stand reproduzierte Guard-Test-Race behoben: bestehende
   Bedingungen an ein gemeinsames Telemetrie-Packet gebunden, alle Grenzwerte
   und Guard-/Safety-DSP erhalten.
-- P1-B MIDI, Cross-Modulation/P2-Modulation, allgemeiner Architektur-Ausbau
+- P1-B MIDI, allgemeiner Architektur-Ausbau
   und die langfristige Klangentscheidung zwischen den Cores bleiben offen.
+
+## Erledigt – P2 Modulation (2026-10-02)
+
+- Envelope-Single-Routing durch mehrere generische Assignments ersetzt; Clock
+  Mod hält weiterhin zehn unabhängige Werte und routet sie über dasselbe System.
+  Legacy-Snapshots, leere Arrays, stabile IDs und Lost-Target-Reaktivierung bleiben
+  erhalten. Bestehende LFO-Multi-Assignments sind weiter aktiv.
+- 20 Meta-Targets: viermal LFO Free Rate/Output Amount und Envelope
+  Attack/Release/Output Amount. LFO↔LFO, LFO↔Envelope, Envelope→Envelope sowie
+  Clock Mod→LFO/Envelope umgesetzt; log Rate/Zeiten, getrennte Base/Effective
+  Values, Summierung und abschließendes Clamping.
+- Self-, direkte und Multi-Hop-Zyklen werden strukturell erkannt und blockiert;
+  Restore erhält gesperrte Rows. Vorbereitete topologische Auswertung nutzt den
+  bestehenden 32-Sample-Control-Takt ohne neue Sample-Loop-Allokationen.
+- Kompakte gemeinsame Assignment-Listen und gruppierter Target-Picker statt
+  UI-Redesign. Phase bleibt wegen fehlendem kontinuierlichem Phase-Vertrag
+  bewusst außerhalb der P2-Registry.
+- Audio-/State-Parität, native Routing-/Meta-Kosten und Testprofile:
+  [P2-Modulation-Bericht](p2-modulation.md). Keine neue Quarantäne.
+- P1-B MIDI inklusive Mapping, Learn und Relative Encoder bleibt offen;
+  LFO/Envelope UI V2 bleibt offen.
 
 ## Status prüfen / möglicherweise bereits erledigt oder überholt
 

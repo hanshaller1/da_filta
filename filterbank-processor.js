@@ -224,6 +224,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.modulationDirectBandOffsetsByChannel = {
       left: new Float64Array(this.bandCount), right: new Float64Array(this.bandCount)
     };
+    this.modulationNativeBandOffsetsByChannel = {
+      left: new Float64Array(this.bandCount), right: new Float64Array(this.bandCount)
+    };
     this.modulationBandOffsetsByChannel = {
       left: new Float64Array(this.bandCount), right: new Float64Array(this.bandCount)
     };
@@ -1529,10 +1532,11 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     return this.controlToGainDb(this.bandControls[normalizedChannel][index]);
   }
 
-  setModulationBandOffset(index, channel, value) {
+  setModulationBandOffset(index, channel, value, nativeOffset = 0) {
     if (!Number.isInteger(index) || index < 0 || index >= this.bandCount
       || (channel !== 'left' && channel !== 'right')) return;
     this.modulationDirectBandOffsetsByChannel[channel][index] = Number.isFinite(value) ? value : 0;
+    this.modulationNativeBandOffsetsByChannel[channel][index] = Number.isFinite(nativeOffset) ? nativeOffset : 0;
   }
 
   setEffectiveDryWet(value) {
@@ -1554,16 +1558,24 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.dynamicEqReleaseCoefficient = timeCoefficient(releaseMs, sampleRate);
   }
 
-  updateModulationTargets() {
+  updateModulationTargets(_unused, evaluateMeta = true) {
     for (let index = 0; index < this.lfoSources.length; index += 1) {
       const oscillator = this.lfoSources[index];
       const active = this.lfoModuleEnabled && oscillator.enabled;
-      this.modulationCore.setSourceValue(oscillator.sourceId, active ? oscillator.sampleValue : 0, oscillator.polarity, active);
+      this.modulationCore.setSourceValue(oscillator.sourceId, active ? oscillator.sampleValue * (oscillator.effectiveOutputAmount / 100) : 0, oscillator.polarity, active);
     }
     for (let index = 0; index < this.envelopeSources.length; index += 1) {
       const follower = this.envelopeSources[index];
       const active = this.envelopeModuleEnabled && follower.enabled;
-      this.modulationCore.setSourceValue(follower.sourceId, active ? follower.value : 0, 'unipolar', active);
+      this.modulationCore.setSourceValue(follower.sourceId, active ? follower.value * (follower.effectiveOutputAmount / 100) : 0, 'unipolar', active);
+    }
+    this.publishClockModSources();
+    if (evaluateMeta && this.modulationCore.hasMetaAssignments) {
+      for (let index = 0; index < this.modulationNodes.length; index += 1) {
+        const node = this.modulationNodes[index];
+        this.modulationCore.evaluateRecords(node.targets, this);
+        if (node.type !== 2) this.publishModulatorNode(node);
+      }
     }
     this.modulationCore.evaluate(this);
     if (this.hasFilterParameterModulation) {
@@ -1578,8 +1590,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   refreshBandModulationOffsets(index) {
     const filterOffset = this.hasFilterParameterModulation
       ? this.effectiveFilterShapeGainsDb[index] - this.baseFilterShapeGainsDb[index] : 0;
-    const clockModLeftDb = this.clockMod?.valueDb('left', index) || 0;
-    const clockModRightDb = this.clockMod?.valueDb('right', index) || 0;
+    const clockModLeftDb = this.modulationNativeBandOffsetsByChannel.left[index];
+    const clockModRightDb = this.modulationNativeBandOffsetsByChannel.right[index];
     const spreadOffset = this.effectiveSpreadDeltaDb;
     this.modulationDirectBandOffsetsDb[index] = (this.modulationDirectBandOffsetsByChannel.left[index]
       + this.modulationDirectBandOffsetsByChannel.right[index]) / 2;
@@ -1655,10 +1667,11 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     }
     const assignments = Array.isArray(source.assignments) ? source.assignments : [
       ...modulationState.lfoSources.flatMap(item => item.assignments.filter(assignment => assignment.targetId)),
-      ...envelopeSources.filter(item => item.targetId)
-        .map(item => ({ id: `${item.id}.assignment.1`, sourceId: item.id, targetId: item.targetId, amount: item.amount, channel: item.channel, invert: item.invert }))
+      ...envelopeSources.flatMap(item => item.assignments.filter(assignment => assignment.targetId))
     ];
-    this.modulationCore.setAssignments(assignments);
+    const clockAssignments = this.clockMod.config.enabled ? this.clockMod.config.assignments.filter(item => item.targetId) : [];
+    this.modulationCore.setAssignments(assignments.concat(assignments.some(item => item.sourceId.startsWith('clockMod.1')) ? [] : clockAssignments));
+    this.prepareModulationRuntime();
     this.hasFilterParameterModulation = this.modulationCore.assignments.some(item => item.targetId.startsWith('filter.'));
     this.hasFilterbankBandModulation = this.modulationCore.assignments.some(item => item.targetId.startsWith('filterbank.band.'));
     this.updateModulationTargets();
@@ -1668,14 +1681,91 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (!wasRunning && this.lfoModuleEnabled) this.modulationTelemetryCounter = this.modulationTelemetryInterval;
   }
 
-  advanceModulationFrame() {
+  prepareModulationRuntime() {
+    const nodes = new Map();
+    for (const [type, sources] of [[0, this.lfoSources], [1, this.envelopeSources]]) for (const processor of sources) {
+      nodes.set(processor.sourceId, { type, processor, sample: this.modulationCore.sources.get(processor.sourceId),
+        targets: this.modulationCore.modulatorTargets.get(processor.sourceId) || [] });
+    }
+    nodes.set('clockMod.1', { type: 2, targets: [] });
+    this.modulationNodes = this.modulationCore.graph.order.map(id => nodes.get(id)).filter(Boolean);
+    this.clockModSourceSamples = [];
+    for (let band = -1; band < this.bandCount; band += 1) {
+      const id = band < 0 ? 'clockMod.1' : `clockMod.1.band.${band}`;
+      // Source registration is configuration work, never a sample-loop lookup.
+      if (!this.modulationCore.sources.has(id)) this.modulationCore.setSourceValue(id, 0, 'bipolar', false);
+      const sample = this.modulationCore.sources.get(id);
+      sample.nativeUnit = band < 0 ? null : 'dB';
+      sample.clockBand = band;
+      this.clockModSourceSamples.push(sample);
+    }
+    // Registering new taps may recompile links. Bind the final records once.
+    for (const node of this.modulationNodes) if (node.type !== 2) node.targets = (this.modulationCore.modulatorTargets.get(node.processor.sourceId) || []).filter(record => record.links.length);
+    this.clockModTargetRecords = this.modulationCore.compiledTargets.filter(record => record.links.some(link => link.source.clockBand !== undefined));
+    for (const record of this.clockModTargetRecords) {
+      record.clockMask = 0;
+      for (const link of record.links) if (link.source.clockBand !== undefined) record.clockMask |= link.source.clockBand < 0 ? 1023 : 1 << link.source.clockBand;
+      const band = /^filterbank\.band\.(\d+)\.gainDb$/.exec(record.target.id);
+      record.bandIndex = band ? Number(band[1]) : -1;
+    }
+    this.clockModHasFilterTargets = this.clockModTargetRecords.some(record => record.target.id.startsWith('filter.'));
+  }
+
+  publishModulatorNode(node) {
+    const processor = node.processor;
+    const active = processor.enabled && (node.type === 0 ? this.lfoModuleEnabled : this.envelopeModuleEnabled);
+    const value = active ? (node.type === 0 ? processor.sampleValue : processor.value) * (processor.effectiveOutputAmount / 100) : 0;
+    node.sample.value = value;
+    node.sample.rightValue = value;
+    node.sample.enabled = active;
+  }
+
+  publishClockModSources() {
+    for (let index = 0; index < this.clockModSourceSamples.length; index += 1) {
+      const sample = this.clockModSourceSamples[index];
+      const band = sample.clockBand < 0 ? this.clockMod.lastTriggeredBand : sample.clockBand;
+      const active = this.clockMod.config.enabled && band >= 0;
+      const locked = active && this.clockMod.config.lockedBands[band];
+      sample.enabled = sample.clockBand >= 0 ? this.clockMod.config.enabled : active;
+      sample.value = active && !locked ? this.clockMod.heldOutputLeft[band] : 0;
+      sample.rightValue = active && !locked ? this.clockMod.heldOutputRight[band] : 0;
+      sample.nativeValue = sample.enabled ? this.clockMod.valueDb('left', band) : 0;
+      sample.nativeRightValue = sample.enabled ? this.clockMod.valueDb('right', band) : 0;
+    }
+  }
+
+  advanceClockModRouting() {
+    const mask = this.clockMod.advance(sampleRate, this.clockCore);
+    if (!mask) return;
+    this.publishClockModSources();
+    for (let index = 0; index < this.clockModTargetRecords.length; index += 1) {
+      const record = this.clockModTargetRecords[index];
+      if (!(record.clockMask & mask)) continue;
+      this.modulationCore.evaluateRecord(record, this);
+      if (record.bandIndex >= 0) this.refreshBandModulationOffsets(record.bandIndex);
+    }
+    if (this.clockModHasFilterTargets) {
+      FilterShape.writeFilterShape(this.effectiveFilterShapeParams, this.bandFrequencies, this.effectiveFilterShapeGainsDb);
+      for (let index = 0; index < this.bandCount; index += 1) this.refreshBandModulationOffsets(index);
+    }
+  }
+
+  advanceModulationFrame(left = 0, right = 0) {
     const clockBeat = this.clockCore.advance(sampleRate);
-    for (const oscillator of this.lfoSources) oscillator.advance(sampleRate, clockBeat, this.clockCore.state.running);
-    const clockModMask = this.clockMod.advance(sampleRate, this.clockCore);
-    if (clockModMask) {
-      for (let band = 0; band < this.bandCount; band += 1) {
-        if (clockModMask & (1 << band)) this.refreshBandModulationOffsets(band);
+    const controlTick = this.modulationControlCounter + 1 >= MODULATION_CONTROL_INTERVAL;
+    if (this.modulationCore.hasMetaAssignments) {
+      for (let index = 0; index < this.modulationNodes.length; index += 1) {
+        const node = this.modulationNodes[index];
+        if (node.type === 2) { this.advanceClockModRouting(); continue; }
+        if (controlTick) this.modulationCore.evaluateRecords(node.targets, this);
+        if (node.type === 0) node.processor.advance(sampleRate, clockBeat, this.clockCore.state.running);
+        else if (this.envelopeModuleEnabled && node.processor.enabled) node.processor.process(left, right, sampleRate);
+        if (controlTick) this.publishModulatorNode(node);
       }
+    } else {
+      for (const follower of this.envelopeSources) if (this.envelopeModuleEnabled && follower.enabled) follower.process(left, right, sampleRate);
+      for (const oscillator of this.lfoSources) oscillator.advance(sampleRate, clockBeat, this.clockCore.state.running);
+      this.advanceClockModRouting();
     }
     this.modulationControlCounter += 1;
     if (this.modulationControlCounter >= MODULATION_CONTROL_INTERVAL) {
@@ -1683,7 +1773,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       // Static bases are applied by state/parameter messages. With no
       // assignments there is no sample-varying registry contribution;
       // clocks, sources and held Clock Mod updates still advance above.
-      if (this.modulationCore.assignments.length) this.updateModulationTargets();
+      if (this.modulationCore.assignments.length) this.updateModulationTargets(undefined, false);
     }
   }
 
@@ -2683,11 +2773,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     const rightOutput = outputChannels[1];
     const frameCount = Math.max(leftOutput?.length || 0, rightOutput?.length || 0, modulationOutput?.length || 0);
     for (let frame = 0; frame < frameCount; frame += 1) {
-      for (let index = 0; index < this.envelopeSources.length; index += 1) {
-        const follower = this.envelopeSources[index];
-        if (this.envelopeModuleEnabled && follower.enabled) follower.process(inputChannels[0]?.[frame], inputChannels[1]?.[frame], sampleRate);
-      }
-      this.advanceModulationFrame();
+      this.advanceModulationFrame(inputChannels[0]?.[frame], inputChannels[1]?.[frame]);
       this.effectiveDryWet = this.effectiveDryWetTarget + this.modulationGainSmoothingCoefficient
         * (this.effectiveDryWet - this.effectiveDryWetTarget);
       if (modulationOutput) modulationOutput[frame] = Math.max(-1, Math.min(1,
@@ -2756,15 +2842,20 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       if (this.modulationTelemetryCounter >= this.modulationTelemetryInterval || this.modulationTelemetryDirty) {
         this.modulationTelemetryCounter %= this.modulationTelemetryInterval;
         for (const oscillator of this.lfoSources) {
-          this.port.postMessage({ type: 'lfo-telemetry', sourceId: oscillator.sourceId,
+          const packet = { type: 'lfo-telemetry', sourceId: oscillator.sourceId,
             enabled: this.lfoModuleEnabled && oscillator.enabled, waveform: oscillator.waveform,
-            polarity: oscillator.polarity, invert: oscillator.invert, rateHz: oscillator.rateHz,
-            rateMode: oscillator.rateMode, phase: oscillator.phase, value: oscillator.sampleValue });
+            polarity: oscillator.polarity, invert: oscillator.invert, rateHz: oscillator.effectiveRateHz,
+            rateMode: oscillator.rateMode, phase: oscillator.phase, value: oscillator.sampleValue * (oscillator.effectiveOutputAmount / 100) };
+          if (this.modulationCore.hasMetaAssignments) Object.assign(packet, { baseRateHz: oscillator.rateHz, outputAmount: oscillator.effectiveOutputAmount });
+          this.port.postMessage(packet);
         }
         for (const follower of this.envelopeSources) {
-          this.port.postMessage({ type: 'envelope-telemetry', sourceId: follower.sourceId,
+          const packet = { type: 'envelope-telemetry', sourceId: follower.sourceId,
             enabled: this.envelopeModuleEnabled && follower.enabled, detectorMode: follower.detectorMode,
-            rawLevel: follower.rawLevel, value: follower.value, thresholdLevel: follower.thresholdLevel });
+            rawLevel: follower.rawLevel, value: follower.value * (follower.effectiveOutputAmount / 100), thresholdLevel: follower.thresholdLevel };
+          if (this.modulationCore.hasMetaAssignments) Object.assign(packet, { attack: follower.effectiveAttack,
+            release: follower.effectiveRelease, outputAmount: follower.effectiveOutputAmount });
+          this.port.postMessage(packet);
         }
         this.modulationTelemetryDirty = false;
       }

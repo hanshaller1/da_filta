@@ -156,7 +156,8 @@ test('Envelope detector runs in the Worklet, reports telemetry, and removes modu
     const envelopeSources = engine.getModulationState().envelopeSources.map((source, index) => ({
       ...source, enabled: index < 2, detectorMode: 'peak', attack: 20, release: 20, delay: 0,
       sensitivity: 100, amount: 50,
-      targetId: index === 0 ? 'filterbank.band.5.gainDb' : index === 1 ? 'filterbank.band.4.gainDb' : '', channel: 'both'
+      assignments: [{ id: `${source.id}.assignment.1`, sourceId: source.id, amount: 50, channel: 'both',
+        targetId: index === 0 ? 'filterbank.band.5.gainDb' : index === 1 ? 'filterbank.band.4.gainDb' : '' }]
     }));
     engine.setModulationState({ ...engine.getModulationState(), envelopeModuleEnabled: true, envelopeSources });
     const modulation = engine.getModulationState();

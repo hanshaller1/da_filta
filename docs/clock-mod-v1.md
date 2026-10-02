@@ -8,7 +8,7 @@ The official Graphic Resonant FB manual describes its own CV1 shift-register and
 
 ## da_filta V1
 
-- The LFO core supplies the free-running waveform and random sample-and-hold semantics. Clock Mod has no modulation-core assignment or target.
+- The LFO core supplies the free-running waveform and random sample-and-hold semantics. P2 exposes the existing held outputs through common modulation-core assignments; Clock Mod itself has no parameter targets.
 - Source Frequency reuses the LFO free-rate range of 0.01–20 Hz. Internal BPM is a separate clock rate and supports 1–10,000 BPM without changing the shared LFO clock limits.
 - The existing AudioWorklet ClockCore and MIDI input feed one shared MIDI beat position. Clock Mod can select that MIDI phase independently of the LFO clock selection; its scale uses the shared clock division table.
 - Per-band left/right held values are a temporary additive dB layer in the existing band-modulation path. Manual base gains are not written. Other active layers combine before the existing band-limit clamp.
@@ -16,6 +16,16 @@ The official Graphic Resonant FB manual describes its own CV1 shift-register and
 - Modulation Gain scales the largest symmetric excursion around Midpoint that fits within the active positive and negative band limits. Right Invert negates that sampled offset for the right channel.
 - Runtime phase, progression and held arrays stay in the worklet. Persisted state contains only Clock Mod configuration.
 - UI telemetry is capped at 15 Hz; clock steps never generate DOM events.
+
+## P2 routing extension
+
+The compact assignment editor chooses LATEST or one of ten BAND holds and routes
+it to existing audio targets or safe LFO/Envelope parameter targets. Legacy states
+migrate to ten original held-band routes, preserving their dB values and exact
+sample timing. New routes support per-row amount, channel, invert, enable, remove,
+lost-target status and automatic reactivation. This changes routing only;
+the generator and its clock/hold behavior remain V1. See
+[Modulation Core](modulation-core.md#clock-mod-held-sources-and-migration).
 
 ## Deferred V2 topic
 

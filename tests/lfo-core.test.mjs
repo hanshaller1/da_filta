@@ -19,7 +19,7 @@ test('legacy flat state migrates to lfo.1 and the product keeps exactly four sou
     lfoPolarity: 'unipolar', lfoPhase: 90, lfoTargetId: 'filter.frequencyHz', lfoAmount: 55, lfoSeed: 123 });
   assert.equal(legacy.lfoModuleEnabled, true);
   assert.deepEqual(legacy.lfoSources[0], {
-    id: 'lfo.1', enabled: true, waveform: 'triangle', rateMode: 'free', rateHz: 2.5, syncDivision: '1/4',
+    id: 'lfo.1', enabled: true, waveform: 'triangle', rateMode: 'free', rateHz: 2.5, syncDivision: '1/4', outputAmount: 100,
     polarity: 'unipolar', phaseOffsetDeg: 90, amount: 55, targetId: 'filter.frequencyHz', channel: 'both', invert: false, seed: 123,
     assignments: [{ id: 'lfo.1.assignment.1', sourceId: 'lfo.1', targetId: 'filter.frequencyHz', amount: 55, channel: 'both', invert: false, enabled: true }]
   });

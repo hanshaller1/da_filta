@@ -10,10 +10,11 @@ const filterbankIsActive = context => Boolean(context?.filterbankEnabled);
 
 const MONO_CHANNELS = Object.freeze(['both']);
 const STEREO_CHANNELS = Object.freeze(['both', 'left', 'right', 'spread']);
-const descriptor = ({ id, label, group, min, max, mapping, unit, activeWhen, isActive, getBase, getMin, getMax, apply, channelRouting = false }) => Object.freeze({
+const descriptor = ({ id, label, group, min, max, mapping, unit, activeWhen, isActive, getBase, getMin, getMax, apply, modulatorId = null, channelRouting = false }) => Object.freeze({
   id, label, group, min, max, range: Object.freeze([min, max]), mapping, unit, channelRouting,
   channels: channelRouting ? STEREO_CHANNELS : MONO_CHANNELS,
-  clamp: Object.freeze({ min, max }), activeWhen, isActive, getBase, getMin, getMax, apply
+  clamp: Object.freeze({ min, max }), activeWhen, isActive, getBase, getMin, getMax, apply, modulatorId,
+  modulationCapability: 'continuous'
 });
 
 const filterTarget = (id, label, field, min, max, mapping, unit, activeWhen, types = null) => descriptor({
@@ -69,8 +70,8 @@ const TARGETS = [
     getMin: context => -clamp(context?.maxBandCutDb, 0, 60, 12),
     getMax: context => clamp(context?.maxBandBoostDb, 0, 24, 12),
     getBase: (context, channel = 'left') => context?.getModulationBandBaseDb?.(index, channel),
-    apply: (context, value, base, channel) => {
-      if (context?.setModulationBandOffset) context.setModulationBandOffset(index, channel, value - base);
+    apply: (context, value, base, channel, nativeOffset = 0) => {
+      if (context?.setModulationBandOffset) context.setModulationBandOffset(index, channel, value - base, nativeOffset);
       else if (context?.modulationDirectBandOffsetsDb) context.modulationDirectBandOffsetsDb[index] = value - base;
     }
   })),
@@ -112,13 +113,94 @@ const TARGETS = [
       context.dynamicEqEffectiveSettings[field] = value;
       context.setEffectiveDynamicEqTimes?.(context.dynamicEqEffectiveSettings.dynamicEqAttackMs, context.dynamicEqEffectiveSettings.dynamicEqReleaseMs);
     }
-  }))
+  })),
+  ...Array.from({ length: 4 }, (_, index) => [
+    ['rate', 'Rate', 'rateHz', .01, 20, 'logarithmic', 'Hz'],
+    ['amount', 'Output Amount', 'outputAmount', 0, 100, 'normalized', '%']
+  ].map(([parameter, label, field, min, max, mapping, unit]) => descriptor({
+    id: `lfo.${index + 1}.${parameter}`, modulatorId: `lfo.${index + 1}`,
+    label: `LFO ${index + 1} ${label}`, group: 'LFO', min, max, mapping, unit,
+    activeWhen: parameter === 'rate' ? 'enabledFreeLfo' : 'enabledLfo',
+    isActive: context => Boolean(context?.lfoModuleEnabled && context?.lfoSources?.[index]?.enabled)
+      && (parameter !== 'rate' || context.lfoSources[index].rateMode !== 'sync'),
+    getBase: context => context?.lfoSources?.[index]?.[field] ?? (parameter === 'amount' ? 100 : 1),
+    apply: (context, value) => context?.lfoSources?.[index]?.setEffectiveParameter?.(field, value)
+  }))).flat(),
+  ...Array.from({ length: 4 }, (_, index) => [
+    ['attack', 'Attack', 'attack', 1, 500, 'logarithmic', 'ms'],
+    ['release', 'Release', 'release', 10, 3000, 'logarithmic', 'ms'],
+    ['amount', 'Output Amount', 'outputAmount', 0, 100, 'normalized', '%']
+  ].map(([parameter, label, field, min, max, mapping, unit]) => descriptor({
+    id: `envelope.${index + 1}.${parameter}`, modulatorId: `envelope.${index + 1}`,
+    label: `ENV ${index + 1} ${label}`, group: 'ENVELOPE', min, max, mapping, unit,
+    activeWhen: 'enabledEnvelope',
+    isActive: context => Boolean(context?.envelopeModuleEnabled && context?.envelopeSources?.[index]?.enabled),
+    getBase: context => context?.envelopeSources?.[index]?.[field] ?? (parameter === 'amount' ? 100 : parameter === 'attack' ? 20 : 250),
+    apply: (context, value) => context?.envelopeSources?.[index]?.setEffectiveParameter?.(field, value)
+  }))).flat()
 ];
 
 export const MODULATION_TARGETS = Object.freeze(TARGETS);
 const targetMap = new Map(TARGETS.map(target => [target.id, target]));
 export const getModulationTarget = id => targetMap.get(id) || null;
 export const isModulationTargetActive = (id, context) => Boolean(targetMap.get(id)?.isActive?.(context));
+
+// Clock's held band taps are outputs of one existing generator, not new
+// modulators. Graph ownership is metadata; the assignment core is source agnostic.
+const sourceOwners = new Map();
+for (const family of ['lfo', 'envelope']) for (let index = 1; index <= 4; index += 1) {
+  const id = `${family}.${index}`; sourceOwners.set(id, id);
+}
+sourceOwners.set('clockMod.1', 'clockMod.1');
+for (let index = 0; index < 10; index += 1) sourceOwners.set(`clockMod.1.band.${index}`, 'clockMod.1');
+export const getModulationSourceOwner = id => sourceOwners.get(id) || id;
+export const modulationAssignmentKey = assignment => `${assignment.sourceId}:${assignment.id}`;
+
+const reaches = (edges, from, destination, visited = new Set()) => {
+  if (from === destination) return true;
+  if (visited.has(from)) return false;
+  visited.add(from);
+  for (const next of edges.get(from) || []) if (reaches(edges, next, destination, visited)) return true;
+  return false;
+};
+const assignmentOrder = (a, b) => `${getModulationSourceOwner(a.sourceId)}:${a.targetId}:${a.id}`
+  .localeCompare(`${getModulationSourceOwner(b.sourceId)}:${b.targetId}:${b.id}`, 'en');
+
+// Enabled but temporarily unavailable edges reserve the graph, so a mode or
+// source reactivation cannot introduce a cycle without structural validation.
+export function compileModulationGraph(assignments = [], targets = targetMap) {
+  const edges = new Map();
+  const blocked = new Set();
+  for (const id of new Set(sourceOwners.values())) edges.set(id, new Set());
+  for (const assignment of [...assignments].sort(assignmentOrder)) {
+    const destination = targets.get(assignment.targetId)?.modulatorId;
+    if (!destination || assignment.enabled === false) continue;
+    const source = getModulationSourceOwner(assignment.sourceId);
+    if (!edges.has(source)) edges.set(source, new Set());
+    if (!edges.has(destination)) edges.set(destination, new Set());
+    if (reaches(edges, destination, source)) { blocked.add(modulationAssignmentKey(assignment)); continue; }
+    edges.get(source).add(destination);
+  }
+  const incoming = new Map([...edges.keys()].map(id => [id, 0]));
+  for (const destinations of edges.values()) for (const id of destinations) incoming.set(id, incoming.get(id) + 1);
+  const pending = [...incoming.keys()].filter(id => !incoming.get(id)).sort();
+  const order = [];
+  while (pending.length) {
+    const id = pending.shift(); order.push(id);
+    for (const destination of edges.get(id)) {
+      incoming.set(destination, incoming.get(destination) - 1);
+      if (!incoming.get(destination)) { pending.push(destination); pending.sort(); }
+    }
+  }
+  return { edges, blocked, order };
+}
+
+export function wouldCreateModulationCycle(assignments, candidate) {
+  const destination = getModulationTarget(candidate.targetId)?.modulatorId;
+  if (!destination) return false;
+  const graph = compileModulationGraph(assignments.filter(item => modulationAssignmentKey(item) !== modulationAssignmentKey(candidate)));
+  return reaches(graph.edges, destination, getModulationSourceOwner(candidate.sourceId));
+}
 
 // Persist configuration only. Availability is derived from the same registry in
 // the editor and Worklet, so temporarily lost targets retain their identity.
@@ -141,7 +223,9 @@ export function getModulationAssignmentStatus(assignment, context, sourceEnabled
   const target = getModulationTarget(assignment?.targetId);
   const available = Boolean(target && target.isActive(context));
   const reason = !assignment?.targetId ? 'no-target' : !target ? 'target-invalid'
-    : !available ? 'target-unavailable' : assignment.enabled === false ? 'assignment-disabled'
+    : assignment.enabled === false ? 'assignment-disabled'
+      : context?.modulationGraph?.blocked.has(modulationAssignmentKey(assignment)) ? 'cycle-blocked'
+      : !available ? 'target-unavailable'
       : !sourceEnabled ? 'source-disabled' : 'active';
   return { available, active: reason === 'active', valid: Boolean(target), reason };
 }
@@ -189,6 +273,7 @@ export class ModulationCore {
       || !Number.isFinite(target.max) || target.min > target.max
       || !['linear', 'logarithmic', 'db', 'normalized', 'continuous-enum'].includes(target.mapping)) return false;
     this.targets.set(target.id, Object.freeze({ ...target }));
+    this.graphSignature = null;
     this.compileAssignments();
     return true;
   }
@@ -197,12 +282,13 @@ export class ModulationCore {
     if (typeof sourceId !== 'string' || !sourceId) return false;
     let sample = this.sources.get(sourceId);
     if (!sample) {
-      sample = { value: 0, range: 'bipolar', enabled: false };
+      sample = { value: 0, rightValue: 0, nativeValue: 0, nativeRightValue: 0, nativeUnit: null, range: 'bipolar', enabled: false };
       this.sources.set(sourceId, sample);
       this.compileAssignments();
     }
     const object = value !== null && typeof value === 'object';
     sample.value = clamp(object ? value.value : value, -1, 1, 0);
+    sample.rightValue = object ? clamp(value.rightValue ?? value.value, -1, 1, 0) : sample.value;
     sample.range = (object ? value.range : range) === 'unipolar' ? 'unipolar' : 'bipolar';
     sample.enabled = object ? value.enabled !== false : enabled;
     return true;
@@ -270,27 +356,40 @@ export class ModulationCore {
     // source references grouped by target, without assignment scans or objects.
     this.compiledTargets = [];
     this.compiledTargetMap.clear();
+    const signature = JSON.stringify([...this.assignments].sort(assignmentOrder)
+      .map(item => [item.id, item.sourceId, item.targetId, item.enabled]));
+    if (signature !== this.graphSignature) {
+      this.graph = compileModulationGraph(this.assignments, this.targets);
+      this.graphSignature = signature;
+      this.graphCompilationCount = (this.graphCompilationCount || 0) + 1;
+    }
+    this.compilationCount = (this.compilationCount || 0) + 1;
+    this.modulatorTargets = new Map(this.graph.order.map(id => [id, []]));
+    this.hasMetaAssignments = this.assignments.some(item => this.targets.get(item.targetId)?.modulatorId);
     for (const target of this.targets.values()) {
       const record = { target, links: [], baseKeys: target.basePath?.split('.') || [],
-        base: 0, logarithmic: target.mapping === 'logarithmic' };
-      this.compiledTargets.push(record);
+        base: 0, nativeContribution: 0, logarithmic: target.mapping === 'logarithmic' };
+      if (target.modulatorId) this.modulatorTargets.get(target.modulatorId)?.push(record);
+      else this.compiledTargets.push(record);
       this.compiledTargetMap.set(target.id, record);
     }
-    for (const assignment of this.assignments) {
+    const ordered = this.hasMetaAssignments ? [...this.assignments].sort(assignmentOrder) : this.assignments;
+    for (const assignment of ordered) {
       const record = this.compiledTargetMap.get(assignment.targetId);
-      if (!record || !assignment.enabled) continue;
+      if (!record || !assignment.enabled || this.graph.blocked.has(modulationAssignmentKey(assignment))) continue;
       let source = this.sources.get(assignment.sourceId);
       if (!source) {
-        source = { value: 0, range: 'bipolar', enabled: false };
+        source = { value: 0, rightValue: 0, nativeValue: 0, nativeRightValue: 0, nativeUnit: null, range: 'bipolar', enabled: false };
         this.sources.set(assignment.sourceId, source);
       }
       const scale = assignment.amount / 100 * (assignment.invert ? -1 : 1);
       // Duplicate rows remain independently editable, but runtime work scales
       // with sources/targets rather than the number of editor rows.
       let link = record.links.find(item => item.source === source);
-      if (!link) { link = { source, left: 0, right: 0, both: 0 }; record.links.push(link); }
+      if (!link) { link = { source, left: 0, right: 0, both: 0, rightSpread: 0 }; record.links.push(link); }
       link.left += assignment.channel === 'right' ? 0 : scale;
       link.right += assignment.channel === 'left' ? 0 : assignment.channel === 'spread' ? -scale : scale;
+      if (assignment.channel === 'spread') link.rightSpread -= scale;
       link.both += scale;
     }
   }
@@ -306,18 +405,29 @@ export class ModulationCore {
     if (!target.getBase) for (let index = 0; index < record.baseKeys.length; index += 1) rawBase = rawBase?.[record.baseKeys[index]];
     const base = clamp(rawBase, min, max, target.defaultValue ?? min);
     record.base = base;
+    record.nativeContribution = 0;
     if (target.isActive && !target.isActive(context)) return base;
     let contribution = 0;
+    let nativeContribution = 0;
     for (let index = 0; index < record.links.length; index += 1) {
       const link = record.links[index];
       if (!link.source.enabled) continue;
-      contribution += link.source.value * (channel === 'left' ? link.left : channel === 'right' ? link.right : link.both);
+      const scale = channel === 'left' ? link.left : channel === 'right' ? link.right : link.both;
+      if (link.source.nativeUnit === target.unit) {
+        nativeContribution += channel === 'right'
+          ? link.source.nativeRightValue * scale + (link.source.nativeValue - link.source.nativeRightValue) * link.rightSpread
+          : link.source.nativeValue * scale;
+      } else contribution += channel === 'right'
+        ? link.source.rightValue * scale + (link.source.value - link.source.rightValue) * link.rightSpread
+        : link.source.value * scale;
     }
+    record.nativeContribution = nativeContribution;
+    if (target.modulatorId && contribution === 0 && nativeContribution === 0) return base;
     if (record.logarithmic) {
       const position = Math.log(base) + contribution * (Math.log(max) - Math.log(min)) / 2;
       return Math.exp(clamp(position, Math.log(min), Math.log(max), Math.log(base)));
     }
-    const value = base + contribution * (max - min) / 2;
+    const value = base + contribution * (max - min) / 2 + (clampResult ? nativeContribution : 0);
     return clampResult ? clamp(value, min, max, base) : value;
   }
 
@@ -326,22 +436,27 @@ export class ModulationCore {
     return record ? this.effectiveValue(record, context, channel) : undefined;
   }
 
-  evaluate(context) {
-    for (let index = 0; index < this.compiledTargets.length; index += 1) {
-      const record = this.compiledTargets[index];
-      const target = record.target;
-      if (typeof target.apply !== 'function') continue;
-      if (target.channelRouting) {
-        const clampResult = !context.deferModulationBandClamp;
-        const left = this.effectiveValue(record, context, 'left', clampResult);
-        target.apply(context, left, record.base, 'left');
-        const right = this.effectiveValue(record, context, 'right', clampResult);
-        target.apply(context, right, record.base, 'right');
-        continue;
-      }
-      const value = this.effectiveValue(record, context, 'both');
-      target.apply(context, value, record.base, 'both');
+  evaluate(context) { this.evaluateRecords(this.compiledTargets, context); }
+
+  evaluateRecords(records, context) {
+    for (let index = 0; index < records.length; index += 1) {
+      this.evaluateRecord(records[index], context);
     }
+  }
+
+  evaluateRecord(record, context) {
+    const target = record.target;
+    if (typeof target.apply !== 'function') return;
+    if (target.channelRouting) {
+      const clampResult = !context.deferModulationBandClamp;
+      const left = this.effectiveValue(record, context, 'left', clampResult);
+      target.apply(context, left, record.base, 'left', record.nativeContribution);
+      const right = this.effectiveValue(record, context, 'right', clampResult);
+      target.apply(context, right, record.base, 'right', record.nativeContribution);
+      return;
+    }
+    const value = this.effectiveValue(record, context, 'both');
+    target.apply(context, value, record.base, 'both');
   }
 
   getAssignments() { return this.assignments.map(assignment => ({ ...assignment })); }

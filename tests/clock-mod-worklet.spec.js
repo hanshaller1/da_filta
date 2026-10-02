@@ -72,7 +72,7 @@ test('Clock Mod adds an isolated held layer and combines with band modulation in
   expect(result.active.heldLeft).toBeLessThan(0);
   expect(result.active.heldRight).toBeGreaterThan(0);
   expect(result.active.heldBand1).toBe(0);
-  expect(result.active.assignmentCount).toBe(1);
+  expect(result.active.assignmentCount).toBe(11); // One LFO route and ten migrated Clock Mod holds.
   expect(result.active.finite).toBe(true);
   expect(result.active.baseAfter).toEqual(result.baseBefore);
   expect(result.disabledOffset).toBeCloseTo(result.disabledDirectLeft, 8);

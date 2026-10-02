@@ -344,7 +344,7 @@ test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsi
     await page.locator('[data-mode="lfo"]').click();
     await expect(page.locator('[data-mode-panel="lfo"]')).toBeVisible();
     await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-waveform]')).toHaveCount(8);
-    await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-target] option')).toHaveCount(28);
+    await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-target] option')).toHaveCount(48);
     await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-slot]')).toHaveCount(4);
     await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-rate]')).toBeVisible();
     await expect(page.locator('[data-mode-panel="lfo"] [data-lfo-amount]')).toBeVisible();

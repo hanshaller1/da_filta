@@ -1,5 +1,6 @@
 import { LfoOscillator, LFO_MIN_RATE_HZ, LFO_MAX_RATE_HZ, LFO_SYNC_DIVISIONS } from './lfo-core.mjs';
 import { SYNC_DIVISION_BEATS } from './clock-core.mjs';
+import { normalizeModulationAssignments } from './modulation-core.mjs';
 
 export const CLOCK_MOD_BAND_COUNT = 10;
 export const CLOCK_MOD_WAVEFORMS = Object.freeze(['sine', 'square', 'triangle', 'saw', 'random']);
@@ -20,7 +21,16 @@ const oscillatorWaveform = waveform => waveform === 'saw' ? 'saw-up' : waveform 
 
 export function normalizeClockModState(source = {}) {
   const state = source?.clockMod && typeof source.clockMod === 'object' ? source.clockMod : source;
+  const routes = Array.isArray(state.assignments) ? state.assignments : Array.from({ length: CLOCK_MOD_BAND_COUNT }, (_, band) => ({
+    id: `clockMod.1.assignment.band.${band}`, sourceId: `clockMod.1.band.${band}`,
+    targetId: `filterbank.band.${band}.gainDb`, amount: 100
+  }));
   return {
+    id: 'clockMod.1',
+    assignments: normalizeModulationAssignments(routes.map((route, index) => ({ ...route,
+      id: route?.id || `clockMod.1.assignment.${index + 1}`,
+      sourceId: /^clockMod\.1\.band\.[0-9]$/.test(route?.sourceId) ? route.sourceId : 'clockMod.1'
+    }))),
     enabled: state.enabled === true,
     waveform: normalizeWaveform(state.waveform),
     sourceFrequencyHz: clamp(state.sourceFrequencyHz, LFO_MIN_RATE_HZ, LFO_MAX_RATE_HZ, 1),
@@ -37,9 +47,8 @@ export function normalizeClockModState(source = {}) {
   };
 }
 
-// Clock Mod is a filterbank layer, not a modulation-core source. Its oscillator
-// borrows LFO's sample clock and waveform/S&H implementation while its clock,
-// progression, and per-band holds stay independent of LFO assignments.
+// The ten held taps belong to one Clock Mod generator. Routing uses regular
+// assignments; its oscillator, progression and held states retain V1 timing.
 export class ClockModCore {
   constructor(source = {}, { maxBandBoostDb = 12, maxBandCutDb = 12 } = {}) {
     this.config = normalizeClockModState(source);
@@ -52,6 +61,8 @@ export class ClockModCore {
     this.heldLeft = new Float64Array(CLOCK_MOD_BAND_COUNT);
     this.heldRight = new Float64Array(CLOCK_MOD_BAND_COUNT);
     this.heldSample = new Float64Array(CLOCK_MOD_BAND_COUNT);
+    this.heldOutputLeft = new Float64Array(CLOCK_MOD_BAND_COUNT);
+    this.heldOutputRight = new Float64Array(CLOCK_MOD_BAND_COUNT);
     this.heldLeft.fill(this.config.midpointDb);
     this.heldRight.fill(this.config.midpointDb);
     this.oscillatorPhase = 0;
@@ -158,6 +169,8 @@ export class ClockModCore {
       const rightHeldOffsetDb = this.config.rightInvert ? -heldOffsetDb : heldOffsetDb;
       const clockModRightValueDb = this.clampValue(this.config.midpointDb + rightHeldOffsetDb);
       this.heldSample[band] = oscillatorValue;
+      this.heldOutputLeft[band] = oscillatorValue * this.config.modulationGain / 100;
+      this.heldOutputRight[band] = this.config.rightInvert ? -this.heldOutputLeft[band] : this.heldOutputLeft[band];
       this.heldLeft[band] = clockModValueDb;
       this.heldRight[band] = clockModRightValueDb;
     }

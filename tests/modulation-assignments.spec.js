@@ -145,7 +145,8 @@ test('production processor sums LFO, Envelope and Clock Mod before the final ban
     Object.assign(state.lfoSources[1], { enabled: true, waveform: 'square', phaseOffsetDeg: 0, rateHz: .01,
       assignments: [{ id: 'right', targetId: 'filterbank.band.0.gainDb', amount: 25, channel: 'right', invert: true }] });
     state.envelopeModuleEnabled = true;
-    Object.assign(state.envelopeSources[0], { enabled: true, targetId: 'filterbank.band.0.gainDb', amount: 100, invert: true, channel: 'left' });
+    Object.assign(state.envelopeSources[0], { enabled: true, assignments: [{ id: 'env.left',
+      targetId: 'filterbank.band.0.gainDb', amount: 100, invert: true, channel: 'left' }] });
     state.clockMod = { ...state.clockMod, enabled: true, waveform: 'saw', sourceFrequencyHz: .01,
       modulationGain: 100, rightInvert: true, internalBpm: 1, midpointDb: 0 };
     engine.setModulationState(state);

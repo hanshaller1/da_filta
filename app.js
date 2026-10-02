@@ -1,4 +1,4 @@
-import { MODULATION_TARGETS, getModulationTarget, getModulationAssignmentStatus, isModulationTargetActive } from './modulation-core.mjs';
+import { MODULATION_TARGETS, getModulationTarget, getModulationAssignmentStatus, compileModulationGraph, wouldCreateModulationCycle } from './modulation-core.mjs';
 import { LFO_WAVEFORMS, LFO_SYNC_DIVISIONS, paginateLfoSources, rateToSlider, sliderToRate, waveformSample } from './lfo-core.mjs';
 import { normalizeClockState, SYNC_DIVISION_BEATS } from './clock-core.mjs';
 import { MidiDeviceManager } from './midi-device-manager.mjs';
@@ -1594,7 +1594,6 @@ const clockModPowerButton = document.querySelector('[data-module-power="clock-mo
 const lfoWaveformButtons = [...document.querySelectorAll('[data-lfo-waveform]')];
 const lfoPolarityButtons = [...document.querySelectorAll('[data-lfo-polarity]')];
 const lfoAssignmentList = document.querySelector('[data-lfo-assignments]');
-const lfoAddAssignmentButton = document.querySelector('[data-lfo-add-assignment]');
 const lfoRateInput = document.querySelector('[data-lfo-rate]');
 const lfoPhaseInput = document.querySelector('[data-lfo-phase]');
 const lfoWavePath = document.querySelector('[data-lfo-wave-path]');
@@ -1651,17 +1650,11 @@ const envelopeReleaseInput = document.querySelector('[data-envelope-release]');
 const envelopeDelayInput = document.querySelector('[data-envelope-delay]');
 const envelopeSensitivityInput = document.querySelector('[data-envelope-sensitivity]');
 const envelopeThresholdInput = document.querySelector('[data-envelope-threshold]');
-const envelopeAmountInput = document.querySelector('[data-envelope-amount]');
-const envelopeTargetSelect = document.querySelector('[data-envelope-target]');
-const envelopeChannelSelect = document.querySelector('[data-envelope-channel]');
-const envelopeInvertButton = document.querySelector('[data-envelope-invert]');
 const envelopeWavePath = document.querySelector('[data-envelope-wave-path]');
 const envelopeRawWavePath = document.querySelector('[data-envelope-raw-wave-path]');
 const envelopeThresholdLine = document.querySelector('[data-envelope-threshold-line]');
 const envelopeReadout = document.querySelector('[data-envelope-readout]');
 const envelopeStatus = document.querySelector('[data-envelope-status]');
-const envelopeTargetState = document.querySelector('[data-envelope-target-state]');
-const envelopeTargetControl = document.querySelector('.envelope-target-control');
 const midiDialog = document.querySelector('[data-midi-dialog]');
 const midiAccessStatusElement = document.querySelector('[data-midi-access-status]');
 const midiAccessMessage = document.querySelector('[data-midi-access-message]');
@@ -1738,8 +1731,25 @@ const lfoTargetContext = () => ({
   spreadMaxOffsetDb: state.spreadMaxOffsetDb,
   spreadMode: state.spreadMode,
   perChannelBands: state.perChannelBands,
-  filterShapeParams: window.FilterShape.shapeParametersFromState(state)
+  filterShapeParams: window.FilterShape.shapeParametersFromState(state),
+  lfoModuleEnabled: state.lfoModuleEnabled, lfoSources: state.lfoSources,
+  envelopeModuleEnabled: state.envelopeModuleEnabled, envelopeSources: state.envelopeSources,
+  modulationGraph: getUiModulationGraph()
 });
+const getUiAssignments = () => [...state.lfoSources, ...state.envelopeSources].flatMap(source => source.assignments)
+  .concat(state.clockMod.assignments);
+let uiModulationGraphKey = '';
+let uiModulationGraph = null;
+const uiCycleOptions = new Map();
+const getUiModulationGraph = () => {
+  const assignments = getUiAssignments();
+  const key = JSON.stringify(assignments.map(({ id, sourceId, targetId, enabled }) => [id, sourceId, targetId, enabled]));
+  if (key !== uiModulationGraphKey || !uiModulationGraph) {
+    uiModulationGraphKey = key; uiModulationGraph = compileModulationGraph(assignments);
+    uiCycleOptions.clear();
+  }
+  return uiModulationGraph;
+};
 const populateLfoTargets = () => renderLfoAssignments();
 const populateModulationTargetSelect = select => {
   if (!select) return;
@@ -1761,38 +1771,58 @@ const populateModulationTargetSelect = select => {
 const lfoAssignmentStatus = (assignment, source) => getModulationAssignmentStatus(
   assignment, lfoTargetContext(), state.lfoModuleEnabled && source.enabled);
 const renderLfoAssignments = () => {
-  const source = getSelectedLfo();
-  if (!lfoAssignmentList || !source) return;
+  renderSourceAssignments('lfo', getSelectedLfo(), lfoAssignmentList, state.lfoModuleEnabled);
+};
+const renderSourceAssignments = (kind, source, list, moduleEnabled) => {
+  if (!list || !source) return;
   const assignments = source.assignments;
-  const rows = [...lfoAssignmentList.children];
-  if (lfoAssignmentList.dataset.sourceId !== source.id || rows.length !== assignments.length
+  const rows = [...list.children];
+  if (list.dataset.sourceId !== source.id || rows.length !== assignments.length
     || rows.some((row, index) => row.dataset.assignmentId !== assignments[index].id)) {
-    lfoAssignmentList.dataset.sourceId = source.id;
-    lfoAssignmentList.replaceChildren();
+    list.dataset.sourceId = source.id;
+    list.replaceChildren();
     for (const assignment of assignments) {
       const row = document.createElement('div');
       row.className = 'lfo-row lfo-assignment-row';
       row.dataset.assignmentId = assignment.id;
-      row.innerHTML = `<label class="lfo-target-control"><span>TARGET</span><select data-lfo-target data-assignment-field="targetId" aria-label="LFO assignment target"></select><small data-lfo-target-state></small></label>
-        <label class="lfo-inline-control lfo-assignment-amount"><span>AMOUNT <output data-lfo-amount-output></output></span><input class="filter-style-slider" type="range" min="0" max="100" step="1" data-lfo-amount data-assignment-field="amount" aria-label="LFO assignment amount"></label>
-        <label class="lfo-inline-control"><span>CHANNEL</span><select data-lfo-channel data-assignment-field="channel" aria-label="LFO assignment channel"></select></label>
-        <label class="lfo-inline-control lfo-assignment-invert"><span>INVERT</span><input type="checkbox" data-lfo-assignment-invert data-assignment-field="invert" aria-label="Invert LFO assignment"></label>
-        <div class="lfo-assignment-actions"><button class="dynamic-eq-view-toggle" type="button" data-lfo-assignment-enable aria-label="Enable LFO assignment"></button><button class="dynamic-eq-view-toggle" type="button" data-lfo-assignment-remove aria-label="Remove LFO assignment">×</button></div>`;
-      populateModulationTargetSelect(row.querySelector('[data-lfo-target]'));
-      lfoAssignmentList.append(row);
+      row.innerHTML = `<label class="lfo-target-control"><span>TARGET</span><select data-${kind}-target data-assignment-field="targetId" aria-label="${kind} assignment target"></select><small data-${kind}-target-state></small></label>
+        <label class="lfo-inline-control lfo-assignment-amount"><span>AMOUNT <output data-${kind}-amount-output></output></span><input class="filter-style-slider" type="range" min="0" max="100" step="1" data-${kind}-amount data-assignment-field="amount" aria-label="${kind} assignment amount"></label>
+        <label class="lfo-inline-control"><span>CHANNEL</span><select data-${kind}-channel data-assignment-field="channel" aria-label="${kind} assignment channel"></select></label>
+        <label class="lfo-inline-control lfo-assignment-invert"><span>INVERT</span><input type="checkbox" data-${kind}-assignment-invert ${kind === 'envelope' ? 'data-envelope-invert' : ''} data-assignment-field="invert" aria-label="Invert ${kind} assignment"></label>
+        <div class="lfo-assignment-actions"><button class="dynamic-eq-view-toggle" type="button" data-${kind}-assignment-enable aria-label="Enable ${kind} assignment"></button><button class="dynamic-eq-view-toggle" type="button" data-${kind}-assignment-remove aria-label="Remove ${kind} assignment">×</button></div>
+        ${kind === 'clock-mod' ? '<label class="lfo-inline-control clock-mod-hold-control"><span>HOLD</span><select data-clock-mod-hold data-assignment-field="sourceId" aria-label="Clock Mod held output"></select></label>' : ''}`;
+      populateModulationTargetSelect(row.querySelector(`[data-${kind}-target]`));
+      if (kind === 'clock-mod') row.querySelector('[data-clock-mod-hold]').replaceChildren(new Option('LATEST', 'clockMod.1'),
+        ...Array.from({ length: 10 }, (_, band) => new Option(`BAND ${band + 1}`, `clockMod.1.band.${band}`)));
+      list.append(row);
     }
   }
-  [...lfoAssignmentList.children].forEach((row, index) => {
+  [...list.children].forEach((row, index) => {
     const assignment = assignments[index];
     const target = getModulationTarget(assignment.targetId);
-    const select = row.querySelector('[data-lfo-target]');
+    const select = row.querySelector(`[data-${kind}-target]`);
+    getUiModulationGraph();
+    const optionKey = `${assignment.sourceId}:${assignment.id}`;
+    let cycles = uiCycleOptions.get(optionKey);
+    if (!cycles) {
+      cycles = new Set(MODULATION_TARGETS.filter(target => target.modulatorId
+        && wouldCreateModulationCycle(getUiAssignments(), { ...assignment, targetId: target.id })).map(target => target.id));
+      uiCycleOptions.set(optionKey, cycles);
+    }
+    for (const option of select.options) {
+      const descriptor = getModulationTarget(option.value);
+      if (!descriptor) continue;
+      const cycle = cycles.has(option.value);
+      option.disabled = cycle;
+      option.textContent = descriptor.label + (cycle ? ' · CYCLE' : '');
+    }
     if (assignment.targetId && !target && ![...select.options].some(option => option.value === assignment.targetId)) {
       select.add(new Option(`INVALID · ${assignment.targetId}`, assignment.targetId));
     }
     select.value = assignment.targetId;
-    row.querySelector('[data-lfo-amount]').value = String(assignment.amount);
-    row.querySelector('[data-lfo-amount-output]').textContent = `${Math.round(assignment.amount)} %`;
-    const channel = row.querySelector('[data-lfo-channel]');
+    row.querySelector(`[data-${kind}-amount]`).value = String(assignment.amount);
+    row.querySelector(`[data-${kind}-amount-output]`).textContent = `${Math.round(assignment.amount)} %`;
+    const channel = row.querySelector(`[data-${kind}-channel]`);
     const channels = target?.channels || [assignment.channel || 'both'];
     if (channel.dataset.targetId !== assignment.targetId || !channel.options.length) {
       channel.replaceChildren(...channels.map(value => new Option(value.toUpperCase(), value)));
@@ -1800,18 +1830,21 @@ const renderLfoAssignments = () => {
     }
     channel.value = channels.includes(assignment.channel) ? assignment.channel : 'both';
     channel.disabled = channels.length === 1;
-    row.querySelector('[data-lfo-assignment-invert]').checked = assignment.invert;
-    const enable = row.querySelector('[data-lfo-assignment-enable]');
+    const invert = row.querySelector(`[data-${kind}-assignment-invert]`);
+    invert.checked = assignment.invert;
+    invert.setAttribute('aria-pressed', String(assignment.invert));
+    if (kind === 'clock-mod') row.querySelector('[data-clock-mod-hold]').value = assignment.sourceId;
+    const enable = row.querySelector(`[data-${kind}-assignment-enable]`);
     enable.textContent = assignment.enabled ? 'ON' : 'OFF';
     enable.setAttribute('aria-pressed', String(assignment.enabled));
-    const status = lfoAssignmentStatus(assignment, source);
+    const status = getModulationAssignmentStatus(assignment, lfoTargetContext(), moduleEnabled && source.enabled);
     row.dataset.assignmentStatus = status.reason;
-    row.querySelector('[data-lfo-target-state]').textContent = {
+    row.querySelector(`[data-${kind}-target-state]`).textContent = {
       'no-target': 'NO TARGET', 'target-invalid': 'INVALID TARGET',
       'target-unavailable': 'UNAVAILABLE · TARGET INACTIVE',
-      'assignment-disabled': 'ASSIGNMENT OFF', 'source-disabled': 'ASSIGNED · SOURCE OFF', active: 'ACTIVE'
+      'assignment-disabled': 'ASSIGNMENT OFF', 'source-disabled': 'ASSIGNED · SOURCE OFF', 'cycle-blocked': 'CYCLE BLOCKED', active: 'ACTIVE'
     }[status.reason];
-    row.classList.toggle('is-inactive', status.reason === 'target-invalid' || status.reason === 'target-unavailable');
+    row.classList.toggle('is-inactive', ['target-invalid', 'target-unavailable', 'cycle-blocked'].includes(status.reason));
   });
 };
 const getMidiStatusText = () => {
@@ -2201,6 +2234,7 @@ const renderClockModControls = () => {
     clockModRightInvertButton.textContent = `RIGHT INVERT ${config.rightInvert ? 'ON' : 'OFF'}`;
     clockModRightInvertButton.setAttribute('aria-pressed', String(config.rightInvert));
   }
+  renderSourceAssignments('clock-mod', state.clockMod, document.querySelector('[data-clock-mod-assignments]'), true);
   renderClockModLocks();
   renderClockModGraph();
 };
@@ -2229,7 +2263,8 @@ const getDisplayedLfoPhase = () => {
     const rate = (Number(bpm) || 120) / 60 / (SYNC_DIVISION_BEATS[source.syncDivision] || 1);
     return (telemetry.phase + elapsed * rate) % 1;
   }
-  return (telemetry.phase + elapsed * source.rateHz) % 1;
+  const rateHz = Number.isFinite(telemetry.rateHz) ? telemetry.rateHz : source.rateHz;
+  return (telemetry.phase + elapsed * rateHz) % 1;
 };
 // Worklet telemetry is already the final oscillator sample after polarity and
 // invert. Keep it authoritative for the live marker; never transform it again.
@@ -2298,7 +2333,8 @@ const renderLfoPhase = () => {
   lfoPhaseDot.setAttribute('cx', x.toFixed(2));
   lfoPhaseDot.setAttribute('cy', y.toFixed(2));
   lfoPhaseDot.dataset.value = String(sample);
-  const clockRate = source.rateMode === 'sync' ? `${source.syncDivision} · ${getMidiStatusText()}` : lfoFormatRate(source.rateHz);
+  const clockRate = source.rateMode === 'sync' ? `${source.syncDivision} · ${getMidiStatusText()}`
+    : lfoFormatRate(Number.isFinite(telemetry?.rateHz) ? telemetry.rateHz : source.rateHz);
   const sampleReadout = telemetrySample === null ? '' : ` · ${telemetrySample > 0 ? '+' : ''}${telemetrySample.toFixed(2)}`;
   if (lfoPhaseReadout) lfoPhaseReadout.textContent = `${Math.round(phase * 360)}° · ${clockRate}${sampleReadout}`;
 };
@@ -2322,7 +2358,7 @@ const renderLfoSlots = () => {
     const assigned = source.assignments.filter(assignment => assignment.targetId);
     const lostCount = assigned.filter(assignment => {
       const reason = lfoAssignmentStatus(assignment, source).reason;
-      return reason === 'target-invalid' || reason === 'target-unavailable';
+      return reason === 'target-invalid' || reason === 'target-unavailable' || reason === 'cycle-blocked';
     }).length;
     detail.textContent = assigned.length === 1 ? (getModulationTarget(assigned[0].targetId)?.label || assigned[0].targetId)
       : assigned.length ? `${assigned.length} TARGETS` : 'NO TARGET';
@@ -2385,6 +2421,10 @@ const renderLfoControls = () => {
   const phaseOutput = document.querySelector('[data-lfo-phase-output]');
   if (rateOutput) rateOutput.textContent = lfoFormatRate(source.rateHz);
   if (phaseOutput) phaseOutput.textContent = `${Math.round(source.phaseOffsetDeg)} deg`;
+  const outputAmountInput = document.querySelector('[data-lfo-output-amount]');
+  if (outputAmountInput) outputAmountInput.value = String(source.outputAmount);
+  const outputAmountOutput = document.querySelector('[data-lfo-output-amount-output]');
+  if (outputAmountOutput) outputAmountOutput.textContent = Math.round(source.outputAmount) + ' %';
   renderLfoAssignments();
   const assignedCount = source.assignments.filter(assignment => assignment.targetId).length;
   if (lfoStatus) lfoStatus.textContent = `${state.lfoModuleEnabled ? 'MODULE ON' : 'MODULE OFF'} · ${source.enabled ? 'LFO ON' : 'LFO OFF'} · ${assignedCount} TARGETS`;
@@ -2463,6 +2503,14 @@ const commitEnvelopeState = () => {
 const setEnvelopeSource = patch => {
   const source = getEnvelopeSource();
   if (!source) return;
+  // Compatibility for single-route callers; an explicit assignment array owns
+  // routing and an empty array must never resurrect a removed legacy target.
+  if (!patch.assignments && ['targetId', 'amount', 'channel', 'invert'].some(field => field in patch)) {
+    const first = source.assignments[0] || { id: `${source.id}.assignment.1`, sourceId: source.id,
+      targetId: '', amount: 50, channel: 'both', invert: false, enabled: true };
+    for (const field of ['targetId', 'amount', 'channel', 'invert']) if (field in patch) first[field] = patch[field];
+    if (!source.assignments.length) source.assignments.push(first);
+  }
   Object.assign(source, patch);
   commitEnvelopeState();
 };
@@ -2475,10 +2523,15 @@ const renderEnvelopeSlots = () => {
     const active = index === selectedEnvelopeIndex;
     button.classList.toggle('active', active);
     button.classList.toggle('is-enabled', source.enabled);
+    const assigned = source.assignments.filter(assignment => assignment.targetId);
+    const lostCount = assigned.filter(assignment => ['target-invalid', 'target-unavailable', 'cycle-blocked'].includes(
+      getModulationAssignmentStatus(assignment, lfoTargetContext(), state.envelopeModuleEnabled && source.enabled).reason)).length;
+    button.dataset.lostTargets = String(lostCount);
+    button.classList.toggle('has-lost-target', lostCount > 0);
     button.setAttribute('aria-pressed', String(active));
     button.setAttribute('aria-label', `Select ENV ${index + 1}, ${source.enabled ? 'ON' : 'OFF'}, ${source.detectorMode.toUpperCase()}, ${target?.label || 'NO TARGET'}`);
     button.querySelector('.lfo-slot-state').textContent = source.enabled ? 'ON' : 'OFF';
-    button.querySelector('.lfo-slot-detail').textContent = `${source.detectorMode.toUpperCase()} · ${target?.label?.toUpperCase() || 'NO TARGET'}`;
+    button.querySelector('.lfo-slot-detail').textContent = `${source.detectorMode.toUpperCase()} · ${assigned.length > 1 ? `${assigned.length} TARGETS` : target?.label?.toUpperCase() || 'NO TARGET'}${lostCount ? ' · UNAVAILABLE' : ''}`;
   });
 };
 const renderEnvelopeControls = () => {
@@ -2502,42 +2555,21 @@ const renderEnvelopeControls = () => {
   if (envelopeDelayInput) envelopeDelayInput.value = String(source.delay);
   if (envelopeSensitivityInput) envelopeSensitivityInput.value = String(source.sensitivity);
   if (envelopeThresholdInput) envelopeThresholdInput.value = String(source.thresholdDb);
-  if (envelopeAmountInput) envelopeAmountInput.value = String(source.amount);
   const attackOutput = document.querySelector('[data-envelope-attack-output]');
   const releaseOutput = document.querySelector('[data-envelope-release-output]');
   const delayOutput = document.querySelector('[data-envelope-delay-output]');
   const sensitivityOutput = document.querySelector('[data-envelope-sensitivity-output]');
   const thresholdOutput = document.querySelector('[data-envelope-threshold-output]');
-  const amountOutput = document.querySelector('[data-envelope-amount-output]');
   if (attackOutput) attackOutput.textContent = `${Math.round(source.attack)} ms`;
   if (releaseOutput) releaseOutput.textContent = `${Math.round(source.release)} ms`;
   if (delayOutput) delayOutput.textContent = `${Math.round(source.delay)} ms`;
   if (sensitivityOutput) sensitivityOutput.textContent = `${Math.round(source.sensitivity)} %`;
   if (thresholdOutput) thresholdOutput.textContent = `${Math.round(source.thresholdDb)} dB`;
-  if (amountOutput) amountOutput.textContent = `${Math.round(source.amount)} %`;
-  if (envelopeTargetSelect) {
-    const known = MODULATION_TARGETS.some(target => target.id === source.targetId);
-    if (source.targetId && !known && ![...envelopeTargetSelect.options].some(option => option.value === source.targetId)) {
-      const unavailable = new Option(`UNAVAILABLE - ${source.targetId}`, source.targetId, true, true);
-      unavailable.disabled = true;
-      envelopeTargetSelect.add(unavailable);
-    }
-    envelopeTargetSelect.value = source.targetId || '';
-  }
-  const target = MODULATION_TARGETS.find(item => item.id === source.targetId);
-  if (envelopeChannelSelect) {
-    envelopeChannelSelect.disabled = !target?.channelRouting;
-    envelopeChannelSelect.value = target?.channelRouting ? source.channel : 'both';
-  }
-  if (envelopeInvertButton) {
-    envelopeInvertButton.textContent = source.invert ? 'INVERT ON' : 'INVERT OFF';
-    envelopeInvertButton.setAttribute('aria-pressed', String(source.invert));
-  }
-  const active = target ? isModulationTargetActive(target.id, lfoTargetContext()) : false;
-  if (envelopeTargetState) envelopeTargetState.textContent = !source.targetId ? 'NO TARGET'
-    : !target ? 'UNAVAILABLE' : !active ? `INACTIVE · ${target.activeWhen.toUpperCase()}`
-      : source.enabled ? 'ACTIVE' : 'ASSIGNED · SOURCE OFF';
-  envelopeTargetControl?.classList.toggle('is-inactive', Boolean(source.targetId && !active));
+  renderSourceAssignments('envelope', source, document.querySelector('[data-envelope-assignments]'), state.envelopeModuleEnabled);
+  const outputAmountInput = document.querySelector('[data-envelope-output-amount]');
+  if (outputAmountInput) outputAmountInput.value = String(source.outputAmount);
+  const outputAmountOutput = document.querySelector('[data-envelope-output-amount-output]');
+  if (outputAmountOutput) outputAmountOutput.textContent = Math.round(source.outputAmount) + ' %';
   if (envelopeStatus) envelopeStatus.textContent = `${state.envelopeModuleEnabled ? 'MODULE ON' : 'MODULE OFF'} · ENV ${selectedEnvelopeIndex + 1} ${source.enabled ? 'ON' : 'OFF'} · INPUT / PRE-FILTERBANK`;
   renderEnvelopeGraph();
 };
@@ -3205,7 +3237,6 @@ document.querySelector('[data-dynamic-eq-reset]')?.addEventListener('click', () 
 });
 renderDynamicEqControls();
 populateLfoTargets();
-populateModulationTargetSelect(envelopeTargetSelect);
 renderLfoControls();
 renderEnvelopeControls();
 envelopePowerButton?.addEventListener('click', event => {
@@ -3245,33 +3276,45 @@ lfoRateInput?.addEventListener('input', () => {
 lfoPhaseInput?.addEventListener('input', () => {
   setSelectedLfo({ phaseOffsetDeg: Number(lfoPhaseInput.value) });
 });
-lfoAddAssignmentButton?.addEventListener('click', () => {
-  const source = getSelectedLfo();
-  source.assignments.push({ id: `${source.id}.assignment.${crypto.randomUUID()}`, sourceId: source.id,
-    targetId: '', amount: 0, channel: 'both', invert: false, enabled: true });
-  commitLfoState();
-});
-const editLfoAssignment = event => {
-  const field = event.target.dataset.assignmentField;
-  if (!field || (field === 'amount') !== (event.type === 'input')) return;
-  const assignment = getSelectedLfo()?.assignments.find(item => item.id === event.target.closest('[data-assignment-id]')?.dataset.assignmentId);
-  if (!assignment) return;
-  assignment[field] = field === 'invert' ? event.target.checked : field === 'amount' ? Number(event.target.value) : event.target.value;
-  if (field === 'targetId' && !getModulationTarget(assignment.targetId)?.channelRouting) assignment.channel = 'both';
-  commitLfoState();
+const bindAssignmentEditor = (kind, getSource, commit) => {
+  const list = document.querySelector('[data-' + kind + '-assignments]');
+  document.querySelector('[data-' + kind + '-add-assignment]')?.addEventListener('click', () => {
+    const source = getSource();
+    source.assignments.push({ id: source.id + '.assignment.' + crypto.randomUUID(), sourceId: source.id,
+      targetId: '', amount: 0, channel: 'both', invert: false, enabled: true });
+    commit();
+  });
+  const edit = event => {
+    const field = event.target.dataset.assignmentField;
+    if (!field || (field === 'amount') !== (event.type === 'input')) return;
+    const assignment = getSource()?.assignments.find(item => item.id === event.target.closest('[data-assignment-id]')?.dataset.assignmentId);
+    if (!assignment) return;
+    const value = field === 'invert' ? event.target.checked : field === 'amount' ? Number(event.target.value) : event.target.value;
+    if ((field === 'targetId' || field === 'sourceId') && wouldCreateModulationCycle(getUiAssignments(), { ...assignment, [field]: value })) {
+      commit(); return;
+    }
+    assignment[field] = value;
+    if (field === 'targetId' && !getModulationTarget(value)?.channelRouting) assignment.channel = 'both';
+    commit();
+  };
+  list?.addEventListener('input', edit);
+  list?.addEventListener('change', edit);
+  list?.addEventListener('click', event => {
+    const row = event.target.closest('[data-assignment-id]');
+    const source = getSource();
+    const index = source?.assignments.findIndex(item => item.id === row?.dataset.assignmentId);
+    if (index === undefined || index < 0) return;
+    if (event.target.closest('[data-' + kind + '-assignment-remove]')) source.assignments.splice(index, 1);
+    else if (event.target.closest('[data-' + kind + '-assignment-enable]')) source.assignments[index].enabled = !source.assignments[index].enabled;
+    else return;
+    commit();
+  });
 };
-lfoAssignmentList?.addEventListener('input', editLfoAssignment);
-lfoAssignmentList?.addEventListener('change', editLfoAssignment);
-lfoAssignmentList?.addEventListener('click', event => {
-  const row = event.target.closest('[data-assignment-id]');
-  const source = getSelectedLfo();
-  const index = source?.assignments.findIndex(item => item.id === row?.dataset.assignmentId);
-  if (index === undefined || index < 0) return;
-  if (event.target.closest('[data-lfo-assignment-remove]')) source.assignments.splice(index, 1);
-  else if (event.target.closest('[data-lfo-assignment-enable]')) source.assignments[index].enabled = !source.assignments[index].enabled;
-  else return;
-  commitLfoState();
-});
+bindAssignmentEditor('lfo', getSelectedLfo, commitLfoState);
+bindAssignmentEditor('envelope', getEnvelopeSource, commitEnvelopeState);
+bindAssignmentEditor('clock-mod', () => state.clockMod, () => commitClockModState({ assignments: state.clockMod.assignments }));
+document.querySelector('[data-lfo-output-amount]')?.addEventListener('input', event => setSelectedLfo({ outputAmount: Number(event.target.value) }));
+document.querySelector('[data-envelope-output-amount]')?.addEventListener('input', event => setEnvelopeSource({ outputAmount: Number(event.target.value) }));
 lfoInvertButton?.addEventListener('click', () => setSelectedLfo({ invert: !getSelectedLfo()?.invert }));
 lfoDivisionSelect?.addEventListener('change', () => {
   if (LFO_SYNC_DIVISIONS.includes(lfoDivisionSelect.value)) setSelectedLfo({ syncDivision: lfoDivisionSelect.value });
@@ -3338,13 +3381,6 @@ envelopeReleaseInput?.addEventListener('input', () => setEnvelopeSource({ releas
 envelopeDelayInput?.addEventListener('input', () => setEnvelopeSource({ delay: Number(envelopeDelayInput.value) }));
 envelopeSensitivityInput?.addEventListener('input', () => setEnvelopeSource({ sensitivity: Number(envelopeSensitivityInput.value) }));
 envelopeThresholdInput?.addEventListener('input', () => setEnvelopeSource({ thresholdDb: Number(envelopeThresholdInput.value) }));
-envelopeAmountInput?.addEventListener('input', () => setEnvelopeSource({ amount: Number(envelopeAmountInput.value) }));
-envelopeTargetSelect?.addEventListener('change', () => {
-  const target = MODULATION_TARGETS.find(item => item.id === envelopeTargetSelect.value);
-  setEnvelopeSource({ targetId: envelopeTargetSelect.value, channel: target?.channelRouting ? getEnvelopeSource().channel : 'both' });
-});
-envelopeChannelSelect?.addEventListener('change', () => setEnvelopeSource({ channel: envelopeChannelSelect.value }));
-envelopeInvertButton?.addEventListener('click', () => setEnvelopeSource({ invert: !getEnvelopeSource()?.invert }));
 window.FilterMode = Object.freeze({
   getState: () => ({
     selectedWorkspaceMode: state.selectedWorkspaceMode,
@@ -3389,13 +3425,14 @@ window.LfoMode = Object.freeze({
   })))
 });
 window.EnvelopeMode = Object.freeze({
-  getState: () => ({ envelopeModuleEnabled: state.envelopeModuleEnabled === true, selectedEnvelopeIndex, envelopeSources: (state.envelopeSources || []).map(source => ({ ...source })) }),
+  getState: () => ({ envelopeModuleEnabled: state.envelopeModuleEnabled === true, selectedEnvelopeIndex,
+    envelopeSources: (state.envelopeSources || []).map(source => ({ ...source, assignments: source.assignments.map(assignment => ({ ...assignment })) })) }),
   getAudioEngine: () => audioEngine,
   getTelemetry: () => { const source = getEnvelopeSource(); const telemetry = source ? envelopeTelemetry.get(source.id) : null; return telemetry ? { ...telemetry } : null; },
   getTargetRegistry: () => MODULATION_TARGETS.map(target => ({ id: target.id, label: target.label, group: target.group, channelRouting: target.channelRouting }))
 });
 window.ClockModMode = Object.freeze({
-  getState: () => ({ ...state.clockMod, lockedBands: [...state.clockMod.lockedBands] }),
+  getState: () => ({ ...state.clockMod, lockedBands: [...state.clockMod.lockedBands], assignments: state.clockMod.assignments.map(assignment => ({ ...assignment })) }),
   getTelemetry: () => clockModTelemetry ? { ...clockModTelemetry,
     heldLeft: [...(clockModTelemetry.heldLeft || [])], heldRight: [...(clockModTelemetry.heldRight || [])] } : null,
   getAudioEngine: () => audioEngine

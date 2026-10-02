@@ -1,4 +1,5 @@
 import { timeCoefficient } from './dynamic-eq-core.mjs';
+import { normalizeModulationAssignments } from './modulation-core.mjs';
 
 export const ENVELOPE_DEFAULT_COUNT = 4;
 export const ENVELOPE_DETECTOR_MODES = Object.freeze(['peak', 'rms']);
@@ -20,8 +21,14 @@ const clamp = (value, minimum, maximum, fallback) => {
 };
 
 export function normalizeEnvelopeSourceState(source = {}, index = 0) {
+  const id = `envelope.${index + 1}`;
+  const assignments = normalizeModulationAssignments(Array.isArray(source.assignments) ? source.assignments : [{
+    targetId: source.targetId, amount: clamp(source.amount, 0, 100, 50), channel: source.channel,
+    invert: source.invert === true
+  }], id);
+  const first = assignments[0];
   return {
-    id: `envelope.${index + 1}`,
+    id, assignments, outputAmount: clamp(source.outputAmount, 0, 100, 100),
     enabled: source.enabled === true,
     detectorMode: ENVELOPE_DETECTOR_MODES.includes(source.detectorMode) ? source.detectorMode : 'peak',
     attack: clamp(source.attack, ENVELOPE_MIN_ATTACK_MS, ENVELOPE_MAX_ATTACK_MS, 20),
@@ -29,10 +36,8 @@ export function normalizeEnvelopeSourceState(source = {}, index = 0) {
     delay: clamp(source.delay, ENVELOPE_MIN_DELAY_MS, ENVELOPE_MAX_DELAY_MS, 0),
     sensitivity: clamp(source.sensitivity, ENVELOPE_MIN_SENSITIVITY, ENVELOPE_MAX_SENSITIVITY, 100),
     thresholdDb: clamp(source.thresholdDb, ENVELOPE_MIN_THRESHOLD_DB, ENVELOPE_MAX_THRESHOLD_DB, ENVELOPE_DEFAULT_THRESHOLD_DB),
-    amount: clamp(source.amount, 0, 100, 50),
-    targetId: typeof source.targetId === 'string' ? source.targetId.trim() : '',
-    channel: ['left', 'right', 'spread'].includes(source.channel) ? source.channel : 'both',
-    invert: source.invert === true
+    amount: first?.amount ?? 0, targetId: first?.targetId ?? '',
+    channel: first?.channel ?? 'both', invert: first?.invert ?? false
   };
 }
 
@@ -53,6 +58,10 @@ export class EnvelopeFollower {
     this.detectorMode = 'peak';
     this.attack = 20;
     this.release = 250;
+    this.effectiveAttack = this.attack;
+    this.effectiveRelease = this.release;
+    this.outputAmount = 100;
+    this.effectiveOutputAmount = 100;
     this.delay = 0;
     this.delaySamples = 0;
     this.delayRemainingSamples = 0;
@@ -89,6 +98,10 @@ export class EnvelopeFollower {
     this.detectorMode = state.detectorMode;
     this.attack = state.attack;
     this.release = state.release;
+    this.effectiveAttack = state.attack;
+    this.effectiveRelease = state.release;
+    this.outputAmount = state.outputAmount;
+    this.effectiveOutputAmount = state.outputAmount;
     this.delay = state.delay;
     this.sensitivity = state.sensitivity;
     this.thresholdDb = state.thresholdDb;
@@ -102,12 +115,12 @@ export class EnvelopeFollower {
   updateTimeConstants(sampleRate) {
     if (!Number.isFinite(sampleRate) || sampleRate <= 0) return;
     const sampleRateChanged = sampleRate !== this.sampleRate;
-    if (sampleRateChanged || this.attack !== this.coefficientAttackMs || this.release !== this.coefficientReleaseMs) {
+    if (sampleRateChanged || this.effectiveAttack !== this.coefficientAttackMs || this.effectiveRelease !== this.coefficientReleaseMs) {
       this.sampleRate = sampleRate;
-      this.coefficientAttackMs = this.attack;
-      this.coefficientReleaseMs = this.release;
-      this.attackCoefficient = timeCoefficient(this.attack, sampleRate);
-      this.releaseCoefficient = timeCoefficient(this.release, sampleRate);
+      this.coefficientAttackMs = this.effectiveAttack;
+      this.coefficientReleaseMs = this.effectiveRelease;
+      this.attackCoefficient = timeCoefficient(this.effectiveAttack, sampleRate);
+      this.releaseCoefficient = timeCoefficient(this.effectiveRelease, sampleRate);
     }
     if (sampleRateChanged || this.delay !== this.coefficientDelayMs) {
       this.coefficientDelayMs = this.delay;
@@ -120,6 +133,13 @@ export class EnvelopeFollower {
       this.rmsSamplesSeen = 0;
       this.rmsEnergy = 0;
     }
+  }
+
+  setEffectiveParameter(field, value) {
+    if (field === 'attack') this.effectiveAttack = clamp(value, 1, 500, this.attack);
+    else if (field === 'release') this.effectiveRelease = clamp(value, 10, 3000, this.release);
+    else if (field === 'outputAmount') this.effectiveOutputAmount = clamp(value, 0, 100, this.outputAmount);
+    if (this.sampleRate > 0) this.updateTimeConstants(this.sampleRate);
   }
 
   process(left = 0, right = 0, sampleRate = this.sampleRate) {

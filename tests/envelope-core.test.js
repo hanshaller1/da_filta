@@ -7,7 +7,8 @@ test('Envelope state defaults and restores count-based source settings', () => {
   const defaults = normalizeEnvelopeState();
   assert.equal(defaults.envelopeCount, 4);
   assert.deepEqual(defaults.envelopeSources[0], {
-    id: 'envelope.1', enabled: false, detectorMode: 'peak', attack: 20, release: 250, delay: 0,
+    id: 'envelope.1', outputAmount: 100, assignments: [{ id: 'envelope.1.assignment.1', sourceId: 'envelope.1',
+      targetId: '', amount: 50, channel: 'both', invert: false, enabled: true }], enabled: false, detectorMode: 'peak', attack: 20, release: 250, delay: 0,
     sensitivity: 100, thresholdDb: -48, amount: 50, targetId: '', channel: 'both', invert: false
   });
   const restored = normalizeEnvelopeState({ envelopeSources: [{
@@ -15,7 +16,8 @@ test('Envelope state defaults and restores count-based source settings', () => {
     thresholdDb: -32, amount: 62, targetId: 'filterbank.band.3.gainDb', channel: 'spread', invert: true
   }] });
   assert.deepEqual(restored.envelopeSources[0], {
-    id: 'envelope.1', enabled: true, detectorMode: 'rms', attack: 35, release: 800,
+    id: 'envelope.1', outputAmount: 100, assignments: [{ id: 'envelope.1.assignment.1', sourceId: 'envelope.1',
+      targetId: 'filterbank.band.3.gainDb', amount: 62, channel: 'spread', invert: true, enabled: true }], enabled: true, detectorMode: 'rms', attack: 35, release: 800,
     sensitivity: 240, thresholdDb: -32, delay: 0, amount: 62, targetId: 'filterbank.band.3.gainDb', channel: 'spread', invert: true
   });
   assert.deepEqual(normalizeEnvelopeSources({ envelopeCount: 3 }).map(source => source.id), ['envelope.1', 'envelope.2', 'envelope.3', 'envelope.4']);

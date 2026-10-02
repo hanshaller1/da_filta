@@ -565,6 +565,7 @@
                     <label class="clock-mod-inline-control" data-clock-mod-scale-control><span>CLOCK SCALE</span><select data-clock-mod-scale aria-label="MIDI clock scale"><option>1/32</option><option>1/16</option><option>1/8</option><option>1/4</option><option>1/2</option><option>1/1</option><option>2/1</option><option>4/1</option></select></label>
                   </div>
                   <div class="clock-mod-actions"><button class="dynamic-eq-view-toggle" type="button" data-clock-mod-right-invert aria-pressed="false">RIGHT INVERT OFF</button><button class="dynamic-eq-view-toggle" type="button" data-clock-mod-reset>RESET PROGRESSION</button></div>
+                  <div class="lfo-assignments"><div class="lfo-assignment-list" data-clock-mod-assignments aria-label="Clock Mod assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment" type="button" data-clock-mod-add-assignment>+ ADD ASSIGNMENT</button></div>
                 </section>
               </div>
             </section>
@@ -604,6 +605,7 @@
                     <div class="lfo-inline-control lfo-source-actions"><span>SOURCE INVERT</span><button class="dynamic-eq-view-toggle" type="button" data-lfo-invert aria-pressed="false">INVERT OFF</button><button class="dynamic-eq-view-toggle" type="button" data-lfo-reset>RESET PHASE</button></div>
                     <label class="filter-parameter-control"><span>PHASE</span><output data-lfo-phase-output>0 deg</output><input class="filter-style-slider" type="range" min="0" max="360" step="1" value="0" data-lfo-phase aria-label="LFO phase offset"></label>
                     <div class="lfo-polarity-control"><span>POLARITY</span><div role="group" aria-label="LFO polarity"><button class="dynamic-eq-view-toggle active" type="button" data-lfo-polarity="bipolar">BIPOLAR</button><button class="dynamic-eq-view-toggle" type="button" data-lfo-polarity="unipolar">UNIPOLAR</button></div></div>
+                    <label class="filter-parameter-control"><span>OUTPUT AMOUNT</span><output data-lfo-output-amount-output>100 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="100" data-lfo-output-amount aria-label="LFO source output amount"></label>
                   </div>
                   <div class="lfo-assignments">
                     <div class="lfo-assignment-list" data-lfo-assignments aria-label="LFO assignments"></div>
@@ -647,14 +649,10 @@
                     <label class="filter-parameter-control"><span>RELEASE</span><output data-envelope-release-output>250 ms</output><input class="filter-style-slider" type="range" min="10" max="3000" step="1" value="250" data-envelope-release aria-label="Envelope release time"></label>
                     <label class="filter-parameter-control"><span>DELAY</span><output data-envelope-delay-output>0 ms</output><input class="filter-style-slider" type="range" min="0" max="2000" step="1" value="0" data-envelope-delay aria-label="Envelope delay time"></label>
                     <label class="filter-parameter-control"><span>SENSITIVITY</span><output data-envelope-sensitivity-output>100 %</output><input class="filter-style-slider" type="range" min="0" max="400" step="1" value="100" data-envelope-sensitivity aria-label="Envelope sensitivity gain"></label>
-                    <label class="filter-parameter-control"><span>AMOUNT</span><output data-envelope-amount-output>50 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="50" data-envelope-amount aria-label="Envelope modulation amount"></label>
+                    <label class="filter-parameter-control"><span>OUTPUT AMOUNT</span><output data-envelope-output-amount-output>100 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="100" data-envelope-output-amount aria-label="Envelope source output amount"></label>
                     <label class="filter-parameter-control"><span>THRESHOLD</span><output data-envelope-threshold-output>−48 dB</output><input class="filter-style-slider" type="range" min="-60" max="0" step="1" value="-48" data-envelope-threshold aria-label="Envelope threshold in decibels"></label>
                   </div>
-                  <div class="lfo-row lfo-assignment-row envelope-assignment-row">
-                    <label class="lfo-target-control envelope-target-control"><span>TARGET</span><select data-envelope-target aria-label="Envelope modulation target"><option value="">NONE</option></select><small data-envelope-target-state>NO TARGET</small></label>
-                    <label class="lfo-inline-control"><span>CHANNEL</span><select data-envelope-channel aria-label="Envelope stereo channel"><option value="both">BOTH</option><option value="left">LEFT</option><option value="right">RIGHT</option><option value="spread">SPREAD</option></select></label>
-                    <button class="dynamic-eq-view-toggle" type="button" data-envelope-invert aria-pressed="false">INVERT OFF</button>
-                  </div>
+                  <div class="lfo-assignments"><div class="lfo-assignment-list" data-envelope-assignments aria-label="Envelope assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment" type="button" data-envelope-add-assignment>+ ADD ASSIGNMENT</button></div>
                 </section>
               </div>
             </section>

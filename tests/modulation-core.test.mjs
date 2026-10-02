@@ -11,7 +11,7 @@ import {
 } from '../modulation-core.mjs';
 
 test('registry descriptors expose stable metadata and V1.5 continuous targets', () => {
-  assert.equal(MODULATION_TARGETS.length, 27);
+  assert.equal(MODULATION_TARGETS.length, 47);
   for (const target of MODULATION_TARGETS) {
     assert.ok(target.id && target.label && target.group && target.mapping);
     assert.deepEqual(target.clamp, { min: target.min, max: target.max });

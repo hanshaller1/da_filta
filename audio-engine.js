@@ -441,16 +441,14 @@
     getModulationState() {
       const lfo = window.ResonantState.normalizeModulationState(this);
       const envelope = window.ResonantState.normalizeEnvelopeState(this);
-      const assignments = lfo.lfoSources.flatMap(item => item.assignments.filter(assignment => assignment.targetId))
-        .concat(envelope.envelopeSources.filter(item => item.targetId).map(item => ({
-        id: `${item.id}.assignment.1`,
-        sourceId: item.id, targetId: item.targetId, amount: item.amount,
-        channel: item.channel || 'both', invert: item.invert === true, enabled: true
-      })));
+      const clockMod = window.ResonantState.normalizeClockModState(this.clockMod || {});
+      const assignments = [...lfo.lfoSources, ...envelope.envelopeSources]
+        .flatMap(item => item.assignments.filter(assignment => assignment.targetId))
+        .concat(clockMod.enabled ? clockMod.assignments.filter(assignment => assignment.targetId) : []);
       return {
         ...lfo,
         ...envelope,
-        clockMod: window.ResonantState.normalizeClockModState(this.clockMod || {}),
+        clockMod,
         envelopeModuleEnabled: this.envelopeModuleEnabled === true,
         filterEnabled: this.filterEnabled,
         filterbankEnabled: this.filterbankEnabled,

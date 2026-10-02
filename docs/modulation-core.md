@@ -1,16 +1,19 @@
-# Modulation Core and LFO assignments
+# Modulation Core, multi-target routing and cross modulation
 
 ## Sources, assignments, and base/effective values
 
 The path is `Source → Assignments → Target Registry → Mapping → Effective → DSP`.
-Exactly four independent LFO sources exist: `lfo.1` through `lfo.4`.
+For modulator targets it includes a validated graph and topological source
+evaluation before the effective value reaches that destination modulator.
+Four independent LFO sources exist: `lfo.1` through `lfo.4`, alongside four
+Envelope Followers and the existing Clock Mod generator.
 Each source can own any number of independently editable assignments, including
 several routes to the same target. There is no small row limit and no LFO 5–20.
 Old flat single-LFO snapshots migrate to `lfo.1`; the previous enable value
 initializes both module power and source 1. The other sources default off.
 
 Each source owns enable, waveform, free/sync mode, free rate, sync division,
-polarity, phase offset, source invert, and random seed. Each assignment owns
+polarity, phase offset, source invert, random seed, and output amount. Each assignment owns
 `id`, `sourceId`, `targetId`, `amount`, `channel`, `invert`, and `enabled`.
 Runtime
 phase and random state belong to its independent audio-thread oscillator. The
@@ -31,10 +34,10 @@ DEV/LAB snapshots; there is no new snapshot schema.
 Base values remain the values stored by controls and snapshots. The worklet
 evaluates assignments into temporary effective values and never writes them
 back into filter, band, Dynamic EQ, spread, dry/wet, or feedback base state.
-Contributions from LFOs and Envelope Followers sum deterministically, then clamp
+Contributions from LFOs, Envelope Followers and Clock Mod sum, then clamp
 to the target's current range. Frequency contributions add in logarithmic
 coordinates; dB and normalized parameters use their registry ranges. Band-gain
-contributions join the existing dedicated Clock Mod, FILTER and global spread
+contributions include the Clock held routes, FILTER and global spread
 layers before the final band-gain clamp. No intermediate per-route clamp loses
 opposing contributions. Disabling/removing all contributions restores the base.
 
@@ -47,7 +50,7 @@ objects or target-ID strings and does not scan the assignment list. The existing
 
 ## Registered targets
 
-The current registry contains 27 continuous targets:
+The current registry contains 47 continuous targets:
 
 - **GLOBAL:** `global.resonance`, `global.dryWet`, `global.spread`
 - **FILTER:** frequency, resonance, depth, slope, bandwidth, gain, tilt, and
@@ -55,6 +58,8 @@ The current registry contains 27 continuous targets:
 - **FILTERBANK:** `filterbank.band.0.gainDb` through
   `filterbank.band.9.gainDb`, plus `filterbank.feedbackAllAmount`
 - **DYNAMIC EQ:** threshold, range, strength, attack, and release
+- **LFO:** each source's free rate and output amount
+- **ENVELOPE:** each source's attack, release, and output amount
 
 Filter slope is active for low-pass, high-pass, band-pass, and notch. Bandwidth
 is active for band-pass and notch. Dynamic EQ attack and release use the
@@ -67,11 +72,11 @@ R; assignment invert reverses both signs. No new band-spread target IDs exist.
 
 Availability/status is derived centrally, independently from persistence:
 `active`, `source-disabled`, `assignment-disabled`, `target-unavailable`,
-`target-invalid`, or `no-target`. Unknown/removed IDs remain invalid and saved.
+`target-invalid`, `cycle-blocked`, or `no-target`. Unknown/removed IDs remain invalid and saved.
 An unavailable assignment contributes zero and automatically reactivates with
 the same ID and settings when its target returns (LP → Formant → LP, for
 example). A compact row status and slot warning show any unavailable/invalid
-route, even when another source is selected. Source OFF alone is not a lost
+or cycle-blocked route, even when another source is selected. Source OFF alone is not a lost
 target warning.
 
 Dry/wet uses its existing 0–100% linear base control. The filterbank worklet
@@ -135,8 +140,9 @@ All configured sources run in the filterbank AudioWorklet. The common target
 evaluation interval remains every 32 samples (about 1.5 kHz at 48 kHz), and the
 existing roughly 4 ms parameter smoothing remains in place. Source waveforms
 are cheap per-sample calculations; target descriptors are evaluated together
-at the existing control rate. Waveform shape, phase, polarity, and invert are
-display-only; UI animation does not drive modulation.
+at the existing control rate. Graphs and interpolated phase markers are
+display-only; UI animation does not drive modulation. Live free-rate markers
+and readouts use effective Worklet rate, while source controls retain base rate.
 
 The editor shows the four source slots. Additional rows extend a source's
 assignment list rather than adding source pages. Only the selected source has
@@ -152,9 +158,9 @@ families, clock sync, stereo routing, and invert. This is not a claim that
 undocumented Erica behavior was reproduced one to one.
 
 da_filta ships four LFOs with multiple assignments and the existing FILTER,
-Filterbank and Dynamic EQ targets. Cross-modulation, source-parameter targets,
-cycle handling and V2 UI remain future work. Clock Mod keeps its dedicated
-workspace and held band layer; it is not rebuilt as a registry source.
+Filterbank and Dynamic EQ targets. Envelope and Clock Mod use the same routing
+and compact assignment editor. Cross modulation and cycle handling are available;
+the LFO/Envelope V2 UI and MIDI mapping/learn remain future work.
 
 ## Envelope follower V1
 
@@ -162,9 +168,11 @@ The four envelope sources are `envelope.1` through `envelope.4`. State is
 stored independently in `envelopeSources`; legacy states with only
 `envelope.1` are padded with defaults for the other sources. Each source uses
 the same Source → Assignment → Target route. Source enable, PEAK/RMS mode,
-attack, release, delay, sensitivity, threshold, amount, target, channel, and
-invert are regular app state and travel through the same state snapshots as
-the LFO settings.
+attack, release, delay, sensitivity, threshold and output amount remain source
+state. Each source owns a generic assignment array with independent target,
+amount, channel, invert and enable. All travel through existing state snapshots.
+Legacy single routing fields migrate to one stable row; the first row provides
+read aliases for older callers. Arrays, including empty arrays, are authoritative.
 
 The detector reads the existing stereo filterbank AudioWorklet input. The
 audio-engine connects the Input Preamp output directly to that input, before
@@ -189,7 +197,7 @@ telemetry. Its dashed threshold guide uses the same dB-to-amplitude conversion
 as the detector comparison. Module power and source enable are separate gates
 and neither changes source settings, assignments, or base values.
 
-Envelope amount uses the same normalized target mapping as LFO amount. Invert
+Envelope assignment amount uses the same normalized target mapping as LFO amount. Invert
 is applied once by the modulation assignment. All sources targeting the same
 parameter are summed by `ModulationCore` and then clamped by that target's
 existing descriptor. LEFT and RIGHT route to one channel. SPREAD applies a
@@ -209,3 +217,95 @@ The source graph displays selected-source Worklet telemetry at about 30 Hz; it d
 detector or alter modulation on the main thread. The UI uses the existing LFO
 workspace split, waveform styles, target and slider controls, shared toggle
 buttons, spacing, colors, and responsive single-column breakpoint.
+
+## Clock Mod held sources and migration
+
+Clock Mod retains one oscillator, clock, progression and ten per-band holds.
+`clockMod.1.band.0` through `.9` expose those existing held outputs to generic
+assignments; they are not additional generators. `clockMod.1` exposes the latest
+triggered band's normalized hold and stays zero before its first trigger.
+The editor's HOLD selector chooses LATEST or one of the ten band taps.
+
+Old configuration without an assignment array migrates to ten stable 100% BOTH
+routes, one held tap to its original band. An explicit array replaces those
+defaults; an explicit empty array stays empty. Configuration and IDs persist;
+phase, random state, held arrays and graph caches never enter snapshots.
+
+Band taps carry their original native dB values, retaining midpoint, asymmetric
+limits, depth, right invert and lock semantics for dB targets. Their normalized
+outputs hold the sampled oscillator multiplied by Modulation Gain; they drive
+other targets, including modulator parameters. Locked taps contribute their
+legacy midpoint to dB routing and zero to normalized routing. BOTH preserves
+distinct held left/right values; SPREAD always uses one signed left contribution
+as `L += v; R -= v`. Assignment invert reverses that contribution.
+
+Clock events evaluate prepared affected target records at the existing event
+sample. Meta targets consume those held samples at the regular 32-sample control
+tick. Timing, quantization, MIDI Start/Stop/Continue, reset, progression and
+internal/external clock semantics are unchanged. The default band routing is
+sample-identical to the merged P2 DSP reference at 48 and 96 kHz.
+
+## Modulator targets, base and effective values
+
+| Target IDs (n = 1..4) | Range and unit | Mapping | Availability |
+| --- | --- | --- | --- |
+| `lfo.n.rate` | 0.01..20 Hz | logarithmic | powered, enabled, FREE mode |
+| `lfo.n.amount` | 0..100% output | normalized | powered and enabled |
+| `envelope.n.attack` | 1..500 ms | logarithmic | powered and enabled |
+| `envelope.n.release` | 10..3000 ms | logarithmic | powered and enabled |
+| `envelope.n.amount` | 0..100% output | normalized | powered and enabled |
+
+All are continuous mono targets with BOTH routing. Output amount defaults to
+100%, scales the generated source sample once, and remains independent of every
+assignment amount. It does not change Envelope sensitivity or detection.
+For normalized sample `s` and signed assignment amount `a/100`, contributions
+sum as `c = sum(s * a/100)`. Linear targets use `base + c*(max-min)/2`.
+Logarithmic targets use `exp(log(base) + c*log(max/min)/2)`, clamped in log space.
+Zero contribution returns the exact base, avoiding a logarithmic round-trip.
+
+LFO→LFO, LFO→Envelope, Envelope→LFO, Envelope→Envelope and Clock Mod→LFO/Envelope
+use ordinary assignments. Multiple different sources may target the same
+parameter. Removal, assignment/source disable or target unavailability removes
+the contribution; Sync→Free reactivates saved LFO rate routes automatically.
+Base rate, attack/release and output amount are never overwritten. Effective
+frequency re-anchors at the current phase without resetting phase or randomness;
+effective times update cached coefficients without resetting detector, RMS
+window, delay, or envelope history. Their base setters had no parameter smoothing;
+the existing control rate and downstream audible-parameter smoothing remain.
+
+Phase is deliberately not registered. The current phase-offset setter changes
+the waveform directly and has no continuous phase smoothing; random-cycle state
+is tracked separately. Arbitrary phase modulation could jump a waveform or
+disagree with cycle state. A continuous phase contract belongs to later work.
+Sync divisions remain discrete and are never continuously modulated in Hz.
+
+## Graph validation and topological evaluation
+
+Modulator sources are nodes; assignments to modulator targets are directed
+edges. Audio/filter targets create no edge. Clock taps share owner `clockMod.1`.
+The source-agnostic core uses descriptor/source ownership metadata, not a second
+family-specific assignment system.
+
+Self edges, direct return edges and longer multi-hop cycles are blocked.
+The compact grouped picker disables cycle-producing options and labels them
+CYCLE. Restored invalid graphs keep all rows and deterministically mark the
+cycle-closing rows `cycle-blocked`; those rows contribute nothing. Enabled but
+temporarily unavailable or source-disabled routes reserve their graph edges so
+reactivation cannot introduce a hidden cycle. Assignment-disabled edges do not.
+
+Edges are compiled in stable owner/target/ID order. A stable topological order
+then evaluates the incoming meta targets before advancing each destination at
+the existing control boundary. For `LFO1→LFO2→Envelope1`, LFO1 publishes its
+current sample before LFO2 receives effective parameters and publishes its own
+sample, followed by Envelope1. Meta graphs therefore do not depend on assignment
+insertion or DOM order. Ordinary routing retains its previous arithmetic order
+for sample parity. Cycles have no iterative feedback solver.
+
+Graph validation is cached by structural assignment fields and invalidated on
+target registration. Amount, invert, source samples and availability do not
+rebuild it. Configuration prepares direct source handles, target records,
+aggregated route coefficients, node order and Clock target masks. The audio
+sample/control loops allocate no new arrays, objects, graph data or target IDs
+and perform no graph traversal/validation or assignment-list scan.
+
+Validation and performance limits are recorded in [P2 modulation report](p2-modulation.md).

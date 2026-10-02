@@ -1,4 +1,5 @@
 import { normalizeModulationAssignments } from './modulation-core.mjs';
+import { SYNC_DIVISION_BEATS } from './clock-core.mjs';
 
 export const LFO_WAVEFORMS = Object.freeze(['sine', 'triangle', 'saw-up', 'saw-down', 'square', 'pulse', 'sample-hold', 'noise']);
 export const LFO_MIN_RATE_HZ = 0.01;
@@ -40,6 +41,7 @@ export function normalizeLfoSourceState(source = {}, index = 0, legacy = false) 
     syncDivision: LFO_SYNC_DIVISIONS.includes(source.syncDivision) ? source.syncDivision : '1/4',
     polarity: source.polarity === 'unipolar' || (legacy && source.lfoPolarity === 'unipolar') ? 'unipolar' : 'bipolar',
     phaseOffsetDeg: clamp(phase, 0, 360, 0),
+    outputAmount: clamp(source.outputAmount, 0, 100, 100),
     assignments,
     // Read aliases for old snapshots/API consumers. Assignments own routing.
     amount: first?.amount ?? 0,
@@ -144,6 +146,9 @@ export class LfoOscillator {
     this.rateMode = 'free';
     this.syncDivision = '1/4';
     this.rateHz = 1;
+    this.effectiveRateHz = 1;
+    this.outputAmount = 100;
+    this.effectiveOutputAmount = 100;
     this.phaseDegrees = 0;
     this.phaseOffset = 0;
     this.phase = 0;
@@ -188,7 +193,7 @@ export class LfoOscillator {
     const previous = {
       enabled: this.enabled, waveform: this.waveform, rateHz: this.rateHz, rateMode: this.rateMode,
       syncDivision: this.syncDivision, polarity: this.polarity, phaseOffsetDeg: this.phaseDegrees,
-      amount: 25, targetId: '', channel: 'both', invert: this.invert, seed: this.seed
+      amount: 25, outputAmount: this.outputAmount, targetId: '', channel: 'both', invert: this.invert, seed: this.seed
     };
     const merged = legacy ? {
       ...previous,
@@ -209,6 +214,9 @@ export class LfoOscillator {
     const rateChanged = next.rateHz !== this.rateHz || next.rateMode !== this.rateMode || next.syncDivision !== this.syncDivision;
     this.waveform = next.waveform;
     this.rateHz = next.rateHz;
+    this.effectiveRateHz = next.rateHz;
+    this.outputAmount = next.outputAmount;
+    this.effectiveOutputAmount = next.outputAmount;
     this.rateMode = next.rateMode;
     this.syncDivision = next.syncDivision;
     this.polarity = next.polarity;
@@ -238,13 +246,26 @@ export class LfoOscillator {
     return this.invert ? -polarityValue : polarityValue;
   }
 
+  setEffectiveParameter(field, value) {
+    if (field === 'outputAmount') this.effectiveOutputAmount = clamp(value, 0, 100, this.outputAmount);
+    if (field !== 'rateHz') return;
+    const next = clamp(value, LFO_MIN_RATE_HZ, LFO_MAX_RATE_HZ, this.rateHz);
+    if (next === this.effectiveRateHz) return;
+    // Re-anchor at the existing phase; changing frequency never resets the
+    // oscillator or its seeded random stream. Sync divisions remain untouched.
+    this.phaseOrigin = this.phase;
+    this.phaseFrameCounter = 0;
+    this.currentCycleIndex = Math.floor(this.phaseOrigin);
+    this.effectiveRateHz = next;
+  }
+
   advance(sampleRate, clockBeat = 0, clockRunning = true) {
     if (!this.enabled || !this.moduleEnabled) { this.sampleValue = 0; return 0; }
     const safeRate = Number.isFinite(sampleRate) && sampleRate > 0 ? sampleRate : 48000;
     if (this.rateMode === 'sync') {
       if (!clockRunning) return this.sampleValue;
       const beatCount = Number.isFinite(clockBeat) ? clockBeat : 0;
-      const beatsPerCycle = { '1/32': 0.125, '1/16': 0.25, '1/8': 0.5, '1/4': 1, '1/2': 2, '1/1': 4, '2/1': 8, '4/1': 16 }[this.syncDivision] || 1;
+      const beatsPerCycle = SYNC_DIVISION_BEATS[this.syncDivision] || 1;
       const unwrapped = (beatCount - this.syncResetBeat) / beatsPerCycle;
       const cycleIndex = Math.floor(unwrapped);
       this.phase = ((unwrapped - cycleIndex) % 1 + 1) % 1;
@@ -260,7 +281,7 @@ export class LfoOscillator {
       this.currentCycleIndex = Math.floor(this.phaseOrigin);
     }
     this.phaseFrameCounter += 1;
-    const unwrappedPhase = this.phaseOrigin + this.phaseFrameCounter * this.rateHz / safeRate;
+    const unwrappedPhase = this.phaseOrigin + this.phaseFrameCounter * this.effectiveRateHz / safeRate;
     const cycleIndex = Math.floor(unwrappedPhase);
     this.phase = unwrappedPhase - cycleIndex;
     if (cycleIndex !== this.currentCycleIndex) this.onCycleChange(cycleIndex);
