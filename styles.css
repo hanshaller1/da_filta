@@ -881,9 +881,6 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     align-items: stretch;
     align-self: start;
     height: max-content;
-    max-height: 100%;
-    overflow-y: auto;
-    overflow-x: hidden;
     background: transparent;
     grid-column: 1;
     grid-row: 1;
@@ -916,6 +913,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
     align-items: stretch;
     min-height: 40px;
     border: 1px solid var(--panel-border);
+    border-right: 0;
     border-bottom: 0;
     border-left: 3px solid var(--panel-border);
     background: var(--graph-background);
@@ -924,7 +922,6 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .mode-tab-row:has(.mode-select.active) {
     z-index: 2;
     margin-right: -1px;
-    border-right: 0;
     border-left-color: var(--cyan);
     background: var(--output-background);
   }
