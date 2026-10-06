@@ -153,7 +153,7 @@ for (const family of ['lfo', 'envelope']) for (let index = 1; index <= 4; index 
 }
 sourceOwners.set('clockMod.1', 'clockMod.1');
 for (let index = 0; index < 10; index += 1) sourceOwners.set(`clockMod.1.band.${index}`, 'clockMod.1');
-export const MACRO_COUNT = 8;
+export const MACRO_COUNT = 4;
 for (let index = 1; index <= MACRO_COUNT; index += 1) sourceOwners.set(`macro.${index}`, `macro.${index}`);
 export const getModulationSourceOwner = id => sourceOwners.get(id) || id;
 export const modulationAssignmentKey = assignment => `${assignment.sourceId}:${assignment.id}`;

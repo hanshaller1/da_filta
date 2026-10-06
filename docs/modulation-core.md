@@ -6,8 +6,8 @@ The path is `Source → Assignments → Target Registry → Mapping → Effectiv
 For modulator targets it includes a validated graph and topological source
 evaluation before the effective value reaches that destination modulator.
 Four independent LFO sources exist: `lfo.1` through `lfo.4`, alongside four
-Envelope Followers, the existing Clock Mod generator, and eight manual static
-modulation sources (`macro.1` through `macro.8`).
+Envelope Followers, the existing Clock Mod generator, and four manual static
+modulation sources (`macro.1` through `macro.4`).
 Each source can own any number of independently editable assignments, including
 several routes to the same target. There is no small row limit and no LFO 5–20.
 Old flat single-LFO snapshots migrate to `lfo.1`; the previous enable value
@@ -51,9 +51,9 @@ objects or target-ID strings and does not scan the assignment list. The existing
 
 ## Manual macros
 
-`macroSources` stores exactly eight entries with `id`, `value` (0..100 percent)
+`macroSources` stores exactly four entries with `id`, `value` (0..100 percent)
 and `assignments`. Missing macro fields in old states/snapshots initialize all
-eight values to zero and all assignment lists to empty without changing the
+four values to zero and all assignment lists to empty without changing the
 LFO, Envelope or Clock configuration. The existing engine state and version-1
 DEV/LAB snapshots round-trip all values, stable row IDs, disabled/inverted rows
 and unavailable/unknown targets. Runtime source handles and graph caches are
@@ -74,13 +74,13 @@ stereo band targets allow BOTH/LEFT/RIGHT/SPREAD using the shared semantics.
 Lost targets retain their configuration, show a row/slot warning and reactivate
 with the same ID when available.
 
-The workspace shows eight existing slider controls above one selected-source
+The workspace shows four existing slider controls above one selected-source
 assignment editor. Selection is UI-only; there is no source power switch,
 oscillator, detector, editable naming or MIDI mapping. Macros may drive existing
 LFO/Envelope meta targets, but macro values are not targets. Static source nodes
 have no incoming meta edges and reuse the current DAG without a new cycle solver.
 
-Configuration registers the eight mutable source samples and compiles ordinary
+Configuration registers the four mutable source samples and compiles ordinary
 route links. Value-only port messages update those samples without rebuilding
 routing or resetting other modulators. Prepared handles are consumed at the
 existing 32-sample control tick; no new sample/control-loop allocations, target
@@ -348,3 +348,21 @@ sample/control loops allocate no new arrays, objects, graph data or target IDs
 and perform no graph traversal/validation or assignment-list scan.
 
 Validation and performance limits are recorded in [P2 modulation report](p2-modulation.md).
+
+## Combined workspace and legacy eight-macro data
+
+PRESETS / SNAPSHOTS contains four macro controls and their existing assignment
+editor on the left, with the preset library, A/B snapshots and Morph on the right.
+One panel-token divider separates them; the existing narrow breakpoint stacks
+both sections. The former MAKROS tab is now MOD with a distinct `mod` ID and an
+empty workspace. Legacy `makros` workspace requests resolve to `presets`.
+Workspace selection remains excluded from presets and recall never changes it.
+
+Old eight-macro states, v1 presets/imports and A/B snapshots are accepted by the
+shared normalizer: the first four values and assignment IDs remain unchanged;
+Macro 5–8, including active assignments, are deliberately discarded without
+remapping or merging. Runtime creates only `macro.1` through `macro.4`.
+New exports/captures contain four sources. Schema stays v1 and storage keys stay
+`da-filta-presets-v1` / `da-filta-snapshots-v1`. Reading stored libraries/snapshots
+does not rewrite or delete storage; explicit save/update/capture writes the new
+contract. Morph normalizes both old endpoints and interpolates only four values.

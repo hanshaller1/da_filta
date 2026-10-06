@@ -1806,6 +1806,12 @@ const renderLfoAssignments = () => {
 };
 const renderSourceAssignments = (kind, source, list, moduleEnabled) => {
   if (!list || !source) return;
+  // Preserve row/option nodes when visible macro values and amounts morph.
+  const setText = (element, value) => {
+    if (element.textContent === value) return;
+    if (element.childNodes.length === 1 && element.firstChild.nodeType === Node.TEXT_NODE) element.firstChild.data = value;
+    else element.textContent = value;
+  };
   const assignments = source.assignments;
   const rows = [...list.children];
   if (list.dataset.sourceId !== source.id || rows.length !== assignments.length
@@ -1845,14 +1851,14 @@ const renderSourceAssignments = (kind, source, list, moduleEnabled) => {
       if (!descriptor) continue;
       const cycle = cycles.has(option.value);
       option.disabled = cycle;
-      option.textContent = descriptor.label + (cycle ? ' · CYCLE' : '');
+      setText(option, descriptor.label + (cycle ? ' · CYCLE' : ''));
     }
     if (assignment.targetId && !target && ![...select.options].some(option => option.value === assignment.targetId)) {
       select.add(new Option(`INVALID · ${assignment.targetId}`, assignment.targetId));
     }
     select.value = assignment.targetId;
     row.querySelector(`[data-${kind}-amount]`).value = String(assignment.amount);
-    row.querySelector(`[data-${kind}-amount-output]`).textContent = `${Math.round(assignment.amount)} %`;
+    setText(row.querySelector(`[data-${kind}-amount-output]`), `${Math.round(assignment.amount)} %`);
     const channel = row.querySelector(`[data-${kind}-channel]`);
     const channels = target?.channels || [assignment.channel || 'both'];
     if (channel.dataset.targetId !== assignment.targetId || !channel.options.length) {
@@ -1866,15 +1872,15 @@ const renderSourceAssignments = (kind, source, list, moduleEnabled) => {
     invert.setAttribute('aria-pressed', String(assignment.invert));
     if (kind === 'clock-mod') row.querySelector('[data-clock-mod-hold]').value = assignment.sourceId;
     const enable = row.querySelector(`[data-${kind}-assignment-enable]`);
-    enable.textContent = assignment.enabled ? 'ON' : 'OFF';
+    setText(enable, assignment.enabled ? 'ON' : 'OFF');
     enable.setAttribute('aria-pressed', String(assignment.enabled));
     const status = getModulationAssignmentStatus(assignment, lfoTargetContext(), moduleEnabled && source.enabled !== false);
     row.dataset.assignmentStatus = status.reason;
-    row.querySelector(`[data-${kind}-target-state]`).textContent = {
+    setText(row.querySelector(`[data-${kind}-target-state]`), {
       'no-target': 'NO TARGET', 'target-invalid': 'INVALID TARGET',
       'target-unavailable': 'UNAVAILABLE · TARGET INACTIVE',
       'assignment-disabled': 'ASSIGNMENT OFF', 'source-disabled': 'ASSIGNED · SOURCE OFF', 'cycle-blocked': 'CYCLE BLOCKED', active: 'ACTIVE'
-    }[status.reason];
+    }[status.reason]);
     row.classList.toggle('is-inactive', ['target-invalid', 'target-unavailable', 'cycle-blocked'].includes(status.reason));
   });
 };
@@ -2463,7 +2469,7 @@ const renderLfoControls = () => {
   renderLfoSlots();
   renderLfoWaveform();
   renderLfoPhase();
-  if (state.selectedWorkspaceMode === 'makros') renderMacroControls();
+  if (state.selectedWorkspaceMode === 'presets') renderMacroControls();
 };
 const animateLfoDisplay = () => {
   lfoAnimationFrame = 0;
@@ -2604,7 +2610,7 @@ const renderEnvelopeControls = () => {
   if (outputAmountOutput) outputAmountOutput.textContent = Math.round(source.outputAmount) + ' %';
   if (envelopeStatus) envelopeStatus.textContent = `${state.envelopeModuleEnabled ? 'MODULE ON' : 'MODULE OFF'} · ENV ${selectedEnvelopeIndex + 1} ${source.enabled ? 'ON' : 'OFF'} · INPUT / PRE-FILTERBANK`;
   renderEnvelopeGraph();
-  if (state.selectedWorkspaceMode === 'makros') renderMacroControls();
+  if (state.selectedWorkspaceMode === 'presets') renderMacroControls();
 };
 const filterTypeDefinitions = window.FilterShape.FILTER_TYPE_DEFINITIONS;
 const filterControlDefinitions = window.FilterShape.FILTER_CONTROL_DEFINITIONS;
@@ -3234,7 +3240,7 @@ dynamicEqPowerButton?.addEventListener('click', event => {
   if (!state.dynamicEqEnabled) dynamicEqTelemetry = null;
   audioEngine?.setDynamicEq(state);
   renderDynamicEqControls();
-  if (state.selectedWorkspaceMode === 'makros') renderMacroControls();
+  if (state.selectedWorkspaceMode === 'presets') renderMacroControls();
 });
 document.querySelectorAll('[data-dynamic-eq-mode]').forEach(button => button.addEventListener('click', () => {
   state.dynamicEqMode = button.dataset.dynamicEqMode;
@@ -3379,7 +3385,7 @@ macroSlots.forEach((button, index) => button.addEventListener('click', () => {
   selectedMacroIndex = index;
   renderMacroControls();
 }));
-document.querySelector('#mode-makros')?.addEventListener('keydown', event => {
+document.querySelector('.macro-mode-panel')?.addEventListener('keydown', event => {
   // Native workspace button activation owns Enter/Space before global Panic.
   if (event.target.closest('button') && (event.key === 'Enter' || event.key === ' ')) event.stopPropagation();
 });
@@ -3561,6 +3567,7 @@ filterPowerButton?.addEventListener('click', event => {
   setFilterEnabled(!state.filterEnabled);
 });
 const selectMode = mode => {
+  if (mode === 'makros') mode = 'presets';
   if (!modePanels.some(panel => panel.dataset.modePanel === mode)) return;
   state.selectedWorkspaceMode = mode;
   modeTabs.forEach(tab => {
@@ -3577,7 +3584,7 @@ const selectMode = mode => {
   else stopLfoDisplay();
   if (mode === 'clock-mod') renderClockModControls();
   if (mode === 'envelope-follower') renderEnvelopeControls();
-  if (mode === 'makros') renderMacroControls();
+  if (mode === 'presets') renderMacroControls();
 };
 modeTabs.forEach((tab, index) => {
   tab.tabIndex = tab.classList.contains('active') ? 0 : -1;
@@ -3978,7 +3985,7 @@ const updatePerChannelBands = (syncAudio = true) => {
   if (syncAudio) audioEngine?.setPerChannelBands(state.perChannelBands);
   renderBandSliderValues();
   renderDynamicEqControls();
-  if (state.selectedWorkspaceMode === 'makros') renderMacroControls();
+  if (state.selectedWorkspaceMode === 'presets') renderMacroControls();
 };
 channelModeToggle?.addEventListener('click', () => {
   state.perChannelBands = !state.perChannelBands;
@@ -4626,7 +4633,7 @@ const syncUiFromAudioState = (snapshot, fromPreset = false) => {
   if (!fromPreset || state.selectedWorkspaceMode === 'lfo') renderLfoControls();
   if (!fromPreset || state.selectedWorkspaceMode === 'envelope-follower') renderEnvelopeControls();
   if (!fromPreset || state.selectedWorkspaceMode === 'clock-mod') renderClockModControls();
-  if (!fromPreset || state.selectedWorkspaceMode === 'makros') renderMacroControls();
+  if (!fromPreset || state.selectedWorkspaceMode === 'presets') renderMacroControls();
 };
 // Product presets project explicit bases through the existing engine setters.
 // Initialization only reads state/storage; it never recalls or changes audio.

@@ -1,8 +1,8 @@
 # Current runtime architecture
 
-Feature baseline: `4c9bf80` after P2 DSP/Modulation, the Erica-style production
-resonator and macros; the working implementation adds product presets,
-snapshots and Morph. This map describes behavior and does not supersede
+Feature baseline: `5a37dba` after P2 DSP/Modulation, the Erica-style production
+resonator, macros, product presets, snapshots and Morph. The workspace cleanup
+combines the editors and reduces manual sources to four. This map does not supersede
 historical measurement reports.
 
 ## Signal flow
@@ -33,7 +33,7 @@ taps have different positions; do not infer routing from a UI graph's location.
 | `filterbank-processor.js` | Ten-band stereo processing, feedback/resonance, FILTER, Dynamic EQ and modulation application |
 | `filter-shape-core.mjs`, `filter-shape.js` | Shared FILTER shape/math; browser compatibility facade |
 | `dynamic-eq-core.mjs` | ABS/REL, LINKED/DUAL detection and gain smoothing helpers; source-only detection before feedback/gain |
-| `modulation-core.mjs` | Shared target registry, assignment compiler and DAG; eight manual static macro source states; effective contributions preserve bases |
+| `modulation-core.mjs` | Shared target registry, assignment compiler and DAG; four manual static macro source states; effective contributions preserve bases |
 | `lfo-core.mjs` | Four configured LFO sources, waveform/phase and assignment state |
 | `envelope-core.mjs` | Four independent Peak/RMS Envelope sources with threshold, delay and attack/release |
 | `clock-core.mjs` | Shared audio-sample clock and MIDI 24-PPQN transport/phase |
@@ -49,7 +49,7 @@ rate-limited (typically 15 Hz) and may miss short audio transitions; a diagnosti
 packet is not a replacement for rendered-sample assertions.
 
 Modulation follows `Source → Assignments → Target Registry → Mapping → Effective
-→ DSP`. Four LFOs, four Envelope Followers, Clock Mod and eight manual macros
+→ DSP`. Four LFOs, four Envelope Followers, Clock Mod and four manual macros
 own stable assignment lists; the shared core compiles routes
 per target/source/channel on state updates. Runtime sums contributions without
 changing stored bases. Registry capabilities and availability drive both UI and
@@ -57,10 +57,10 @@ DSP. Unavailable/invalid routes persist and valid targets automatically
 reactivate them. Clock Mod exposes its existing held normalized/native-dB
 source taps to these same routes. All contributions join before the existing
 final band-gain clamp. Meta routes use the existing validated DAG.
-`macro.1` through `macro.8` publish static unipolar values (`value / 100`);
+`macro.1` through `macro.4` publish static unipolar values (`value / 100`);
 zero is neutral. Their values are not targets, so they add no incoming meta
 edges. State/snapshots persist `macroSources` with IDs, values and assignments;
-old states default to eight neutral empty macros. Value-only Worklet messages
+old states default to four neutral empty macros. Value-only Worklet messages
 update prepared source handles without resetting modulators. Runtime retains
 the 32-sample control tick, existing smoothing and allocation-free evaluation. See
 [`modulation-core.md`](modulation-core.md) for migration and channel contracts.
@@ -114,8 +114,18 @@ its no-global-spread gate in the worklet and registry. Current P/CH authority,
 L/R bases, anchors and assignment CHANNEL=SPREAD are unchanged. Invalid legacy
 values normalize to `linear`/`CLASSIC`.
 
-The obsolete MOD placeholder is removed. The old plan described clocked sine
+The obsolete MOD feature placeholder was removed; the current `mod` workspace
+is deliberately empty after moving macros into PRESETS / SNAPSHOTS.
+The old plan described clocked sine
 band modulation at 10% gain, but explicitly left hold/toggle/timing undecided;
 it never became a DSP path. Mapping it to LFO/Envelope/Clock Mod would invent
 that contract. Old `modulated` arrays are ignored by existing explicit restore
 paths; no MOD state or special case is added to the assignment core.
+
+## Combined production workspace
+
+PRESETS / SNAPSHOTS owns the four-source macro editor on the left and existing
+preset/snapshot/Morph controls on the right. MOD is an empty UI workspace.
+The navigation/workspace seam omits only the workspace left border; the internal
+divider uses the existing panel border token. Old eight-macro data normalizes to
+the first four sources without remapping; product schema/storage stay version 1.

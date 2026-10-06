@@ -383,7 +383,7 @@
             </div>
             <div class="mode-tab-row">
               <span class="mode-power-slot" aria-hidden="true"></span>
-              <button class="mode-select" type="button" role="tab" id="mode-tab-makros" aria-selected="false" aria-controls="mode-makros" data-mode="makros"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="14" cy="13" r="3"/><path d="m6 7 1.5-1.5M14 13l1.5-1.5"/></svg><span>MAKROS</span></button>
+              <button class="mode-select" type="button" role="tab" id="mode-tab-mod" aria-selected="false" aria-controls="mode-mod" data-mode="mod"><svg class="mode-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="14" cy="13" r="3"/><path d="m6 7 1.5-1.5M14 13l1.5-1.5"/></svg><span>MOD</span></button>
             </div>
             <div class="mode-tab-row">
               <span class="mode-power-slot" aria-hidden="true"></span>
@@ -708,73 +708,62 @@
                 </div>
               </section>
             </section>
-            <section class="filter-mode-panel lfo-mode-panel macro-mode-panel" id="mode-makros" role="tabpanel" aria-labelledby="mode-tab-makros" data-mode-panel="makros" hidden>
-              <header class="lfo-workspace-header"><strong>MAKROS</strong><span>MANUAL MODULATION</span></header>
-              <div class="macro-controls" aria-label="Macro controls">
-                <div class="macro-control">
-                  <button class="lfo-slot" type="button" data-macro-slot="0" aria-label="Select MACRO 1" aria-pressed="true"><span class="lfo-slot-number">MACRO 1</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
-                  <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-1" data-macro-value-output="0">0 %</output><input id="macro-value-1" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="0" aria-label="MACRO 1 value"></label>
-                </div>
-                <div class="macro-control">
-                  <button class="lfo-slot" type="button" data-macro-slot="1" aria-label="Select MACRO 2" aria-pressed="false"><span class="lfo-slot-number">MACRO 2</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
-                  <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-2" data-macro-value-output="1">0 %</output><input id="macro-value-2" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="1" aria-label="MACRO 2 value"></label>
-                </div>
-                <div class="macro-control">
-                  <button class="lfo-slot" type="button" data-macro-slot="2" aria-label="Select MACRO 3" aria-pressed="false"><span class="lfo-slot-number">MACRO 3</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
-                  <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-3" data-macro-value-output="2">0 %</output><input id="macro-value-3" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="2" aria-label="MACRO 3 value"></label>
-                </div>
-                <div class="macro-control">
-                  <button class="lfo-slot" type="button" data-macro-slot="3" aria-label="Select MACRO 4" aria-pressed="false"><span class="lfo-slot-number">MACRO 4</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
-                  <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-4" data-macro-value-output="3">0 %</output><input id="macro-value-4" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="3" aria-label="MACRO 4 value"></label>
-                </div>
-                <div class="macro-control">
-                  <button class="lfo-slot" type="button" data-macro-slot="4" aria-label="Select MACRO 5" aria-pressed="false"><span class="lfo-slot-number">MACRO 5</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
-                  <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-5" data-macro-value-output="4">0 %</output><input id="macro-value-5" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="4" aria-label="MACRO 5 value"></label>
-                </div>
-                <div class="macro-control">
-                  <button class="lfo-slot" type="button" data-macro-slot="5" aria-label="Select MACRO 6" aria-pressed="false"><span class="lfo-slot-number">MACRO 6</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
-                  <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-6" data-macro-value-output="5">0 %</output><input id="macro-value-6" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="5" aria-label="MACRO 6 value"></label>
-                </div>
-                <div class="macro-control">
-                  <button class="lfo-slot" type="button" data-macro-slot="6" aria-label="Select MACRO 7" aria-pressed="false"><span class="lfo-slot-number">MACRO 7</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
-                  <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-7" data-macro-value-output="6">0 %</output><input id="macro-value-7" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="6" aria-label="MACRO 7 value"></label>
-                </div>
-                <div class="macro-control">
-                  <button class="lfo-slot" type="button" data-macro-slot="7" aria-label="Select MACRO 8" aria-pressed="false"><span class="lfo-slot-number">MACRO 8</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
-                  <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-8" data-macro-value-output="7">0 %</output><input id="macro-value-8" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="7" aria-label="MACRO 8 value"></label>
-                </div>
-              </div>
-              <section class="macro-assignment-editor" aria-label="Selected macro assignments">
-                <header class="lfo-workspace-header"><strong data-macro-editor-title>MACRO 1 &middot; ASSIGNMENTS</strong></header>
-                <div class="lfo-assignments"><div class="lfo-assignment-list" data-macro-assignments aria-label="Macro assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment" type="button" data-macro-add-assignment>+ ADD ASSIGNMENT</button></div>
-              </section>
-            </section>
+            <section class="filter-mode-panel" id="mode-mod" role="tabpanel" aria-labelledby="mode-tab-mod" data-mode-panel="mod" hidden></section>
             <section class="filter-mode-panel lfo-mode-panel preset-mode-panel" id="mode-presets" role="tabpanel" aria-labelledby="mode-tab-presets" data-mode-panel="presets" hidden>
-              <header class="lfo-workspace-header"><strong>PRESETS / SNAPSHOTS</strong><span>PRODUCTION BASE STATE</span></header>
-              <div class="preset-library">
-                <label class="lfo-target-control"><span>PRESET</span><select data-preset-list aria-label="Preset auswählen"></select></label>
-                <label class="lfo-target-control"><span>NAME</span><input type="text" maxlength="64" data-preset-name aria-label="Presetname" autocomplete="off"></label>
-                <span class="preset-selected-name" data-preset-selected-name aria-label="Ausgewählter Presetname">INIT</span>
-                <div class="preset-actions">
-                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="load">LOAD</button>
-                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="save">SAVE AS</button>
-                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="update">UPDATE</button>
-                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="rename">RENAME</button>
-                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="duplicate">DUPLICATE</button>
-                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="delete">DELETE</button>
-                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="import">IMPORT</button>
-                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="export">EXPORT PRESET</button>
-                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="export-library">EXPORT LIBRARY</button>
+              <div class="combined-preset-workspace">
+                <section class="macro-mode-panel" aria-label="Macros">
+                  <header class="lfo-workspace-header"><strong>MACROS</strong><span>MANUAL MODULATION</span></header>
+                  <div class="macro-controls" aria-label="Macro controls">
+                    <div class="macro-control">
+                      <button class="lfo-slot" type="button" data-macro-slot="0" aria-label="Select MACRO 1" aria-pressed="true"><span class="lfo-slot-number">MACRO 1</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
+                      <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-1" data-macro-value-output="0">0 %</output><input id="macro-value-1" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="0" aria-label="MACRO 1 value"></label>
+                    </div>
+                    <div class="macro-control">
+                      <button class="lfo-slot" type="button" data-macro-slot="1" aria-label="Select MACRO 2" aria-pressed="false"><span class="lfo-slot-number">MACRO 2</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
+                      <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-2" data-macro-value-output="1">0 %</output><input id="macro-value-2" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="1" aria-label="MACRO 2 value"></label>
+                    </div>
+                    <div class="macro-control">
+                      <button class="lfo-slot" type="button" data-macro-slot="2" aria-label="Select MACRO 3" aria-pressed="false"><span class="lfo-slot-number">MACRO 3</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
+                      <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-3" data-macro-value-output="2">0 %</output><input id="macro-value-3" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="2" aria-label="MACRO 3 value"></label>
+                    </div>
+                    <div class="macro-control">
+                      <button class="lfo-slot" type="button" data-macro-slot="3" aria-label="Select MACRO 4" aria-pressed="false"><span class="lfo-slot-number">MACRO 4</span><span class="lfo-slot-detail">0 ASSIGNED</span></button>
+                      <label class="filter-parameter-control"><span>VALUE</span><output for="macro-value-4" data-macro-value-output="3">0 %</output><input id="macro-value-4" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-macro-value="3" aria-label="MACRO 4 value"></label>
+                    </div>
+                  </div>
+                  <section class="macro-assignment-editor" aria-label="Selected macro assignments">
+                    <header class="lfo-workspace-header"><strong data-macro-editor-title>MACRO 1 &middot; ASSIGNMENTS</strong></header>
+                    <div class="lfo-assignments"><div class="lfo-assignment-list" data-macro-assignments aria-label="Macro assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment" type="button" data-macro-add-assignment>+ ADD ASSIGNMENT</button></div>
+                  </section>
+                </section>
+              <section class="preset-workspace" aria-label="Presets and snapshots">
+                <header class="lfo-workspace-header"><strong>PRESETS / SNAPSHOTS</strong><span>PRODUCTION BASE STATE</span></header>
+                <div class="preset-library">
+                  <label class="lfo-target-control"><span>PRESET</span><select data-preset-list aria-label="Preset auswählen"></select></label>
+                  <label class="lfo-target-control"><span>NAME</span><input type="text" maxlength="64" data-preset-name aria-label="Presetname" autocomplete="off"></label>
+                  <span class="preset-selected-name" data-preset-selected-name aria-label="Ausgewählter Presetname">INIT</span>
+                  <div class="preset-actions">
+                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="load">LOAD</button>
+                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="save">SAVE AS</button>
+                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="update">UPDATE</button>
+                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="rename">RENAME</button>
+                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="duplicate">DUPLICATE</button>
+                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="delete">DELETE</button>
+                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="import">IMPORT</button>
+                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="export">EXPORT PRESET</button>
+                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="export-library">EXPORT LIBRARY</button>
+                  </div>
+                  <input type="file" accept=".json,application/json" data-preset-import hidden>
+                  <div class="preset-confirmation" data-preset-confirmation hidden><span data-preset-confirm-label></span><button class="dynamic-eq-view-toggle" type="button" data-preset-confirm>CONFIRM</button><button class="dynamic-eq-view-toggle" type="button" data-preset-cancel>CANCEL</button></div>
                 </div>
-                <input type="file" accept=".json,application/json" data-preset-import hidden>
-                <div class="preset-confirmation" data-preset-confirmation hidden><span data-preset-confirm-label></span><button class="dynamic-eq-view-toggle" type="button" data-preset-confirm>CONFIRM</button><button class="dynamic-eq-view-toggle" type="button" data-preset-cancel>CANCEL</button></div>
+                <div class="preset-snapshots">
+                  <section class="preset-snapshot" aria-label="Snapshot A"><header class="lfo-workspace-header"><strong>SNAPSHOT A</strong><span data-snapshot-status="A">EMPTY</span></header><div class="preset-actions"><button class="dynamic-eq-view-toggle" type="button" data-snapshot-capture="A">CAPTURE A</button><button class="dynamic-eq-view-toggle" type="button" data-snapshot-recall="A" disabled>RECALL A</button></div></section>
+                  <section class="preset-snapshot" aria-label="Snapshot B"><header class="lfo-workspace-header"><strong>SNAPSHOT B</strong><span data-snapshot-status="B">EMPTY</span></header><div class="preset-actions"><button class="dynamic-eq-view-toggle" type="button" data-snapshot-capture="B">CAPTURE B</button><button class="dynamic-eq-view-toggle" type="button" data-snapshot-recall="B" disabled>RECALL B</button></div></section>
+                </div>
+                <label class="filter-parameter-control preset-morph"><span>MORPH · A ↔ B</span><output for="preset-morph" data-preset-morph-output>0 %</output><input id="preset-morph" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-preset-morph disabled aria-label="Morph zwischen Snapshot A und B"></label>
+                <div class="lfo-module-status" data-preset-status role="status" aria-live="polite">CAPTURE A + B TO ENABLE MORPH</div>
+              </section>
               </div>
-              <div class="preset-snapshots">
-                <section class="preset-snapshot" aria-label="Snapshot A"><header class="lfo-workspace-header"><strong>SNAPSHOT A</strong><span data-snapshot-status="A">EMPTY</span></header><div class="preset-actions"><button class="dynamic-eq-view-toggle" type="button" data-snapshot-capture="A">CAPTURE A</button><button class="dynamic-eq-view-toggle" type="button" data-snapshot-recall="A" disabled>RECALL A</button></div></section>
-                <section class="preset-snapshot" aria-label="Snapshot B"><header class="lfo-workspace-header"><strong>SNAPSHOT B</strong><span data-snapshot-status="B">EMPTY</span></header><div class="preset-actions"><button class="dynamic-eq-view-toggle" type="button" data-snapshot-capture="B">CAPTURE B</button><button class="dynamic-eq-view-toggle" type="button" data-snapshot-recall="B" disabled>RECALL B</button></div></section>
-              </div>
-              <label class="filter-parameter-control preset-morph"><span>MORPH · A ↔ B</span><output for="preset-morph" data-preset-morph-output>0 %</output><input id="preset-morph" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-preset-morph disabled aria-label="Morph zwischen Snapshot A und B"></label>
-              <div class="lfo-module-status" data-preset-status role="status" aria-live="polite">CAPTURE A + B TO ENABLE MORPH</div>
             </section>
           </section>
           </div>

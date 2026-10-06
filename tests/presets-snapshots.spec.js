@@ -4,6 +4,35 @@ const { execFileSync } = require('node:child_process');
 const { processorFactory } = require('./helpers/modulation-crossmod.cjs');
 const { summarizeNativeRender } = require('./helpers/measure-input-character-full-graph.cjs');
 test.use({ viewport: { width: 1440, height: 900 } });
+
+test('stored legacy eight-macro v1 library and A/B snapshots remain readable without startup rewrite', async ({ page }) => {
+  await page.goto('/');
+  const stored = await page.evaluate(() => {
+    const a = window.PresetMode.capture();
+    a.macroSources = Array.from({ length: 8 }, (_, i) => ({ id: `macro.${i + 1}`, value: i * 10,
+      assignments: [{ id: `old.${i}`, sourceId: `macro.${i + 1}`, targetId: 'global.resonance', amount: 10, channel: 'both', invert: false, enabled: true }] }));
+    const b = structuredClone(a); b.macroSources.forEach(source => { source.value += 20; });
+    const library = JSON.stringify({ format: 'da_filta-preset-library', version: 1, presets: [
+      { id: 'old', format: 'da_filta-preset', version: 1, name: 'Old', state: a }] });
+    const snapshots = JSON.stringify({ format: 'da_filta-snapshots', version: 1, slots: { A: a, B: b } });
+    localStorage.setItem('da-filta-presets-v1', library); localStorage.setItem('da-filta-snapshots-v1', snapshots);
+    return { library, snapshots };
+  });
+  await page.reload();
+  expect(await page.evaluate(() => ({ library: localStorage.getItem('da-filta-presets-v1'), snapshots: localStorage.getItem('da-filta-snapshots-v1') }))).toEqual(stored);
+  await page.locator('[data-mode="presets"]').click();
+  await page.locator('[data-preset-list]').selectOption('old'); await page.locator('[data-preset-action="load"]').click();
+  expect((await page.evaluate(() => window.PresetMode.capture())).macroSources.map(source => source.value)).toEqual([0, 10, 20, 30]);
+  await page.locator('[data-preset-morph]').evaluate(input => { input.value = '50'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+  expect((await page.evaluate(() => window.PresetMode.capture())).macroSources.map(source => source.value)).toEqual([10, 20, 30, 40]);
+  await expect(page.locator('[data-macro-value="3"]')).toHaveValue('40');
+  await page.locator('[data-snapshot-recall="A"]').click();
+  await expect(page.locator('[data-macro-value="3"]')).toHaveValue('30');
+  await page.locator('[data-mode="mod"]').click();
+  await page.evaluate(() => window.PresetMode.apply(window.PresetMode.getState().presets[0].state));
+  await expect(page.locator('#mode-mod')).toBeVisible();
+  expect(await page.evaluate(() => window.FilterMode.getState().selectedWorkspaceMode)).toBe('mod');
+});
 const action = (page, name) => page.locator(`[data-preset-action="${name}"]`);
 const open = async page => { await page.goto('/'); await page.locator('[data-mode="presets"]').click(); };
 const name = (page, value) => page.locator('[data-preset-name]').fill(value);
@@ -62,7 +91,7 @@ test('complex product capture/load preserves every base and excluded session, sa
     analyzer: window.AnalyzerDisplay?.getState?.(), workspace: window.FilterMode.getState().selectedWorkspaceMode }));
   for (const key of ['theme', 'midi', 'keyboard', 'analyzer', 'workspace']) expect(after[key]).toEqual(before[key]);
   for (const key of ['volumeDb', 'outputGuardEnabled', 'outputGuardThreshold', 'outputProtectionEnabled', 'outputProtectionSoftness', 'feedbackCore']) expect(after.engine[key]).toEqual(before.engine[key]);
-  await page.locator('[data-mode="makros"]').click(); await expect(page.locator('[data-macro-value="7"]')).toHaveValue('84');
+  await page.locator('[data-mode="presets"]').click(); await expect(page.locator('[data-macro-value="3"]')).toHaveValue('36');
   await page.locator('[data-mode="lfo"]').click(); await expect(page.locator('[data-lfo-rate-output]')).toHaveText('0.40 Hz');
   await page.locator('[data-mode="envelope-follower"]').click(); await expect(page.locator('[data-envelope-attack]')).toHaveValue('10');
   await page.locator('[data-mode="filter"]').click(); await expect(page.locator('[data-filter-type="bell"]')).toHaveClass(/active/);
@@ -132,7 +161,7 @@ test('blocked localStorage reports persistence failure while the application and
   await open(page); await expect(page.locator('[data-preset-status]')).toContainText('nicht lesbar');
   await name(page, 'Memory'); await action(page, 'save').click(); await expect(page.locator('[data-preset-status]')).toContainText('Nicht dauerhaft gespeichert');
   await change(page, { resonance: .5 }); await action(page, 'load').click(); expect((await state(page)).resonance).toBe(0);
-  await page.locator('[data-mode="makros"]').click(); await expect(page.locator('[data-macro-value]')).toHaveCount(8);
+  await page.locator('[data-mode="presets"]').click(); await expect(page.locator('[data-macro-value]')).toHaveCount(4);
 });
 
 for (const width of [1914, 1440, 1024, 560]) test(`preset controls, full names and snapshots fit at ${width}px`, async ({ page }) => {

@@ -22,7 +22,7 @@ startup defaults, not a separately maintained preset-default table.
 | LFO | Module enable, four source IDs and configuration: waveform, FREE/SYNC, free rate, division, polarity, phase **base**, output amount, invert, configured seed and assignments |
 | Envelope | Module enable, four source IDs; enable, Peak/RMS, attack/release/delay, sensitivity, threshold, output amount and assignments |
 | Clock / Clock Mod | Shared clock source and configured BPM; Clock Mod's existing productive configuration, configured seeds, band locks and assignments |
-| Macros | `macro.1`…`macro.8`: all eight manual values and assignments |
+| Macros | `macro.1`…`macro.4`: all four manual values and assignments |
 
 Input Gain is included because its existing GainNode is before Input Character
 and the dry/wet split: it changes drive and sound, rather than acting as device
@@ -58,7 +58,7 @@ supported ±12 dB envelope; the active session spread limit remains authoritativ
 
 Missing fields use product defaults. Unknown extra fields are discarded,
 nonfinite/wrong numeric types are sanitized, arrays have ten bands/four
-LFOs/four Envelopes/eight macros, and assignments pass through the existing
+LFOs/four Envelopes/four macros, and assignments pass through the existing
 normalizers. Runtime fields cannot enter the projection.
 
 ## Library, storage and files
@@ -160,11 +160,13 @@ Responsive checks cover 1914/1440/1024/560 px, full 64-character names,
 nonoverlapping snapshots/Morph and native keyboard controls.
 
 The focused live test moves Morph 120 times over several seconds with four
-LFOs, four Envelopes, Clock Mod, eight macros, FILTER, Dynamic EQ and LOCAL/MAIN.
+LFOs, four Envelopes, Clock Mod, four macros, FILTER, Dynamic EQ and LOCAL/MAIN.
 It verifies unchanged nodes/safety, zero Processor Errors/storage writes/editor
 mutations, and four structural updates for four midpoint crossings. Native
 Chromium traces measure 128-frame full-graph Render callbacks at 48/96 kHz,
-excluding the first 250 ms of each window. A representative focused run measured
+excluding the first 250 ms of each window. The following historical timings were
+measured before the four-macro workspace cleanup, with eight sources.
+A representative focused run measured
 48-kHz Morph p99 1.034 ms (budget 2.667 ms, no warm exceedances). The 96-kHz
 measurements vary with host load; one optimized run measured p99 1.272 ms
 (budget 1.333 ms), with 19 of 2572 warm callbacks exceeding budget. This remains
@@ -184,3 +186,21 @@ placeholder remains, and the old global absence of file inputs now permits
 exactly the hidden JSON preset importer. The audio-source test still requires
 zero other file inputs and unchanged device/integrated-sample behavior. No
 numeric DSP assertion, tolerance or quarantine tag is relaxed.
+
+## Combined workspace and legacy eight-macro data
+
+PRESETS / SNAPSHOTS contains four macro controls and their existing assignment
+editor on the left, with the preset library, A/B snapshots and Morph on the right.
+One panel-token divider separates them; the existing narrow breakpoint stacks
+both sections. The former MAKROS tab is now MOD with a distinct `mod` ID and an
+empty workspace. Legacy `makros` workspace requests resolve to `presets`.
+Workspace selection remains excluded from presets and recall never changes it.
+
+Old eight-macro states, v1 presets/imports and A/B snapshots are accepted by the
+shared normalizer: the first four values and assignment IDs remain unchanged;
+Macro 5–8, including active assignments, are deliberately discarded without
+remapping or merging. Runtime creates only `macro.1` through `macro.4`.
+New exports/captures contain four sources. Schema stays v1 and storage keys stay
+`da-filta-presets-v1` / `da-filta-snapshots-v1`. Reading stored libraries/snapshots
+does not rewrite or delete storage; explicit save/update/capture writes the new
+contract. Morph normalizes both old endpoints and interpolates only four values.

@@ -21,12 +21,12 @@ function configure(source) {
   return { core, state };
 }
 
-test('eight static macro defaults and legacy migration leave existing modulation state intact', () => {
-  assert.equal(MACRO_COUNT, 8);
+test('four static macro defaults and legacy migration leave existing modulation state intact', () => {
+  assert.equal(MACRO_COUNT, 4);
   const legacy = { lfoEnabled: true, lfoAmount: 37, envelopeSources: [{ enabled: true, attack: 40 }], clockMod: { enabled: true } };
   const before = [normalizeModulationState(legacy), normalizeEnvelopeState(legacy), normalizeClockModState(legacy.clockMod)];
   const defaults = normalizeMacroState(legacy);
-  assert.deepEqual(defaults.macroSources, Array.from({ length: 8 }, (_, index) => ({ id: `macro.${index + 1}`, value: 0, assignments: [] })));
+  assert.deepEqual(defaults.macroSources, Array.from({ length: 4 }, (_, index) => ({ id: `macro.${index + 1}`, value: 0, assignments: [] })));
   Object.assign(legacy, defaults);
   assert.deepEqual([normalizeModulationState(legacy), normalizeEnvelopeState(legacy), normalizeClockModState(legacy.clockMod)], before);
   assert.deepEqual(normalizeMacroState(null), defaults);
@@ -111,6 +111,8 @@ test('all macro values and independent disabled inverted lost rows round-trip wi
   const state = normalizeMacroState({ macroSources: Array.from({ length: 8 }, (_, index) => ({ value: index * 13,
     assignments: [route(`row.${index}`, 'filterbank.band.4.gainDb', -50, { channel: 'spread', invert: true }),
       route(`off.${index}`, 'lfo.2.rate', 50, { enabled: false }), route(`lost.${index}`, 'removed.target', 100)] })) });
+  assert.deepEqual(state.macroSources.map(source => source.id), ['macro.1', 'macro.2', 'macro.3', 'macro.4']);
+  assert.deepEqual(state.macroSources.map(source => source.value), [0, 13, 26, 39]);
   assert.deepEqual(normalizeMacroState(JSON.parse(JSON.stringify(state))), state);
   assert.deepEqual(Object.keys(state.macroSources[0]), ['id', 'value', 'assignments']);
 });

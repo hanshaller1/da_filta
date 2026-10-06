@@ -6,6 +6,37 @@ import { ModulationCore } from '../modulation-core.mjs';
 const { contract, defaults } = presetFixture();
 const memory = () => { const data = new Map(); return { getItem: key => data.get(key) || null, setItem: (key, value) => data.set(key, value), data }; };
 const clean = value => JSON.parse(JSON.stringify(value));
+test('legacy v1 eight-macro library and snapshots load without writes, normalize and export four sources', () => {
+  const legacy = contract.clonePresetState(contract.init);
+  legacy.macroSources = Array.from({ length: 8 }, (_, i) => ({ id: `macro.${i + 1}`, value: i * 12,
+    assignments: [{ id: `legacy.${i}`, sourceId: `macro.${i + 1}`, targetId: 'global.resonance', amount: 20, channel: 'both', invert: false, enabled: true }] }));
+  const storage = memory();
+  storage.setItem(PRESET_STORAGE_KEY, JSON.stringify({ format: 'da_filta-preset-library', version: 1, presets: [
+    { id: 'legacy', format: 'da_filta-preset', version: 1, name: 'Legacy', state: legacy }] }));
+  const b = clean(legacy); b.macroSources.forEach(source => { source.value = 100; });
+  storage.setItem(SNAPSHOT_STORAGE_KEY, JSON.stringify({ format: 'da_filta-snapshots', version: 1, slots: { A: legacy, B: b } }));
+  const before = [...storage.data.entries()];
+  const store = new PresetStore(contract, storage);
+  assert.equal(store.error, ''); assert.deepEqual([...storage.data.entries()], before);
+  const expected = legacy.macroSources.slice(0, 4);
+  assert.deepEqual(store.entry('legacy').state.macroSources, expected);
+  assert.deepEqual(store.snapshots.A.macroSources, expected);
+  assert.equal(store.snapshots.B.macroSources.length, 4);
+  assert.deepEqual(store.exportPreset('legacy').state.macroSources, expected);
+  assert.deepEqual(store.exportLibrary().presets[0].state.macroSources, expected);
+  const imported = new PresetStore(contract, memory());
+  imported.import(JSON.stringify({ format: 'da_filta-preset', version: 1, name: 'Old', state: legacy }));
+  assert.deepEqual(imported.presets[0].state.macroSources, expected);
+  for (const percent of [0, 25, 50, 75, 100]) {
+    const morphed = contract.interpolatePresetState(legacy, b, percent);
+    assert.equal(morphed.macroSources.length, 4);
+    assert.deepEqual(morphed.macroSources.map(source => source.value), expected.map(source => source.value + (100 - source.value) * percent / 100));
+  }
+  store.capture('A', legacy);
+  assert.equal(JSON.parse(storage.getItem(SNAPSHOT_STORAGE_KEY)).slots.A.macroSources.length, 4);
+  assert.equal(contract.init.macroSources.length, 4);
+  assert.ok(contract.init.macroSources.every(source => source.value === 0 && source.assignments.length === 0));
+});
 function endpoints() {
   const a = contract.clonePresetState(contract.init), b = contract.clonePresetState(a);
   Object.assign(a, { resonance: -.4, dryWet: 20, filterFrequencyHz: 100, dynamicEqThresholdDb: -50 });
@@ -29,7 +60,7 @@ test('production projection reuses defaults, saves bases, excludes session and r
     lfoSources: [null], envelopeSources: ['bad'], macroSources: [{ value: 900, assignments: [null, { id: 'lost', targetId: 'removed', amount: -50 }] }] });
   assert.equal(malformed.filterFrequencyHz, contract.init.filterFrequencyHz); assert.equal(malformed.resonance, 0);
   assert.equal(malformed.bandGainLeft.length, 10); assert.equal(malformed.bandGainLeft[1], -100);
-  assert.equal(malformed.lfoSources.length, 4); assert.equal(malformed.envelopeSources.length, 4); assert.equal(malformed.macroSources.length, 8);
+  assert.equal(malformed.lfoSources.length, 4); assert.equal(malformed.envelopeSources.length, 4); assert.equal(malformed.macroSources.length, 4);
   assert.equal(malformed.macroSources[0].assignments[1].targetId, 'removed');
   assert.equal('midiStatus' in state.lfoClock, false); assert.equal('running' in state.lfoClock, false);
   const expandedSpread = contract.capturePresetState({ ...defaults, spreadMaxOffsetDb: 12, spread: 9 });

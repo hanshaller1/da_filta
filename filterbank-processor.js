@@ -2164,7 +2164,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-modulation-base-values') { this.setModulationBaseValues(data); return; }
     if (data.type === 'set-macro-value') {
       const sample = this.modulationCore.sources.get(data.sourceId);
-      if (sample && /^macro\.[1-8]$/.test(data.sourceId) && Number.isFinite(Number(data.value))) {
+      if (sample && /^macro\.[1-4]$/.test(data.sourceId) && Number.isFinite(Number(data.value))) {
         sample.value = Math.min(100, Math.max(0, Number(data.value))) / 100;
         sample.rightValue = sample.value;
       }

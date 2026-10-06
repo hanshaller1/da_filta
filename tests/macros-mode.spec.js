@@ -12,18 +12,48 @@ const macro = (value, assignments = []) => ({ value, assignments });
 const route = (id, targetId, amount = 50, extra = {}) => ({ id, targetId, amount, ...extra });
 test.use({ viewport: { width: 1440, height: 900 } });
 
-test('MAKROS exposes eight manual controls and the shared assignment editor @smoke', async ({ page }) => {
+test('MOD is empty and switching workspaces preserves macro/preset bases and accessible ownership', async ({ page }) => {
+  await page.goto('/'); await page.locator('[data-mode="presets"]').click();
+  await slider(page.locator('[data-macro-value="3"]'), 73);
+  const before = await page.evaluate(() => ({ base: window.PresetMode.capture(), library: window.PresetMode.getState() }));
+  await expect(page.getByRole('tab', { name: 'MAKROS', exact: true })).toHaveCount(0);
+  for (let i = 0; i < 3; i++) {
+    await page.getByRole('tab', { name: 'MOD', exact: true }).click();
+    await expect(page.locator('#mode-mod')).toBeVisible();
+    await expect(page.locator('#mode-mod')).toBeEmpty();
+    await expect(page.locator('#mode-mod input, #mode-mod button, #mode-mod select')).toHaveCount(0);
+    expect(await page.evaluate(() => ({ base: window.PresetMode.capture(), library: window.PresetMode.getState() }))).toEqual(before);
+    await page.getByRole('tab', { name: 'PRESETS / SNAPSHOTS', exact: true }).click();
+    await expect(page.locator('[data-macro-value="3"]')).toHaveValue('73');
+  }
+  const ownership = await page.evaluate(() => {
+    const ids = [...document.querySelectorAll('[id]')].map(element => element.id);
+    return { unique: new Set(ids).size === ids.length, tabs: [...document.querySelectorAll('[role=tab]')].every(tab =>
+      document.getElementById(tab.getAttribute('aria-controls'))?.getAttribute('aria-labelledby') === tab.id) };
+  });
+  expect(ownership).toEqual({ unique: true, tabs: true });
+  // Exercise the existing navigation entry point with an old workspace ID.
+  await page.locator('[data-mode="mod"]').evaluate(tab => { tab.dataset.mode = 'makros'; tab.click(); tab.dataset.mode = 'mod'; });
+  expect(await page.evaluate(() => window.FilterMode.getState().selectedWorkspaceMode)).toBe('presets');
+  await expect(page.locator('#mode-presets')).toBeVisible();
+  await expect(page.locator('[data-macro-slot]')).toHaveCount(4);
+  await page.locator('[data-macro-slot="3"]').focus(); await page.keyboard.press('Space');
+  await expect(page.locator('[data-macro-slot="3"]')).toBeFocused();
+  await expect(page.locator('[data-macro-slot="3"]')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('Combined workspace exposes four manual controls and the shared assignment editor @smoke', async ({ page }) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.setViewportSize({ width: 1440, height: 900 }); await page.goto('/');
-  await page.locator('[data-mode="makros"]').click();
-  await expect(page.locator('#mode-makros')).toBeVisible();
-  await expect(page.locator('#mode-makros')).not.toContainText('coming later');
+  await page.locator('[data-mode="presets"]').click();
+  await expect(page.locator('#mode-presets')).toBeVisible();
+  await expect(page.locator('#mode-presets')).not.toContainText('coming later');
   await expect(page.locator('.mode-placeholder')).toHaveCount(0);
-  await expect(page.locator('[data-mode="makros"]').locator('xpath=..').locator('.mode-power')).toHaveCount(0);
-  await expect(page.locator('[data-macro-value]')).toHaveCount(8);
+  await expect(page.locator('[data-mode="presets"]').locator('xpath=..').locator('.mode-power')).toHaveCount(0);
+  await expect(page.locator('[data-macro-value]')).toHaveCount(4);
   const defaults = await page.evaluate(() => window.MacroMode.getState());
-  expect(defaults.macroSources.map(source => source.value)).toEqual(Array(8).fill(0));
-  expect(defaults.macroSources.map(source => source.assignments)).toEqual(Array(8).fill([]));
+  expect(defaults.macroSources.map(source => source.value)).toEqual(Array(4).fill(0));
+  expect(defaults.macroSources.map(source => source.assignments)).toEqual(Array(4).fill([]));
   await slider(page.locator('[data-macro-value="0"]'), 50);
   await expect(page.locator('[data-macro-value-output="0"]')).toHaveText('50 %');
   await page.locator('[data-macro-add-assignment]').click();
@@ -34,8 +64,8 @@ test('MAKROS exposes eight manual controls and the shared assignment editor @smo
   await first.locator('[data-macro-assignment-invert]').check();
   const saved = (await page.evaluate(() => window.MacroMode.getState())).macroSources;
   expect(saved[0].assignments[0]).toMatchObject({ amount: -50, channel: 'spread', invert: true, enabled: true });
-  await page.locator('[data-macro-slot="7"]').click();
-  await expect(page.locator('[data-macro-slot="7"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('[data-macro-slot="3"]').click();
+  await expect(page.locator('[data-macro-slot="3"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(rows(page)).toHaveCount(0);
   expect((await page.evaluate(() => window.MacroMode.getState())).macroSources).toEqual(saved);
   await page.locator('[data-macro-slot="0"]').focus(); await page.keyboard.press('Enter');
@@ -56,15 +86,15 @@ test('MAKROS exposes eight manual controls and the shared assignment editor @smo
   await expect(rows(page)).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.locator('[data-mode="filterbank"]').click();
-  await page.locator('[data-mode="makros"]').click();
-  await expect(page.locator('#mode-makros')).toBeVisible();
+  await page.locator('[data-mode="presets"]').click();
+  await expect(page.locator('#mode-presets')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
 test('macro lost targets retain rows and reactivate, including slot warnings while unselected', async ({ page }) => {
   await page.goto('/'); await page.locator('[data-mode="filter"]').click();
   await page.locator('[data-module-power="filter"]').click();
-  await page.locator('[data-mode="makros"]').click(); await page.locator('[data-macro-add-assignment]').click();
+  await page.locator('[data-mode="presets"]').click(); await page.locator('[data-macro-add-assignment]').click();
   await rows(page).first().locator('[data-macro-target]').selectOption('filter.frequencyHz');
   await slider(rows(page).first().locator('[data-macro-amount]'), 50);
   await slider(page.locator('[data-macro-value="0"]'), 100);
@@ -75,13 +105,13 @@ test('macro lost targets retain rows and reactivate, including slot warnings whi
   await page.locator('[data-module-power="filter"]').click();
   await expect(rows(page).first()).toHaveAttribute('data-assignment-status', 'active');
   await page.locator('[data-mode="filter"]').click(); await page.locator('[data-filter-type="formant"]').click();
-  await page.locator('[data-mode="makros"]').click();
+  await page.locator('[data-mode="presets"]').click();
   await expect(rows(page).first()).toHaveAttribute('data-assignment-status', 'target-unavailable');
   await page.locator('[data-macro-slot="1"]').click();
   await expect(page.locator('[data-macro-slot="0"]')).toHaveAttribute('data-lost-targets', '1');
   await expect(page.locator('[data-macro-slot="0"]')).toContainText('LOST TARGET');
   await page.locator('[data-mode="filter"]').click(); await page.locator('[data-filter-type="lowpass"]').click();
-  await page.locator('[data-mode="makros"]').click(); await page.locator('[data-macro-slot="0"]').click();
+  await page.locator('[data-mode="presets"]').click(); await page.locator('[data-macro-slot="0"]').click();
   await expect(rows(page).first()).toHaveAttribute('data-assignment-status', 'active');
   expect((await page.evaluate(() => window.MacroMode.getState())).macroSources[0]).toEqual(saved);
   await page.locator('[data-macro-add-assignment]').click();
@@ -104,11 +134,11 @@ test('macro configuration round-trips existing engine and version-1 snapshots; l
     B: { name: 'legacy', state: { lfoSources: [{ enabled: true, rateHz: 2, targetId: 'global.resonance', amount: 37 }],
       envelopeSources: [{ enabled: true, attack: 40 }], clockMod: { enabled: true } } }
   } })));
-  await page.goto('/'); await page.locator('[data-mode="makros"]').click();
+  await page.goto('/'); await page.locator('[data-mode="presets"]').click();
   await page.locator('[data-dev-lab-group="sweetspots"] .dev-lab-collapse-toggle').click();
   await page.locator('[data-sweetspot-load="A"]').click();
   const saved = await page.evaluate(() => window.MacroMode.getState().macroSources);
-  expect(saved.map(source => source.value)).toEqual([0, 13, 26, 39, 52, 65, 78, 91]);
+  expect(saved.map(source => source.value)).toEqual([0, 13, 26, 39]);
   await expect(rows(page).nth(2)).toHaveAttribute('data-assignment-status', 'target-invalid');
   await expect(rows(page).nth(2).locator('[data-macro-target-state]')).toContainText('INVALID');
   const engineRoundtrip = await page.evaluate(() => {
@@ -125,7 +155,7 @@ test('macro configuration round-trips existing engine and version-1 snapshots; l
   expect(await page.evaluate(() => window.MacroMode.getState().macroSources)).toEqual(saved);
   await page.locator('[data-sweetspot-load="B"]').click();
   const legacy = await page.evaluate(() => window.MacroMode.getAudioEngine().getState());
-  expect(legacy.macroSources.map(source => [source.value, source.assignments])).toEqual(Array(8).fill([0, []]));
+  expect(legacy.macroSources.map(source => [source.value, source.assignments])).toEqual(Array(4).fill([0, []]));
   expect(legacy.lfoSources[0]).toMatchObject({ enabled: true, rateHz: 2, amount: 37 });
   expect(legacy.envelopeSources[0]).toMatchObject({ enabled: true, attack: 40 }); expect(legacy.clockMod.enabled).toBe(true);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('da-filta-sweetspots-v1')).version)).toBe(1);
@@ -133,9 +163,9 @@ test('macro configuration round-trips existing engine and version-1 snapshots; l
 
 for (const width of [1914, 1440, 1024, 560]) test(`macro workspace controls and assignment rows fit at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 }); await page.goto('/');
-  await page.locator('[data-mode="makros"]').click();
+  await page.locator('[data-mode="presets"]').click();
   for (let index = 0; index < 8; index++) await page.locator('[data-macro-add-assignment]').click();
-  const layout = await page.locator('#mode-makros').evaluate(panel => {
+  const layout = await page.locator('#mode-presets').evaluate(panel => {
     const controls = panel.querySelector('.macro-controls').getBoundingClientRect();
     const editor = panel.querySelector('.macro-assignment-editor').getBoundingClientRect();
     const rect = panel.getBoundingClientRect();
@@ -148,15 +178,26 @@ for (const width of [1914, 1440, 1024, 560]) test(`macro workspace controls and 
   expect(layout.scroll).toBeLessThanOrEqual(layout.width);
   expect(layout.documentScroll).toBeLessThanOrEqual(layout.documentWidth);
   expect(layout.controlsBottom).toBeLessThanOrEqual(layout.editorTop);
+  const seam = await page.evaluate(() => {
+    const macro = document.querySelector('.macro-mode-panel'), preset = document.querySelector('.preset-workspace');
+    const m = macro.getBoundingClientRect(), p = preset.getBoundingClientRect();
+    const workspace = document.querySelector('.mode-workspace');
+    return { outerBorder: getComputedStyle(workspace).borderLeftWidth,
+      divider: getComputedStyle(preset).borderLeftWidth, stackedDivider: getComputedStyle(preset).borderTopWidth,
+      macroRight: m.right, presetLeft: p.left, macroBottom: m.bottom, presetTop: p.top };
+  });
+  if (width >= 1200) expect(seam.outerBorder).toBe('0px');
+  if (width > 600) { expect(seam.divider).toBe('1px'); expect(seam.macroRight).toBeLessThanOrEqual(seam.presetLeft); }
+  else { expect(seam.stackedDivider).toBe('1px'); expect(seam.macroBottom).toBeLessThanOrEqual(seam.presetTop); }
   for (const value of layout.values) {
     expect(value.width).toBeGreaterThan(32); expect(value.height).toBeGreaterThanOrEqual(32);
     expect(value.left).toBeGreaterThanOrEqual(layout.left); expect(value.right).toBeLessThanOrEqual(layout.right);
   }
-  await page.locator('[data-macro-slot="7"]').click();
+  await page.locator('[data-macro-slot="3"]').click();
   await page.locator('[data-macro-add-assignment]').click();
   await rows(page).first().locator('[data-macro-target]').selectOption('global.resonance');
-  await slider(page.locator('[data-macro-value="7"]'), 71);
-  await expect(page.locator('[data-macro-value-output="7"]')).toHaveText('71 %');
+  await slider(page.locator('[data-macro-value="3"]'), 71);
+  await expect(page.locator('[data-macro-value-output="3"]')).toHaveText('71 %');
   await page.screenshot({ path: test.info().outputPath(`macro-${width}.png`), fullPage: true });
 });
 
@@ -175,6 +216,7 @@ test('production processor sums macros with LFO/Envelope, applies meta targets, 
         { id: 'frequency', targetId: 'filter.frequencyHz', amount: 20 },
         { id: 'rate', targetId: 'lfo.2.rate', amount: 50 }, { id: 'attack', targetId: 'envelope.1.attack', amount: 50 }] },
         { value: 50, assignments: [{ id: 'second', targetId: 'filterbank.band.4.gainDb', amount: 25 }] }] };
+    state.macroSources.push({}, {}, { value: 100, assignments: [{ id: 'discarded', targetId: 'global.resonance', amount: 100 }] });
     const bank = makeBank(48000, { modulationState: state,
       bandFrequencies: [...window.Filterbank.BAND_FREQUENCIES], bandQs: [...window.Filterbank.BAND_QS],
       bandGainLeft: Array(10).fill(0), bandGainRight: Array(10).fill(0), resonance: 0 });
@@ -203,7 +245,7 @@ test('production processor sums macros with LFO/Envelope, applies meta targets, 
       attack: bank.envelopeSources[0].effectiveAttack,
       band: core.getEffectiveValue('filterbank.band.4.gainDb', bank, 'left'), env: bank.envelopeSources[0].value },
       stable: count === core.compilationCount && graphCount === core.graphCompilationCount && nodes === bank.modulationNodes && targets === core.compiledTargets,
-      blocked: [...core.graph.blocked] };
+      blocked: [...core.graph.blocked], macroIds: [...core.sources.keys()].filter(id => id.startsWith('macro.')) };
   }, processorFactory('http://localhost:3000'));
   expect(result.before).toMatchObject({ resonance: .5, baseResonance: 0, baseFrequency: 1000, baseRate: 2, baseAttack: 20 });
   expect(result.before.frequency).toBeGreaterThan(1000); expect(result.before.rate).toBeGreaterThan(2); expect(result.before.attack).toBeGreaterThan(20);
@@ -212,6 +254,7 @@ test('production processor sums macros with LFO/Envelope, applies meta targets, 
   expect(result.after).toMatchObject({ resonance: 0, frequency: 1000, rate: 2, attack: 20 });
   expect(result.after.band).toBeCloseTo(1.2 + result.after.env * 1.2, 12);
   expect(result.stable).toBe(true); expect(result.blocked).toEqual([]);
+  expect(result.macroIds).toEqual(['macro.1', 'macro.2', 'macro.3', 'macro.4']);
 });
 
 for (const rate of [48000, 96000]) test(`manual macro routing renders native audio and neutral sources match legacy at ${rate}Hz`, async ({ page }) => {
@@ -299,7 +342,7 @@ test('accepted resonator/P2 audio stays sample-identical with no macro configura
   for (const row of result) expect(row.difference, JSON.stringify(row)).toBe(0);
 });
 
-test('eight macros with 32 routes: native callback cost survey at 48/96kHz', async ({ page }) => {
+test('four macros with 32 routes: native callback cost survey at 48/96kHz', async ({ page }) => {
   test.setTimeout(60000); await page.goto('/');
   const cases = [48000, 96000].flatMap(rate => [false, true].map(active => ({ rate, active, stage: `${active ? '32-routes' : 'base'}@${rate}` })));
   const cdp = await page.context().newCDPSession(page), events = [];
@@ -310,8 +353,8 @@ test('eight macros with 32 routes: native callback cost survey at 48/96kHz', asy
     for (const config of cases) {
       const context = new AudioContext({ sampleRate: config.rate, latencyHint: 'interactive' });
       await context.audioWorklet.addModule('/filterbank-processor.js');
-      const macroSources = Array.from({ length: 8 }, (_, index) => ({ value: 50,
-        assignments: config.active ? [`filterbank.band.${index}.gainDb`, 'global.resonance', 'lfo.2.rate', 'envelope.1.attack']
+      const macroSources = Array.from({ length: 4 }, (_, index) => ({ value: 50,
+        assignments: config.active ? [`filterbank.band.${index}.gainDb`, `filterbank.band.${index + 4}.gainDb`, 'global.resonance', 'global.dryWet', 'lfo.2.rate', 'lfo.2.outputAmount', 'envelope.1.attack', 'envelope.1.release']
           .map((targetId, n) => ({ id: `${index}.${n}`, targetId, amount: 2, invert: index % 2 === 0 })) : [] }));
       const bank = new AudioWorkletNode(context, 'da-filta-processor', { numberOfInputs: 1, numberOfOutputs: 2, outputChannelCount: [2, 1],
         processorOptions: { modulationState: { macroSources, filterbankEnabled: true, lfoModuleEnabled: true, envelopeModuleEnabled: true,

@@ -4,14 +4,23 @@ Stand: 2026-10-06
 
 Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungsthemen. Erledigte Punkte sollen aus dem offenen Backlog entfernt oder in einen kurzen Abschnitt „Erledigt“ verschoben werden. Neue bestätigte Aufgaben sollen hier ergänzt werden.
 
+## Offenes Backlog – Post-1.0
+
+- DEV/LAB-SNAPSHOTS: bestehende experimentelle Snapshots separat prüfen und pflegen.
+- MACRO VALUE ALS META-TARGET (nicht Teil von 1.0):
+  - `macro.1.value` … `macro.4.value`
+  - LFO → Macro Value, Envelope → Macro Value, Clock Mod → Macro Value
+  - Macro Nodes in bestehende DAG/Cycle Detection integrieren
+  - Macro → Macro separat bewerten
+
 ## Featureblöcke vor 1.0
 
-- MAKROS Mode ist erledigt: acht manuelle Quellen, gemeinsamer Assignment Core,
+- Macros im gemeinsamen PRESETS / SNAPSHOTS Workspace: vier manuelle Quellen, gemeinsamer Assignment Core,
   Meta-Targets, Lost Target/Reaktivierung und bestehender State-/Snapshot-Roundtrip.
 - PRESETS / SNAPSHOTS ist erledigt: versionierter Produkt-Base-State, read-only
   INIT, User-Library mit JSON-Austausch, persistente A/B-Snapshots und semantisches
   Morph aus unveränderlichen Endpunkten. [Vertrag](presets-snapshots.md).
-- FEATURE SET FOR 1.0 COMPLETE: kein „coming later“-Hauptmodus mehr.
+- FEATURE SET FOR 1.0 COMPLETE: kein „coming later“-Hauptmodus mehr; MOD bleibt leer.
 - P1-B MIDI inklusive Mapping/Learn/Relative Encoder bleibt separat offen.
 
 ## Nächste Phase – Cleanup / Release-Härtung
