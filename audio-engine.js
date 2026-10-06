@@ -72,6 +72,7 @@
       Object.assign(this, window.ResonantState.normalizeDynamicEqState());
       Object.assign(this, window.ResonantState.normalizeModulationState());
       Object.assign(this, window.ResonantState.normalizeEnvelopeState());
+      Object.assign(this, window.ResonantState.normalizeMacroState());
       this.clockMod = window.ResonantState.normalizeClockModState();
       this.envelopeModuleEnabled = false;
       this.status = 'OFF';
@@ -441,13 +442,15 @@
     getModulationState() {
       const lfo = window.ResonantState.normalizeModulationState(this);
       const envelope = window.ResonantState.normalizeEnvelopeState(this);
+      const macros = window.ResonantState.normalizeMacroState(this);
       const clockMod = window.ResonantState.normalizeClockModState(this.clockMod || {});
-      const assignments = [...lfo.lfoSources, ...envelope.envelopeSources]
+      const assignments = [...lfo.lfoSources, ...envelope.envelopeSources, ...macros.macroSources]
         .flatMap(item => item.assignments.filter(assignment => assignment.targetId))
         .concat(clockMod.enabled ? clockMod.assignments.filter(assignment => assignment.targetId) : []);
       return {
         ...lfo,
         ...envelope,
+        ...macros,
         clockMod,
         envelopeModuleEnabled: this.envelopeModuleEnabled === true,
         filterEnabled: this.filterEnabled,
@@ -475,6 +478,7 @@
       const wasClockModEnabled = this.clockMod?.enabled === true;
       Object.assign(this, window.ResonantState.normalizeModulationState(source));
       Object.assign(this, window.ResonantState.normalizeEnvelopeState(source));
+      Object.assign(this, window.ResonantState.normalizeMacroState(source));
       this.clockMod = window.ResonantState.normalizeClockModState(source.clockMod ?? this.clockMod ?? {});
       this.clampClockModMidpoint();
       this.envelopeModuleEnabled = source.envelopeModuleEnabled === true;
@@ -485,6 +489,16 @@
       this.syncModulationState();
       if (wasClockModEnabled !== this.clockMod.enabled) this.applySpectralCoreRequired();
       return this.getModulationState();
+    }
+
+    setMacroValue(sourceId, value) {
+      const source = this.macroSources.find(item => item.id === sourceId);
+      if (!source || !Number.isFinite(Number(value))) return false;
+      source.value = Math.min(100, Math.max(0, Number(value)));
+      // Value-only messages keep existing oscillators, detector histories and
+      // compiled routing intact while the regular control tick consumes it.
+      this.filterbank?.setMacroValue(sourceId, source.value);
+      return source.value;
     }
 
     setClockModState(source = {}) {
@@ -727,6 +741,7 @@
         ...window.ResonantState.normalizeDynamicEqState(this),
         ...window.ResonantState.normalizeModulationState(this),
         ...window.ResonantState.normalizeEnvelopeState(this),
+        ...window.ResonantState.normalizeMacroState(this),
         envelopeModuleEnabled: this.envelopeModuleEnabled === true,
         filterType: this.filterType,
         filterFrequencyHz: this.filterFrequencyHz,

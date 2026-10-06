@@ -153,6 +153,8 @@ for (const family of ['lfo', 'envelope']) for (let index = 1; index <= 4; index 
 }
 sourceOwners.set('clockMod.1', 'clockMod.1');
 for (let index = 0; index < 10; index += 1) sourceOwners.set(`clockMod.1.band.${index}`, 'clockMod.1');
+export const MACRO_COUNT = 8;
+for (let index = 1; index <= MACRO_COUNT; index += 1) sourceOwners.set(`macro.${index}`, `macro.${index}`);
 export const getModulationSourceOwner = id => sourceOwners.get(id) || id;
 export const modulationAssignmentKey = assignment => `${assignment.sourceId}:${assignment.id}`;
 
@@ -215,8 +217,20 @@ export function normalizeModulationAssignments(assignments = [], sourceId = '') 
     const target = getModulationTarget(targetId);
     const channel = (target?.channels || STEREO_CHANNELS).includes(input.channel) ? input.channel : 'both';
     return { id, sourceId: sourceId || input.sourceId || '', targetId,
-      amount: clamp(input.amount, 0, 100, 0), channel, invert: input.invert === true, enabled: input.enabled !== false };
+      amount: clamp(input.amount, -100, 100, 0), channel, invert: input.invert === true, enabled: input.enabled !== false };
   });
+}
+
+// Manual static sources: only configuration belongs in state. No oscillator,
+// detector, runtime history or macro targets are needed.
+export function normalizeMacroState(source = {}) {
+  const supplied = Array.isArray(source?.macroSources) ? source.macroSources : [];
+  return { macroSources: Array.from({ length: MACRO_COUNT }, (_, index) => {
+    const input = supplied[index] || {};
+    const id = `macro.${index + 1}`;
+    return { id, value: clamp(input.value, 0, 100, 0),
+      assignments: normalizeModulationAssignments(input.assignments, id) };
+  }) };
 }
 
 export function getModulationAssignmentStatus(assignment, context, sourceEnabled = true) {
@@ -244,7 +258,7 @@ export function mapModulationValue(target, baseValue, sourceValue, amount = 100)
   if (!target || !['linear', 'logarithmic', 'db', 'normalized', 'continuous-enum'].includes(target.mapping)) return NaN;
   const base = clamp(baseValue, target.min, target.max, target.min);
   const source = normalizeSourceSample(sourceValue);
-  const amountScale = clamp(amount, 0, 100, 0) / 100;
+  const amountScale = clamp(amount, -100, 100, 0) / 100;
   if (!source || amountScale === 0) return base;
   const extent = target.max - target.min;
   const modulation = source.value * amountScale;
@@ -304,7 +318,7 @@ export class ModulationCore {
     if (typeof sourceId !== 'string' || !sourceId.trim() || typeof targetId !== 'string') return false;
     const target = this.targets.get(targetId);
     const normalizedChannel = !target || target.channelRouting ? (STEREO_CHANNELS.includes(channel) ? channel : 'both') : 'both';
-    const normalizedAmount = clamp(amount, 0, 100, 0);
+    const normalizedAmount = clamp(amount, -100, 100, 0);
     // ID-less callers keep the legacy source/target upsert contract. Explicit
     // IDs allow any number of independent rows, including duplicate targets.
     const assignmentId = typeof id === 'string' && id ? id : `${sourceId}:${targetId}`;
@@ -422,7 +436,7 @@ export class ModulationCore {
         : link.source.value * scale;
     }
     record.nativeContribution = nativeContribution;
-    if (target.modulatorId && contribution === 0 && nativeContribution === 0) return base;
+    if (contribution === 0 && nativeContribution === 0) return base;
     if (record.logarithmic) {
       const position = Math.log(base) + contribution * (Math.log(max) - Math.log(min)) / 2;
       return Math.exp(clamp(position, Math.log(min), Math.log(max), Math.log(base)));

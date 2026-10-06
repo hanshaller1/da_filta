@@ -300,6 +300,13 @@
       return this.dynamicEqState;
     }
 
+    setMacroValue(sourceId, value) {
+      if (this.disposed) return;
+      const source = this.modulationState?.macroSources?.find(item => item.id === sourceId);
+      if (source) source.value = value;
+      this.workletNode.port.postMessage({ type: 'set-macro-value', sourceId, value });
+    }
+
     setModulationState(source) {
       this.modulationState = source || null;
       if (!this.disposed) this.workletNode.port.postMessage({ type: 'set-modulation-state', ...(this.modulationState || {}) });

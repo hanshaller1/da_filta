@@ -6,13 +6,14 @@ The path is `Source → Assignments → Target Registry → Mapping → Effectiv
 For modulator targets it includes a validated graph and topological source
 evaluation before the effective value reaches that destination modulator.
 Four independent LFO sources exist: `lfo.1` through `lfo.4`, alongside four
-Envelope Followers and the existing Clock Mod generator.
+Envelope Followers, the existing Clock Mod generator, and eight manual static
+modulation sources (`macro.1` through `macro.8`).
 Each source can own any number of independently editable assignments, including
 several routes to the same target. There is no small row limit and no LFO 5–20.
 Old flat single-LFO snapshots migrate to `lfo.1`; the previous enable value
 initializes both module power and source 1. The other sources default off.
 
-Each source owns enable, waveform, free/sync mode, free rate, sync division,
+Each LFO source owns enable, waveform, free/sync mode, free rate, sync division,
 polarity, phase offset, source invert, random seed, and output amount. Each assignment owns
 `id`, `sourceId`, `targetId`, `amount`, `channel`, `invert`, and `enabled`.
 Runtime
@@ -34,7 +35,7 @@ DEV/LAB snapshots; there is no new snapshot schema.
 Base values remain the values stored by controls and snapshots. The worklet
 evaluates assignments into temporary effective values and never writes them
 back into filter, band, Dynamic EQ, spread, dry/wet, or feedback base state.
-Contributions from LFOs, Envelope Followers and Clock Mod sum, then clamp
+Contributions from LFOs, Envelope Followers, Clock Mod and macros sum, then clamp
 to the target's current range. Frequency contributions add in logarithmic
 coordinates; dB and normalized parameters use their registry ranges. Band-gain
 contributions include the Clock held routes, FILTER and global spread
@@ -47,6 +48,44 @@ references and aggregate coefficients per source/channel. Runtime cost depends
 on sources and targets, not duplicate editor rows; evaluation creates no arrays,
 objects or target-ID strings and does not scan the assignment list. The existing
 32-sample control interval and audio-thread smoothing remain unchanged.
+
+## Manual macros
+
+`macroSources` stores exactly eight entries with `id`, `value` (0..100 percent)
+and `assignments`. Missing macro fields in old states/snapshots initialize all
+eight values to zero and all assignment lists to empty without changing the
+LFO, Envelope or Clock configuration. The existing engine state and version-1
+DEV/LAB snapshots round-trip all values, stable row IDs, disabled/inverted rows
+and unavailable/unknown targets. Runtime source handles and graph caches are
+never persisted.
+
+The Worklet source sample is `value / 100`: 0% contributes zero, 50% contributes
+half, and 100% supplies the full assignment contribution. There is no centered
+50% position. Generic assignment amounts accept -100..100%; invert multiplies
+the route sign once. For value 50% and amount +80%, the normalized contribution
+is +0.4. Existing per-target mappings and final clamps determine the effective
+parameter. Macro controls never overwrite target bases; zero contribution
+returns the exact base, including logarithmic targets.
+
+Macros share the existing registry, grouped picker, compact assignment renderer
+and editor bindings. One source may own many routes and several macros may
+share a target with LFO/Envelope/Clock sources. Mono targets allow BOTH and
+stereo band targets allow BOTH/LEFT/RIGHT/SPREAD using the shared semantics.
+Lost targets retain their configuration, show a row/slot warning and reactivate
+with the same ID when available.
+
+The workspace shows eight existing slider controls above one selected-source
+assignment editor. Selection is UI-only; there is no source power switch,
+oscillator, detector, editable naming or MIDI mapping. Macros may drive existing
+LFO/Envelope meta targets, but macro values are not targets. Static source nodes
+have no incoming meta edges and reuse the current DAG without a new cycle solver.
+
+Configuration registers the eight mutable source samples and compiles ordinary
+route links. Value-only port messages update those samples without rebuilding
+routing or resetting other modulators. Prepared handles are consumed at the
+existing 32-sample control tick; no new sample/control-loop allocations, target
+ID lookups, assignment scans, timers or UI-driven DSP paths are introduced.
+Existing target/DSP smoothing remains responsible for audible transitions.
 
 ## Registered targets
 

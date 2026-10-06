@@ -31,11 +31,11 @@ taps have different positions; do not infer routing from a UI graph's location.
 | `filterbank-processor.js` | Ten-band stereo processing, feedback/resonance, FILTER, Dynamic EQ and modulation application |
 | `filter-shape-core.mjs`, `filter-shape.js` | Shared FILTER shape/math; browser compatibility facade |
 | `dynamic-eq-core.mjs` | ABS/REL, LINKED/DUAL detection and gain smoothing helpers; source-only detection before feedback/gain |
-| `modulation-core.mjs` | Stable target registry and assignments; contributions affect effective values while preserving bases |
+| `modulation-core.mjs` | Shared target registry, assignment compiler and DAG; eight manual static macro source states; effective contributions preserve bases |
 | `lfo-core.mjs` | Four configured LFO sources, waveform/phase and assignment state |
 | `envelope-core.mjs` | Four independent Peak/RMS Envelope sources with threshold, delay and attack/release |
 | `clock-core.mjs` | Shared audio-sample clock and MIDI 24-PPQN transport/phase |
-| `clock-mod-core.mjs` | Dedicated held per-band additive layer; borrows LFO waveform code, uses independent step timing, is not a registry target/source |
+| `clock-mod-core.mjs` | Dedicated Clock Mod oscillator/progression and ten holds; latest/band source taps use shared assignments and independent step timing |
 | `midi-device-manager.mjs` | Access, discovery, one selected input/listener and hotplug handling; UI requests access through ENABLE MIDI |
 | `input-preamp-processor.js` | Production Character curves, adaptive 1x/2x/4x FIR differential path, aligned stage handover and 192-sample delay; linear input gain is owned by the GainNode |
 | `output-guard-processor.js` | Independent gain-reduction guard before final soft protection |
@@ -47,12 +47,20 @@ rate-limited (typically 15 Hz) and may miss short audio transitions; a diagnosti
 packet is not a replacement for rendered-sample assertions.
 
 Modulation follows `Source → Assignments → Target Registry → Mapping → Effective
-→ DSP`. Four LFOs own stable assignment lists; the shared core compiles routes
+→ DSP`. Four LFOs, four Envelope Followers, Clock Mod and eight manual macros
+own stable assignment lists; the shared core compiles routes
 per target/source/channel on state updates. Runtime sums contributions without
 changing stored bases. Registry capabilities and availability drive both UI and
 DSP. Unavailable/invalid routes persist and valid targets automatically
-reactivate them. Clock Mod remains its dedicated additive band layer and joins
-other contributions before the existing final band-gain clamp. See
+reactivate them. Clock Mod exposes its existing held normalized/native-dB
+source taps to these same routes. All contributions join before the existing
+final band-gain clamp. Meta routes use the existing validated DAG.
+`macro.1` through `macro.8` publish static unipolar values (`value / 100`);
+zero is neutral. Their values are not targets, so they add no incoming meta
+edges. State/snapshots persist `macroSources` with IDs, values and assignments;
+old states default to eight neutral empty macros. Value-only Worklet messages
+update prepared source handles without resetting modulators. Runtime retains
+the 32-sample control tick, existing smoothing and allocation-free evaluation. See
 [`modulation-core.md`](modulation-core.md) for migration and channel contracts.
 
 `tests/helpers/input-character-architecture*.cjs` and related measurement bundles

@@ -19,19 +19,19 @@ function browserBundle(origin, worklet = false, { variant = 'p3b4', transformCon
   const prefix = `import { LinearTptSvf, OversampledPositiveTptResonator } from '${origin}/tpt-svf.js';
 import { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } from '${origin}/dynamic-eq-core.mjs';
 import { FilterShape } from '${origin}/filter-shape-core.mjs';
-import { ModulationCore } from '${origin}/modulation-core.mjs';
+import { ModulationCore, normalizeMacroState } from '${origin}/modulation-core.mjs';
 import { LfoOscillator, normalizeModulationState } from '${origin}/lfo-core.mjs';
 import { EnvelopeFollower, normalizeEnvelopeSources } from '${origin}/envelope-core.mjs';
 import { ClockCore } from '${origin}/clock-core.mjs';
 import { ClockModCore } from '${origin}/clock-mod-core.mjs';
-const deps = { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeModulationState, EnvelopeFollower, normalizeEnvelopeSources, ClockCore, ClockModCore };
+const deps = { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, normalizeMacroState, LfoOscillator, normalizeModulationState, EnvelopeFollower, normalizeEnvelopeSources, ClockCore, ClockModCore };
 function classesFor(rate) {
   const sampleRate = rate;
   class Stub { constructor() { this.port = { onmessage: null, postMessage() {} }; } }
   const AudioWorkletProcessor = Stub;
   const registered = {};
   const registerProcessor = (name, Class) => { registered[name] = Class; };
-  const { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, LfoOscillator, normalizeModulationState, EnvelopeFollower, normalizeEnvelopeSources, ClockCore, ClockModCore } = deps;
+  const { LinearTptSvf, OversampledPositiveTptResonator, normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient, FilterShape, ModulationCore, normalizeMacroState, LfoOscillator, normalizeModulationState, EnvelopeFollower, normalizeEnvelopeSources, ClockCore, ClockModCore } = deps;
   ${bank}
   ${read('output-guard-processor.js')}
   ${read('output-protection-processor.js')}

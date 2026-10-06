@@ -106,6 +106,9 @@ export function normalizeModulationState(source = {}) {
       lfoSeed: first.seed
     }),
     lfoModuleEnabled: moduleEnabled,
+    // Signed generic assignments keep an accurate read alias; the standalone
+    // legacy normalizer retains its original malformed-state contract.
+    lfoAmount: first.amount,
     lfoCount: lfoSources.length,
     lfoSources
   };

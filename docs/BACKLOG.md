@@ -1,8 +1,15 @@
 # da_filta Backlog
 
-Stand: 2026-10-02
+Stand: 2026-10-06
 
 Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungsthemen. Erledigte Punkte sollen aus dem offenen Backlog entfernt oder in einen kurzen Abschnitt „Erledigt“ verschoben werden. Neue bestätigte Aufgaben sollen hier ergänzt werden.
+
+## Featureblöcke vor 1.0
+
+- MAKROS Mode ist erledigt: acht manuelle Quellen, gemeinsamer Assignment Core,
+  Meta-Targets, Lost Target/Reaktivierung und bestehender State-/Snapshot-Roundtrip.
+- PRESETS / SNAPSHOTS bleibt offen und ist der nächste und letzte Featureblock vor 1.0.
+- P1-B MIDI inklusive Mapping/Learn/Relative Encoder bleibt separat offen.
 
 ## LFO / Modulation
 

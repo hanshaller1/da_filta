@@ -1,7 +1,7 @@
 import { LinearTptSvf, OversampledPositiveTptResonator } from './tpt-svf.js';
 import { normalizeDynamicEq, targetGainDb, smoothGain, timeCoefficient } from './dynamic-eq-core.mjs';
 import { FilterShape } from './filter-shape-core.mjs';
-import { ModulationCore } from './modulation-core.mjs';
+import { ModulationCore, normalizeMacroState } from './modulation-core.mjs';
 import { LfoOscillator, normalizeModulationState } from './lfo-core.mjs';
 import { EnvelopeFollower, normalizeEnvelopeSources } from './envelope-core.mjs';
 import { ClockCore } from './clock-core.mjs';
@@ -1620,6 +1620,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   setModulationState(source = {}) {
     const modulationState = normalizeModulationState(source);
     const envelopeSources = normalizeEnvelopeSources(source);
+    const { macroSources } = normalizeMacroState(source);
+    for (const macro of macroSources) this.modulationCore.setSourceValue(macro.id, macro.value / 100, 'unipolar', true);
     const wasEnvelopeModuleEnabled = this.envelopeModuleEnabled;
     if (source.filterShapeParams && typeof source.filterShapeParams === 'object') {
       Object.assign(this.filterShapeParams, source.filterShapeParams);
@@ -1670,7 +1672,8 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     }
     const assignments = Array.isArray(source.assignments) ? source.assignments : [
       ...modulationState.lfoSources.flatMap(item => item.assignments.filter(assignment => assignment.targetId)),
-      ...envelopeSources.flatMap(item => item.assignments.filter(assignment => assignment.targetId))
+      ...envelopeSources.flatMap(item => item.assignments.filter(assignment => assignment.targetId)),
+      ...macroSources.flatMap(item => item.assignments.filter(assignment => assignment.targetId))
     ];
     const clockAssignments = this.clockMod.config.enabled ? this.clockMod.config.assignments.filter(item => item.targetId) : [];
     this.modulationCore.setAssignments(assignments.concat(assignments.some(item => item.sourceId.startsWith('clockMod.1')) ? [] : clockAssignments));
@@ -2134,6 +2137,14 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     }
     if (data.type === 'set-dynamic-eq') { this.setDynamicEq(data); return; }
     if (data.type === 'set-modulation-state') { this.setModulationState(data); return; }
+    if (data.type === 'set-macro-value') {
+      const sample = this.modulationCore.sources.get(data.sourceId);
+      if (sample && /^macro\.[1-8]$/.test(data.sourceId) && Number.isFinite(Number(data.value))) {
+        sample.value = Math.min(100, Math.max(0, Number(data.value))) / 100;
+        sample.rightValue = sample.value;
+      }
+      return;
+    }
     if (data.type === 'set-clock-state') { this.clockCore.configure(data.clock || data); return; }
     if (data.type === 'midi-clock-start') {
       if (this.clockCore.state.source === 'midi') {

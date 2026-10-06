@@ -26,6 +26,7 @@ let clockModTelemetry = null;
 const envelopeGraphValues = new Map();
 const envelopeRawGraphValues = new Map();
 let selectedEnvelopeIndex = 0;
+let selectedMacroIndex = 0;
 let panic = () => {};
 let updateResonatorDiagnostics = () => {};
 // FILTERBANK editor visuals intentionally describe the manual FILTERBANK
@@ -1765,7 +1766,7 @@ const lfoTargetContext = () => ({
   envelopeModuleEnabled: state.envelopeModuleEnabled, envelopeSources: state.envelopeSources,
   modulationGraph: getUiModulationGraph()
 });
-const getUiAssignments = () => [...state.lfoSources, ...state.envelopeSources].flatMap(source => source.assignments)
+const getUiAssignments = () => [...state.lfoSources, ...state.envelopeSources, ...state.macroSources].flatMap(source => source.assignments)
   .concat(state.clockMod.assignments);
 let uiModulationGraphKey = '';
 let uiModulationGraph = null;
@@ -1815,7 +1816,7 @@ const renderSourceAssignments = (kind, source, list, moduleEnabled) => {
       row.className = 'lfo-row lfo-assignment-row';
       row.dataset.assignmentId = assignment.id;
       row.innerHTML = `<label class="lfo-target-control"><span>TARGET</span><select data-${kind}-target data-assignment-field="targetId" aria-label="${kind} assignment target"></select><small data-${kind}-target-state></small></label>
-        <label class="lfo-inline-control lfo-assignment-amount"><span>AMOUNT <output data-${kind}-amount-output></output></span><input class="filter-style-slider" type="range" min="0" max="100" step="1" data-${kind}-amount data-assignment-field="amount" aria-label="${kind} assignment amount"></label>
+        <label class="lfo-inline-control lfo-assignment-amount"><span>AMOUNT <output data-${kind}-amount-output></output></span><input class="filter-style-slider" type="range" min="-100" max="100" step="1" data-${kind}-amount data-assignment-field="amount" aria-label="${kind} assignment amount"></label>
         <label class="lfo-inline-control"><span>CHANNEL</span><select data-${kind}-channel data-assignment-field="channel" aria-label="${kind} assignment channel"></select></label>
         <label class="lfo-inline-control lfo-assignment-invert"><span>INVERT</span><input type="checkbox" data-${kind}-assignment-invert ${kind === 'envelope' ? 'data-envelope-invert' : ''} data-assignment-field="invert" aria-label="Invert ${kind} assignment"></label>
         <div class="lfo-assignment-actions"><button class="dynamic-eq-view-toggle" type="button" data-${kind}-assignment-enable aria-label="Enable ${kind} assignment"></button><button class="dynamic-eq-view-toggle" type="button" data-${kind}-assignment-remove aria-label="Remove ${kind} assignment">×</button></div>
@@ -1866,7 +1867,7 @@ const renderSourceAssignments = (kind, source, list, moduleEnabled) => {
     const enable = row.querySelector(`[data-${kind}-assignment-enable]`);
     enable.textContent = assignment.enabled ? 'ON' : 'OFF';
     enable.setAttribute('aria-pressed', String(assignment.enabled));
-    const status = getModulationAssignmentStatus(assignment, lfoTargetContext(), moduleEnabled && source.enabled);
+    const status = getModulationAssignmentStatus(assignment, lfoTargetContext(), moduleEnabled && source.enabled !== false);
     row.dataset.assignmentStatus = status.reason;
     row.querySelector(`[data-${kind}-target-state]`).textContent = {
       'no-target': 'NO TARGET', 'target-invalid': 'INVALID TARGET',
@@ -2461,6 +2462,7 @@ const renderLfoControls = () => {
   renderLfoSlots();
   renderLfoWaveform();
   renderLfoPhase();
+  if (state.selectedWorkspaceMode === 'makros') renderMacroControls();
 };
 const animateLfoDisplay = () => {
   lfoAnimationFrame = 0;
@@ -2601,6 +2603,7 @@ const renderEnvelopeControls = () => {
   if (outputAmountOutput) outputAmountOutput.textContent = Math.round(source.outputAmount) + ' %';
   if (envelopeStatus) envelopeStatus.textContent = `${state.envelopeModuleEnabled ? 'MODULE ON' : 'MODULE OFF'} · ENV ${selectedEnvelopeIndex + 1} ${source.enabled ? 'ON' : 'OFF'} · INPUT / PRE-FILTERBANK`;
   renderEnvelopeGraph();
+  if (state.selectedWorkspaceMode === 'makros') renderMacroControls();
 };
 const filterTypeDefinitions = window.FilterShape.FILTER_TYPE_DEFINITIONS;
 const filterControlDefinitions = window.FilterShape.FILTER_CONTROL_DEFINITIONS;
@@ -3230,6 +3233,7 @@ dynamicEqPowerButton?.addEventListener('click', event => {
   if (!state.dynamicEqEnabled) dynamicEqTelemetry = null;
   audioEngine?.setDynamicEq(state);
   renderDynamicEqControls();
+  if (state.selectedWorkspaceMode === 'makros') renderMacroControls();
 });
 document.querySelectorAll('[data-dynamic-eq-mode]').forEach(button => button.addEventListener('click', () => {
   state.dynamicEqMode = button.dataset.dynamicEqMode;
@@ -3342,6 +3346,48 @@ const bindAssignmentEditor = (kind, getSource, commit) => {
 bindAssignmentEditor('lfo', getSelectedLfo, commitLfoState);
 bindAssignmentEditor('envelope', getEnvelopeSource, commitEnvelopeState);
 bindAssignmentEditor('clock-mod', () => state.clockMod, () => commitClockModState({ assignments: state.clockMod.assignments }));
+const getSelectedMacro = () => state.macroSources[selectedMacroIndex];
+const macroSlots = [...document.querySelectorAll('[data-macro-slot]')];
+const renderMacroControls = () => {
+  const context = lfoTargetContext();
+  state.macroSources.forEach((source, index) => {
+    const selected = index === selectedMacroIndex;
+    const button = macroSlots[index];
+    const assigned = source.assignments.filter(assignment => assignment.targetId);
+    const lost = assigned.filter(assignment => ['target-invalid', 'target-unavailable'].includes(
+      getModulationAssignmentStatus(assignment, context).reason)).length;
+    button.classList.toggle('active', selected);
+    button.classList.toggle('has-lost-target', lost > 0);
+    button.setAttribute('aria-pressed', String(selected));
+    button.dataset.lostTargets = String(lost);
+    button.querySelector('.lfo-slot-detail').textContent = lost ? `LOST TARGET (${lost})` : `${assigned.length} ASSIGNED`;
+    const input = document.querySelector(`[data-macro-value="${index}"]`);
+    input.value = String(source.value);
+    document.querySelector(`[data-macro-value-output="${index}"]`).textContent = `${source.value} %`;
+  });
+  document.querySelector('[data-macro-editor-title]').textContent = `MACRO ${selectedMacroIndex + 1} · ASSIGNMENTS`;
+  renderSourceAssignments('macro', getSelectedMacro(), document.querySelector('[data-macro-assignments]'), true);
+};
+const commitMacroState = () => {
+  Object.assign(state, window.ResonantState.normalizeMacroState(state));
+  audioEngine?.setModulationState(state);
+  renderMacroControls();
+};
+bindAssignmentEditor('macro', getSelectedMacro, commitMacroState);
+macroSlots.forEach((button, index) => button.addEventListener('click', () => {
+  selectedMacroIndex = index;
+  renderMacroControls();
+}));
+document.querySelector('#mode-makros')?.addEventListener('keydown', event => {
+  // Native workspace button activation owns Enter/Space before global Panic.
+  if (event.target.closest('button') && (event.key === 'Enter' || event.key === ' ')) event.stopPropagation();
+});
+document.querySelectorAll('[data-macro-value]').forEach(input => input.addEventListener('input', () => {
+  const source = state.macroSources[Number(input.dataset.macroValue)];
+  source.value = Math.min(100, Math.max(0, Number(input.value)));
+  document.querySelector(`[data-macro-value-output="${input.dataset.macroValue}"]`).textContent = `${source.value} %`;
+  audioEngine?.setMacroValue(source.id, source.value);
+}));
 document.querySelector('[data-lfo-output-amount]')?.addEventListener('input', event => setSelectedLfo({ outputAmount: Number(event.target.value) }));
 document.querySelector('[data-envelope-output-amount]')?.addEventListener('input', event => setEnvelopeSource({ outputAmount: Number(event.target.value) }));
 lfoInvertButton?.addEventListener('click', () => setSelectedLfo({ invert: !getSelectedLfo()?.invert }));
@@ -3466,6 +3512,10 @@ window.ClockModMode = Object.freeze({
     heldLeft: [...(clockModTelemetry.heldLeft || [])], heldRight: [...(clockModTelemetry.heldRight || [])] } : null,
   getAudioEngine: () => audioEngine
 });
+window.MacroMode = Object.freeze({
+  getState: () => ({ ...window.ResonantState.normalizeMacroState(state), selectedMacroIndex }),
+  getAudioEngine: () => audioEngine
+});
 const renderFilterPower = () => {
   if (filterbankPowerButton) {
     filterbankPowerButton.setAttribute('aria-pressed', String(state.filterbankEnabled));
@@ -3526,6 +3576,7 @@ const selectMode = mode => {
   else stopLfoDisplay();
   if (mode === 'clock-mod') renderClockModControls();
   if (mode === 'envelope-follower') renderEnvelopeControls();
+  if (mode === 'makros') renderMacroControls();
 };
 modeTabs.forEach((tab, index) => {
   tab.tabIndex = tab.classList.contains('active') ? 0 : -1;
@@ -3926,6 +3977,7 @@ const updatePerChannelBands = () => {
   audioEngine?.setPerChannelBands(state.perChannelBands);
   renderBandSliderValues();
   renderDynamicEqControls();
+  if (state.selectedWorkspaceMode === 'makros') renderMacroControls();
 };
 channelModeToggle?.addEventListener('click', () => {
   state.perChannelBands = !state.perChannelBands;
@@ -4236,6 +4288,7 @@ audioEngine = new AudioEngine({
 });
 audioEngine.applyState(state);
 renderClockModControls();
+renderMacroControls();
 updateResonatorDiagnostics();
 const setAudioBypass = enabled => {
   audioBypassEnabled = Boolean(enabled);
@@ -4471,6 +4524,7 @@ const syncUiFromAudioState = snapshot => {
   Object.assign(state, window.ResonantState.normalizeDynamicEqState(snapshot));
   Object.assign(state, window.ResonantState.normalizeModulationState(snapshot));
   Object.assign(state, window.ResonantState.normalizeEnvelopeState(snapshot));
+  Object.assign(state, window.ResonantState.normalizeMacroState(snapshot));
   state.clockMod = window.ResonantState.normalizeClockModState(snapshot.clockMod ?? state.clockMod ?? {});
   state.envelopeModuleEnabled = snapshot.envelopeModuleEnabled === true;
   if (snapshot.lfoClock) state.lfoClock = normalizeClockState(snapshot.lfoClock);
@@ -4569,11 +4623,13 @@ const syncUiFromAudioState = snapshot => {
   renderLfoControls();
   renderEnvelopeControls();
   renderClockModControls();
+  renderMacroControls();
 };
 // This is the complete, explicit DEV/LAB snapshot contract. Normal app state
 // is intentionally absent: DEV/LAB snapshots are experimental configurations,
 // not production presets.
 const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
+  ['macroSources', value => { Object.assign(state, window.ResonantState.normalizeMacroState({ macroSources: value })); commitMacroState(); }],
   ['clockMod', value => { state.clockMod = window.ResonantState.normalizeClockModState(value); audioEngine.setClockModState(state.clockMod); renderClockModControls(); }],
   ['envelopeModuleEnabled', value => { state.envelopeModuleEnabled = value === true; audioEngine.setModulationState(state); renderEnvelopeControls(); }],
   ['envelopeSources', value => {
@@ -4636,6 +4692,10 @@ const createDevLabSnapshot = () => {
 };
 const applyDevLabSnapshot = snapshot => {
   if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
+  if (!Array.isArray(snapshot.macroSources)) {
+    Object.assign(state, window.ResonantState.normalizeMacroState());
+    commitMacroState();
+  }
   if (!Array.isArray(snapshot.lfoSources)
     && ['lfoEnabled', 'lfoWaveform', 'lfoRateHz', 'lfoPolarity', 'lfoPhase', 'lfoTargetId', 'lfoAmount', 'lfoSeed'].some(key => Object.prototype.hasOwnProperty.call(snapshot, key))) {
     const migrated = window.ResonantState.normalizeModulationState(snapshot);

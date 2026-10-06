@@ -202,8 +202,9 @@ test('workspace selection and module power remain independent pointer interactio
 
   await page.locator('[data-mode="filterbank"]').click();
   expect(await page.evaluate(() => window.FilterMode.getState())).toMatchObject({ selectedWorkspaceMode: 'filterbank', filterEnabled: false });
-  // Only MAKROS remains unavailable; CLOCK MOD, LFO and ENVELOPE are routable.
-  await expect(page.locator('.mode-power:disabled')).toHaveCount(1);
+  // Manual macros use zero as neutral and have no source/module power switch.
+  await expect(page.locator('.mode-power:disabled')).toHaveCount(0);
+  await expect(page.locator('[data-mode="makros"]').locator('xpath=..').locator('.mode-power-slot')).toHaveCount(1);
   await expect(page.locator('[data-module-power="envelope-follower"]')).toBeEnabled();
   await expect(page.locator('[data-mode="filterbank"]').locator('xpath=..').locator('[data-module-power="filterbank"]')).toHaveCount(1);
   await expect(page.locator('[data-mode="presets"]').locator('xpath=..').locator('.mode-power-slot')).toHaveCount(1);
