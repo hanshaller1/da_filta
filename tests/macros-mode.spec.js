@@ -18,7 +18,7 @@ test('MAKROS exposes eight manual controls and the shared assignment editor @smo
   await page.locator('[data-mode="makros"]').click();
   await expect(page.locator('#mode-makros')).toBeVisible();
   await expect(page.locator('#mode-makros')).not.toContainText('coming later');
-  await expect(page.locator('.mode-placeholder')).toHaveCount(1);
+  await expect(page.locator('.mode-placeholder')).toHaveCount(0);
   await expect(page.locator('[data-mode="makros"]').locator('xpath=..').locator('.mode-power')).toHaveCount(0);
   await expect(page.locator('[data-macro-value]')).toHaveCount(8);
   const defaults = await page.evaluate(() => window.MacroMode.getState());

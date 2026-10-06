@@ -2,6 +2,7 @@ import { MODULATION_TARGETS, getModulationTarget, getModulationAssignmentStatus,
 import { LFO_WAVEFORMS, LFO_SYNC_DIVISIONS, paginateLfoSources, rateToSlider, sliderToRate, waveformSample } from './lfo-core.mjs';
 import { normalizeClockState, SYNC_DIVISION_BEATS } from './clock-core.mjs';
 import { MidiDeviceManager } from './midi-device-manager.mjs';
+import { createPresetContract, PresetStore, presetStructureKey } from './presets-core.mjs';
 
 const {
   BAND_DEFINITIONS,
@@ -3966,7 +3967,7 @@ const channelModeToggle = document.querySelector('[data-channel-toggle]');
 const bandResetButton = document.querySelector('[data-band-reset]');
 const spreadControl = document.querySelector('[data-control="spread"]');
 const spreadControlCard = spreadControl?.closest('.control-card');
-const updatePerChannelBands = () => {
+const updatePerChannelBands = (syncAudio = true) => {
   bands.classList.toggle('is-per-channel', state.perChannelBands);
   channelModeToggle?.classList.toggle('is-per-channel', state.perChannelBands);
   channelModeToggle?.setAttribute('aria-pressed', String(state.perChannelBands));
@@ -3974,7 +3975,7 @@ const updatePerChannelBands = () => {
   const spreadDisabled = state.perChannelBands;
   if (spreadControl) spreadControl.disabled = spreadDisabled;
   spreadControlCard?.classList.toggle('is-disabled', spreadDisabled);
-  audioEngine?.setPerChannelBands(state.perChannelBands);
+  if (syncAudio) audioEngine?.setPerChannelBands(state.perChannelBands);
   renderBandSliderValues();
   renderDynamicEqControls();
   if (state.selectedWorkspaceMode === 'makros') renderMacroControls();
@@ -4018,14 +4019,14 @@ const RESONANCE_DOWN_CODE = 'BracketLeft';
 const VOLUME_UP_CODE = 'Backslash';
 const VOLUME_DOWN_CODE = 'Quote';
 const isEditableTarget = target => target instanceof HTMLElement && ((target.matches('input, textarea, select') && !target.matches('input[type="range"]')) || target.isContentEditable);
-const renderGlobalControlValue = (name, value) => {
+const renderGlobalControlValue = (name, value, precise = false) => {
   const definition = GLOBAL_CONTROL_DEFINITIONS[name];
   const slider = document.querySelector(`[data-control="${name}"]`);
   if (!definition || !slider) return;
   const minimum = name === 'spread' ? -state.spreadMaxOffsetDb : definition.min;
   const maximum = name === 'spread' ? state.spreadMaxOffsetDb : definition.max;
   const clamped = Math.min(maximum, Math.max(minimum, Number(value)));
-  const normalized = Number(clamped.toFixed(2));
+  const normalized = precise ? clamped : Number(clamped.toFixed(2));
   state[name] = normalized;
   slider.value = String(normalized);
   const output = document.querySelector(`[data-output="${name}"]`);
@@ -4519,7 +4520,7 @@ let sweetspots = readSweetspots();
 const persistSweetspots = () => {
   try { window.localStorage.setItem(SWEETSPOT_STORAGE_KEY, JSON.stringify({ version: 1, slots: sweetspots })); } catch { /* Storage may be unavailable. */ }
 };
-const syncUiFromAudioState = snapshot => {
+const syncUiFromAudioState = (snapshot, fromPreset = false) => {
   if (!snapshot) return;
   Object.assign(state, window.ResonantState.normalizeDynamicEqState(snapshot));
   Object.assign(state, window.ResonantState.normalizeModulationState(snapshot));
@@ -4552,10 +4553,10 @@ const syncUiFromAudioState = snapshot => {
   state.feedbackAllRight = Boolean(snapshot.feedbackAllRight);
   if (snapshot.spreadMaxOffsetDb !== undefined) state.spreadMaxOffsetDb = Number(snapshot.spreadMaxOffsetDb);
   configureSpreadControl(state.spreadMaxOffsetDb);
-  if (snapshot.resonance !== undefined) renderGlobalControlValue('resonance', snapshot.resonance);
-  if (snapshot.inputGainDb !== undefined) renderGlobalControlValue('inputGain', snapshot.inputGainDb);
-  if (snapshot.dryWet !== undefined) renderGlobalControlValue('dryWet', snapshot.dryWet);
-  if (snapshot.spread !== undefined) renderGlobalControlValue('spread', snapshot.spread);
+  if (snapshot.resonance !== undefined) renderGlobalControlValue('resonance', snapshot.resonance, fromPreset);
+  if (snapshot.inputGainDb !== undefined) renderGlobalControlValue('inputGain', snapshot.inputGainDb, fromPreset);
+  if (snapshot.dryWet !== undefined) renderGlobalControlValue('dryWet', snapshot.dryWet, fromPreset);
+  if (snapshot.spread !== undefined) renderGlobalControlValue('spread', snapshot.spread, fromPreset);
   if (snapshot.volumeDb !== undefined) renderGlobalControlValue('volume', snapshot.volumeDb);
   if (snapshot.spreadMode !== undefined) state.spreadMode = snapshot.spreadMode;
   if (snapshot.spreadCurve !== undefined) state.spreadCurve = snapshot.spreadCurve;
@@ -4569,7 +4570,7 @@ const syncUiFromAudioState = snapshot => {
     fbAllButton.textContent = 'FB ALL';
     fbAllButton.setAttribute('aria-pressed', String(state.feedbackAllLeft));
   }
-  updatePerChannelBands();
+  updatePerChannelBands(!fromPreset);
   const selectValues = [
     [outputGuardSelect, snapshot.outputGuardEnabled === undefined ? undefined : snapshot.outputGuardEnabled ? 'on' : 'off'],
     [outputProtectionSelect, snapshot.outputProtectionEnabled === undefined ? undefined : snapshot.outputProtectionEnabled ? 'on' : 'off'],
@@ -4620,11 +4621,106 @@ const syncUiFromAudioState = snapshot => {
   renderBandSliderValues();
   renderFilterPower();
   renderFilterMode();
-  renderLfoControls();
-  renderEnvelopeControls();
-  renderClockModControls();
-  renderMacroControls();
+  // Hidden source editors render from this base state when their workspace
+  // opens. Morph must not rebuild their slot and assignment DOM every frame.
+  if (!fromPreset || state.selectedWorkspaceMode === 'lfo') renderLfoControls();
+  if (!fromPreset || state.selectedWorkspaceMode === 'envelope-follower') renderEnvelopeControls();
+  if (!fromPreset || state.selectedWorkspaceMode === 'clock-mod') renderClockModControls();
+  if (!fromPreset || state.selectedWorkspaceMode === 'makros') renderMacroControls();
 };
+// Product presets project explicit bases through the existing engine setters.
+// Initialization only reads state/storage; it never recalls or changes audio.
+const presetContract = createPresetContract(window.ResonantState, audioEngine.getState());
+const presetStore = new PresetStore(presetContract, {
+  getItem: key => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value)
+});
+const presetList = document.querySelector('[data-preset-list]');
+const presetNameInput = document.querySelector('[data-preset-name]');
+const presetStatus = document.querySelector('[data-preset-status]');
+const presetMorph = document.querySelector('[data-preset-morph]');
+let selectedPresetId = 'factory:init';
+let presetConfirmation = null;
+const captureProductionState = () => presetContract.capturePresetState(audioEngine.getState(), state);
+const applyProductionState = (snapshot, morph = false) => {
+  const continuous = morph && presetStructureKey(captureProductionState()) === presetStructureKey(snapshot);
+  const normalized = presetContract.applyPresetState(audioEngine, snapshot, { continuous });
+  syncUiFromAudioState({ ...audioEngine.getState(), bandChannelLinked: normalized.bandChannelLinked }, true);
+  return normalized;
+};
+const setPresetStatus = message => { presetStatus.textContent = [message, presetStore.error].filter(Boolean).join(' · '); };
+const cancelPresetConfirmation = () => { presetConfirmation = null; document.querySelector('[data-preset-confirmation]').hidden = true; };
+const renderPresetControls = () => {
+  const options = [{ label: 'FACTORY', entries: [{ id: 'factory:init', name: 'INIT' }] }, { label: 'USER', entries: presetStore.presets }];
+  presetList.replaceChildren(...options.map(group => {
+    const element = document.createElement('optgroup'); element.label = group.label;
+    group.entries.forEach(entry => { const option = document.createElement('option'); option.value = entry.id; option.textContent = entry.name; element.append(option); });
+    return element;
+  }));
+  presetList.value = selectedPresetId;
+  presetNameInput.value = selectedPresetId === 'factory:init' ? 'INIT' : presetStore.entry(selectedPresetId)?.name || '';
+  document.querySelector('[data-preset-selected-name]').textContent = presetNameInput.value;
+  for (const action of ['update', 'rename', 'delete']) document.querySelector(`[data-preset-action="${action}"]`).disabled = selectedPresetId === 'factory:init';
+  for (const slot of ['A', 'B']) {
+    document.querySelector(`[data-snapshot-status="${slot}"]`).textContent = presetStore.snapshots[slot] ? 'CAPTURED' : 'EMPTY';
+    document.querySelector(`[data-snapshot-recall="${slot}"]`).disabled = !presetStore.snapshots[slot];
+  }
+  presetMorph.disabled = !(presetStore.snapshots.A && presetStore.snapshots.B);
+};
+const runPresetAction = action => {
+  try { action(); } catch (error) { setPresetStatus(error.message); }
+};
+const requestPresetConfirmation = (label, action) => {
+  presetConfirmation = { id: selectedPresetId, action };
+  document.querySelector('[data-preset-confirm-label]').textContent = label;
+  document.querySelector('[data-preset-confirmation]').hidden = false;
+  document.querySelector('[data-preset-confirm]').focus();
+};
+const downloadPresets = (data, filename) => {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
+};
+const presetActions = {
+  load: () => { applyProductionState(selectedPresetId === 'factory:init' ? presetContract.init : presetStore.entry(selectedPresetId).state); setPresetStatus('PRESET LOADED'); },
+  save: () => { selectedPresetId = presetStore.saveAs(presetNameInput.value, captureProductionState()).id; renderPresetControls(); setPresetStatus('PRESET SAVED'); },
+  update: () => requestPresetConfirmation('UPDATE ausgewähltes User-Preset?', () => { presetStore.update(selectedPresetId, captureProductionState()); setPresetStatus('PRESET UPDATED'); }),
+  rename: () => { presetStore.rename(selectedPresetId, presetNameInput.value); renderPresetControls(); setPresetStatus('PRESET RENAMED'); },
+  duplicate: () => { selectedPresetId = presetStore.duplicate(selectedPresetId, presetNameInput.value).id; renderPresetControls(); setPresetStatus('PRESET DUPLICATED'); },
+  delete: () => requestPresetConfirmation('DELETE ausgewähltes User-Preset?', () => { presetStore.delete(selectedPresetId); selectedPresetId = 'factory:init'; renderPresetControls(); setPresetStatus('PRESET DELETED'); }),
+  import: () => document.querySelector('[data-preset-import]').click(),
+  export: () => { downloadPresets(presetStore.exportPreset(selectedPresetId), 'da-filta-preset.json'); setPresetStatus('PRESET EXPORTED'); },
+  'export-library': () => { downloadPresets(presetStore.exportLibrary(), 'da-filta-preset-library.json'); setPresetStatus('LIBRARY EXPORTED'); }
+};
+presetList.addEventListener('change', () => { selectedPresetId = presetList.value; cancelPresetConfirmation(); renderPresetControls(); setPresetStatus('SELECTED · LOAD TO RECALL'); });
+document.querySelectorAll('[data-preset-action]').forEach(button => button.addEventListener('click', () => { cancelPresetConfirmation(); runPresetAction(presetActions[button.dataset.presetAction]); }));
+document.querySelector('[data-preset-confirm]').addEventListener('click', () => { const pending = presetConfirmation; cancelPresetConfirmation(); if (pending?.id === selectedPresetId) runPresetAction(pending.action); });
+document.querySelector('[data-preset-cancel]').addEventListener('click', cancelPresetConfirmation);
+document.querySelector('[data-preset-import]').addEventListener('change', async event => {
+  const file = event.target.files[0]; if (!file) return;
+  try { const imported = presetStore.import(await file.text()); if (imported.length) selectedPresetId = imported[0].id; renderPresetControls(); setPresetStatus(`${imported.length} PRESETS IMPORTED`); }
+  catch (error) { setPresetStatus(`IMPORT ERROR: ${error.message}`); }
+  finally { event.target.value = ''; }
+});
+document.querySelectorAll('[data-snapshot-capture]').forEach(button => button.addEventListener('click', () => runPresetAction(() => {
+  presetStore.capture(button.dataset.snapshotCapture, captureProductionState()); renderPresetControls(); setPresetStatus('SNAPSHOT CAPTURED');
+})));
+document.querySelectorAll('[data-snapshot-recall]').forEach(button => button.addEventListener('click', () => runPresetAction(() => {
+  const slot = button.dataset.snapshotRecall; applyProductionState(presetStore.snapshots[slot]); presetMorph.value = slot === 'A' ? '0' : '100';
+  document.querySelector('[data-preset-morph-output]').textContent = `${presetMorph.value} %`; setPresetStatus(`SNAPSHOT ${slot} RECALLED`);
+})));
+presetMorph.addEventListener('input', () => runPresetAction(() => {
+  if (presetMorph.disabled) return;
+  applyProductionState(presetContract.interpolatePresetState(presetStore.snapshots.A, presetStore.snapshots.B, Number(presetMorph.value), audioEngine), true);
+  document.querySelector('[data-preset-morph-output]').textContent = `${presetMorph.value} %`; setPresetStatus('MORPH · DISCRETE A < 50 % / B ≥ 50 %');
+}));
+document.querySelector('#mode-presets').addEventListener('keydown', event => {
+  if (event.target.closest('button') && ['Enter', ' '].includes(event.key)) event.stopPropagation();
+  if (event.key === 'Escape') cancelPresetConfirmation();
+});
+renderPresetControls(); setPresetStatus('CAPTURE A + B TO ENABLE MORPH');
+window.PresetMode = Object.freeze({ capture: captureProductionState, apply: applyProductionState, contract: presetContract,
+  getState: () => ({ presets: structuredClone(presetStore.presets), snapshots: structuredClone(presetStore.snapshots), selectedPresetId }),
+  getAudioEngine: () => audioEngine });
+
 // This is the complete, explicit DEV/LAB snapshot contract. Normal app state
 // is intentionally absent: DEV/LAB snapshots are experimental configurations,
 // not production presets.

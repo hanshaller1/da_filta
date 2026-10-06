@@ -749,7 +749,33 @@
                 <div class="lfo-assignments"><div class="lfo-assignment-list" data-macro-assignments aria-label="Macro assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment" type="button" data-macro-add-assignment>+ ADD ASSIGNMENT</button></div>
               </section>
             </section>
-            <section class="mode-placeholder" id="mode-presets" role="tabpanel" aria-labelledby="mode-tab-presets" data-mode-panel="presets" hidden><strong>PRESETS / SNAPSHOTS</strong><span>Preset management – coming later</span></section>
+            <section class="filter-mode-panel lfo-mode-panel preset-mode-panel" id="mode-presets" role="tabpanel" aria-labelledby="mode-tab-presets" data-mode-panel="presets" hidden>
+              <header class="lfo-workspace-header"><strong>PRESETS / SNAPSHOTS</strong><span>PRODUCTION BASE STATE</span></header>
+              <div class="preset-library">
+                <label class="lfo-target-control"><span>PRESET</span><select data-preset-list aria-label="Preset auswählen"></select></label>
+                <label class="lfo-target-control"><span>NAME</span><input type="text" maxlength="64" data-preset-name aria-label="Presetname" autocomplete="off"></label>
+                <span class="preset-selected-name" data-preset-selected-name aria-label="Ausgewählter Presetname">INIT</span>
+                <div class="preset-actions">
+                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="load">LOAD</button>
+                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="save">SAVE AS</button>
+                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="update">UPDATE</button>
+                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="rename">RENAME</button>
+                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="duplicate">DUPLICATE</button>
+                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="delete">DELETE</button>
+                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="import">IMPORT</button>
+                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="export">EXPORT PRESET</button>
+                  <button class="dynamic-eq-view-toggle" type="button" data-preset-action="export-library">EXPORT LIBRARY</button>
+                </div>
+                <input type="file" accept=".json,application/json" data-preset-import hidden>
+                <div class="preset-confirmation" data-preset-confirmation hidden><span data-preset-confirm-label></span><button class="dynamic-eq-view-toggle" type="button" data-preset-confirm>CONFIRM</button><button class="dynamic-eq-view-toggle" type="button" data-preset-cancel>CANCEL</button></div>
+              </div>
+              <div class="preset-snapshots">
+                <section class="preset-snapshot" aria-label="Snapshot A"><header class="lfo-workspace-header"><strong>SNAPSHOT A</strong><span data-snapshot-status="A">EMPTY</span></header><div class="preset-actions"><button class="dynamic-eq-view-toggle" type="button" data-snapshot-capture="A">CAPTURE A</button><button class="dynamic-eq-view-toggle" type="button" data-snapshot-recall="A" disabled>RECALL A</button></div></section>
+                <section class="preset-snapshot" aria-label="Snapshot B"><header class="lfo-workspace-header"><strong>SNAPSHOT B</strong><span data-snapshot-status="B">EMPTY</span></header><div class="preset-actions"><button class="dynamic-eq-view-toggle" type="button" data-snapshot-capture="B">CAPTURE B</button><button class="dynamic-eq-view-toggle" type="button" data-snapshot-recall="B" disabled>RECALL B</button></div></section>
+              </div>
+              <label class="filter-parameter-control preset-morph"><span>MORPH · A ↔ B</span><output for="preset-morph" data-preset-morph-output>0 %</output><input id="preset-morph" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-preset-morph disabled aria-label="Morph zwischen Snapshot A und B"></label>
+              <div class="lfo-module-status" data-preset-status role="status" aria-live="polite">CAPTURE A + B TO ENABLE MORPH</div>
+            </section>
           </section>
           </div>
           <section class="persistent-band-control-panel" aria-label="Permanente Band Controls">

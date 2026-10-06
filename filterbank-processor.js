@@ -584,7 +584,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
 
   setDynamicEq(source) {
     const settings = normalizeDynamicEq(source, this.bandCount);
-    if (this.learnedReferenceFrozen && settings.learnedReferenceFrozen && this.learnedReferenceValid) {
+    if (!source.restoreReference && this.learnedReferenceFrozen && settings.learnedReferenceFrozen && this.learnedReferenceValid) {
       settings.learnedReferenceDb = [...this.learnedReferenceDb];
       settings.learnedReferenceValid = true;
     }
@@ -1687,6 +1687,30 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (!wasRunning && this.lfoModuleEnabled) this.modulationTelemetryCounter = this.modulationTelemetryInterval;
   }
 
+  setModulationBaseValues(source) {
+    // The caller has already validated/normalized a production preset. Discrete
+    // configuration is applied separately, once on a structural boundary.
+    if (!this.modulationCore.setAssignmentAmounts(source.assignments)) { this.setModulationState(source); return; }
+    Object.assign(this.filterShapeParams, source.filterShapeParams);
+    Object.assign(this.effectiveFilterShapeParams, source.filterShapeParams);
+    this.baseResonance = this.clampResonance(source.baseResonance);
+    this.dryWet = source.dryWet;
+    this.baseSpread = source.baseSpread;
+    this.baseFeedbackAllAmount = source.feedbackAllAmount;
+    if (source.clock) this.clockCore.configure(source.clock);
+    this.clockMod.configure(source.clockMod, this.clockCore);
+    for (let index = 0; index < this.lfoSources.length; index += 1) {
+      this.lfoSources[index].configure({ ...source.lfoSources[index], moduleEnabled: this.lfoModuleEnabled });
+      this.envelopeSources[index].configure(source.envelopeSources[index]);
+    }
+    for (const macro of source.macroSources) {
+      const sample = this.modulationCore.sources.get(macro.id);
+      sample.value = macro.value / 100; sample.rightValue = sample.value;
+    }
+    this.updateModulationTargets();
+    this.modulationTelemetryDirty = true;
+  }
+
   prepareModulationRuntime() {
     const nodes = new Map();
     for (const [type, sources] of [[0, this.lfoSources], [1, this.envelopeSources]]) for (const processor of sources) {
@@ -2137,6 +2161,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     }
     if (data.type === 'set-dynamic-eq') { this.setDynamicEq(data); return; }
     if (data.type === 'set-modulation-state') { this.setModulationState(data); return; }
+    if (data.type === 'set-modulation-base-values') { this.setModulationBaseValues(data); return; }
     if (data.type === 'set-macro-value') {
       const sample = this.modulationCore.sources.get(data.sourceId);
       if (sample && /^macro\.[1-8]$/.test(data.sourceId) && Number.isFinite(Number(data.value))) {

@@ -432,9 +432,9 @@
       return this.filterbankEnabled;
     }
 
-    setDynamicEq(source) {
+    setDynamicEq(source, restoreReference = false) {
       Object.assign(this, window.ResonantState.normalizeDynamicEqState(source));
-      this.filterbank?.setDynamicEq?.(this);
+      this.filterbank?.setDynamicEq?.(this, restoreReference);
       this.applySpectralCoreRequired();
       this.syncModulationState();
     }
@@ -543,7 +543,38 @@
     }
 
     syncModulationState() {
+      if (this.presetUpdateMode) return;
       this.filterbank?.setModulationState?.(this.getModulationState());
+    }
+
+    applyPresetState(snapshot, { continuous = false } = {}) {
+      // Only production bases reach this path. Session Master/Safety, devices,
+      // DEV architectures, transport and all existing audio nodes stay owned here.
+      this.presetUpdateMode = continuous ? 'continuous' : 'structural';
+      try {
+        if (this.filterbankEnabled !== snapshot.filterbankEnabled) this.setFilterbankEnabled(snapshot.filterbankEnabled);
+        if (this.filterEnabled !== snapshot.filterEnabled) this.setFilterEnabled(snapshot.filterEnabled);
+        this.setFilterState(snapshot);
+        if (!continuous || Object.keys(window.ResonantState.normalizeDynamicEqState(snapshot)).some(key =>
+          Array.isArray(snapshot[key]) ? snapshot[key].some((value, index) => value !== this[key][index]) : snapshot[key] !== this[key])) this.setDynamicEq(snapshot, true);
+        if (this.inputGainDb !== snapshot.inputGainDb) this.setInputGainDb(snapshot.inputGainDb);
+        if (this.inputPreampStage !== snapshot.inputPreampStage) this.setInputPreampStage(snapshot.inputPreampStage);
+        if (this.inputCharacterAmount !== snapshot.inputCharacterAmount) this.setInputCharacterAmount(snapshot.inputCharacterAmount);
+        if (this.resonance !== snapshot.resonance) this.setResonance(snapshot.resonance);
+        if (this.dryWet !== snapshot.dryWet) this.setDryWet(snapshot.dryWet);
+        if (this.spread !== snapshot.spread) this.setSpread(snapshot.spread);
+        if (this.feedbackAllAmount !== snapshot.feedbackAllAmount) this.setFeedbackAllAmount(snapshot.feedbackAllAmount);
+        if (this.perChannelBands !== snapshot.perChannelBands) this.setPerChannelBands(snapshot.perChannelBands);
+        this.bandGainLeft = [...snapshot.bandGainLeft]; this.bandGainRight = [...snapshot.bandGainRight];
+        this.feedbackBandLeft = [...snapshot.feedbackBandLeft]; this.feedbackBandRight = [...snapshot.feedbackBandRight];
+        this.feedbackAllLeft = snapshot.feedbackAllLeft; this.feedbackAllRight = snapshot.feedbackAllRight;
+        this.setModulationState({ ...snapshot, lfoClock: { ...this.lfoClock, ...snapshot.lfoClock } });
+      } finally { this.presetUpdateMode = null; }
+      this.applyEffectiveBandGains();
+      if (!continuous) { this.applyEffectiveFeedbackState(); this.applySpectralCoreRequired(); }
+      const modulation = this.getModulationState();
+      if (continuous) this.filterbank?.setModulationBaseValues(modulation);
+      else this.filterbank?.setModulationState(modulation);
     }
 
     learnDynamicEq() {
@@ -577,6 +608,7 @@
     }
 
     applySpectralCoreRequired() {
+      if (this.presetUpdateMode) return;
       this.filterbank?.setSpectralCoreRequired?.(this.spectralCoreRequired);
     }
 
@@ -654,7 +686,7 @@
     }
 
     applyEffectiveBandGains() {
-      if (!this.filterbank) return;
+      if (!this.filterbank || this.presetUpdateMode) return;
       for (let index = 0; index < BAND_COUNT; index += 1) this.applyEffectiveBandGain(index);
     }
 
@@ -678,7 +710,7 @@
     }
 
     applyEffectiveFeedbackState() {
-      if (!this.filterbank) return;
+      if (!this.filterbank || this.presetUpdateMode) return;
       for (let index = 0; index < BAND_COUNT; index += 1) {
         this.filterbank.setBandFeedback('left', index, this.filterbankEnabled && this.feedbackBandLeft[index]);
         this.filterbank.setBandFeedback('right', index, this.filterbankEnabled && this.feedbackBandRight[index]);

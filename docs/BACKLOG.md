@@ -8,8 +8,23 @@ Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungstheme
 
 - MAKROS Mode ist erledigt: acht manuelle Quellen, gemeinsamer Assignment Core,
   Meta-Targets, Lost Target/Reaktivierung und bestehender State-/Snapshot-Roundtrip.
-- PRESETS / SNAPSHOTS bleibt offen und ist der nächste und letzte Featureblock vor 1.0.
+- PRESETS / SNAPSHOTS ist erledigt: versionierter Produkt-Base-State, read-only
+  INIT, User-Library mit JSON-Austausch, persistente A/B-Snapshots und semantisches
+  Morph aus unveränderlichen Endpunkten. [Vertrag](presets-snapshots.md).
+- FEATURE SET FOR 1.0 COMPLETE: kein „coming later“-Hauptmodus mehr.
 - P1-B MIDI inklusive Mapping/Learn/Relative Encoder bleibt separat offen.
+
+## Nächste Phase – Cleanup / Release-Härtung
+
+1. Backlog-/Status-Cleanup
+2. Bestehende Quarantäne bereinigen
+3. Architektur-/Doku-Konsistenz
+4. UI/UX Cleanup
+5. Regression / Performance, einschließlich 96-kHz-Morph-Callback-Reserve
+6. Release-Härtung
+7. 1.0.0
+
+Feature Freeze bedeutet noch keinen Release. Keine V2-Arbeit in dieser Phase.
 
 ## LFO / Modulation
 
@@ -165,7 +180,6 @@ Diese Punkte nicht blind als offene Arbeit behandeln; vor Umsetzung gegen den ak
 - FILTERBANK-Response für 8/10-Band-Modus
 - LCXL3 MIDI-Mapping
 - LCXL3 Shift-Layer
-- Presets
 - Feedback-Pegelsprung untersuchen
 - Resonance-Smoothing verbessern
 - AudioWorklet-Refactoring

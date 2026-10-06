@@ -474,4 +474,30 @@ export class ModulationCore {
   }
 
   getAssignments() { return this.assignments.map(assignment => ({ ...assignment })); }
+
+  // Configuration/message path only. Continuous morph edits reuse the compiled
+  // source/target links, including aggregated duplicate routes and Clock taps.
+  setAssignmentAmounts(assignments) {
+    if (assignments.length !== this.assignments.length || assignments.some((next, index) => {
+      const old = this.assignments[index];
+      return ['id', 'sourceId', 'targetId', 'channel', 'invert', 'enabled'].some(key => old[key] !== next[key]);
+    })) return false;
+    for (const record of this.compiledTargetMap.values()) for (const link of record.links) {
+      link.left = 0; link.right = 0; link.both = 0; link.rightSpread = 0;
+    }
+    this.assignments = assignments.map(row => Object.freeze({ ...row, amount: clamp(row.amount, -100, 100, 0) }));
+    for (const row of this.assignments) {
+      if (!row.enabled || this.graph.blocked.has(modulationAssignmentKey(row))) continue;
+      const record = this.compiledTargetMap.get(row.targetId);
+      const source = this.sources.get(row.sourceId);
+      const link = record?.links.find(item => item.source === source);
+      if (!link) continue;
+      const scale = row.amount / 100 * (row.invert ? -1 : 1);
+      link.left += row.channel === 'right' ? 0 : scale;
+      link.right += row.channel === 'left' ? 0 : row.channel === 'spread' ? -scale : scale;
+      if (row.channel === 'spread') link.rightSpread -= scale;
+      link.both += scale;
+    }
+    return true;
+  }
 }

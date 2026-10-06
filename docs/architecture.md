@@ -1,7 +1,8 @@
 # Current runtime architecture
 
-Reference baseline: `279e7db` after P1-A; the working implementation adds P1-C
-Input Character oversampling and legacy cleanup. This map describes behavior and does not supersede
+Feature baseline: `4c9bf80` after P2 DSP/Modulation, the Erica-style production
+resonator and macros; the working implementation adds product presets,
+snapshots and Morph. This map describes behavior and does not supersede
 historical measurement reports.
 
 ## Signal flow
@@ -24,8 +25,9 @@ taps have different positions; do not infer routing from a UI graph's location.
 
 | Component | Existing responsibility |
 | --- | --- |
-| `app.js`, `index.html`, `styles.css` | Controllers, workspace visibility, UI-only graphs, themes, MIDI setup, keyboard and DEV/LAB snapshots |
+| `app.js`, `index.html`, `styles.css` | Controllers, workspace visibility, UI-only graphs, themes, MIDI setup, keyboard, product preset/snapshot/Morph controls and separate DEV/LAB snapshots |
 | `state.js` | Base configuration, normalization and compatibility; not a second DSP engine |
+| `presets-core.mjs` | Version-1 explicit production base projection using existing normalizers; user library/file exchange, immutable A/B snapshots and semantic Morph; no DSP or parallel application state |
 | `audio-engine.js` | Web Audio graph, source selection, transport forwarding and worklet messages |
 | `filterbank.js` | Filterbank wrapper, control updates and shared band definitions |
 | `filterbank-processor.js` | Ten-band stereo processing, feedback/resonance, FILTER, Dynamic EQ and modulation application |
@@ -62,6 +64,21 @@ old states default to eight neutral empty macros. Value-only Worklet messages
 update prepared source handles without resetting modulators. Runtime retains
 the 32-sample control tick, existing smoothing and allocation-free evaluation. See
 [`modulation-core.md`](modulation-core.md) for migration and channel contracts.
+
+Product presets and A/B snapshots share one production-base contract, separate
+from DEV/LAB snapshots. INIT uses actual defaults. Library selection is silent;
+LOAD/RECALL apply through existing AudioEngine setters without recreating audio
+nodes. Master listening level, guard/safety, devices, UI, runtime histories and
+DEV architecture choices remain session-owned. Input Gain is a saved sound
+base because it drives Input Character before the dry/wet split.
+
+Morph always derives bases from immutable A/B endpoints: semantic linear/dB or
+log-frequency/time interpolation, with discrete topology switching at 50%.
+Compatible assignment amounts reuse compiled links; structural changes use the
+existing compiler/DAG only when configuration changes. All existing modulation
+still acts above these bases. Configuration work stays outside sample/control
+hotpaths; Morph does not persist per slider frame. Schema, storage, limits and
+measurement details are in [`presets-snapshots.md`](presets-snapshots.md).
 
 `tests/helpers/input-character-architecture*.cjs` and related measurement bundles
 are experiments, including frozen comparison variants. They are deliberately

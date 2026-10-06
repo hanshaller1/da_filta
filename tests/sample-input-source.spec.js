@@ -34,7 +34,14 @@ test('the INPUT combobox switches between one device source and one integrated l
   await expect(page.locator('[data-audio-source="device"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(inputSelect).toHaveValue('input-1');
   await expect(page.locator('[data-sample-slots], [data-sample-slot], [data-sample-enabled]')).toHaveCount(0);
-  await expect(page.locator('input[type="file"]')).toHaveCount(0);
+  // Product presets now support JSON exchange; the audio source still exposes
+  // no file-import path, only devices and the existing integrated sample bank.
+  await expect(page.locator('input[type="file"]')).toHaveCount(1);
+  await expect(page.locator('input[type="file"]:not([data-preset-import])')).toHaveCount(0);
+  const presetImport = page.locator('#mode-presets input[type="file"][data-preset-import]');
+  await expect(presetImport).toHaveCount(1);
+  await expect(presetImport).toHaveAttribute('accept', '.json,application/json');
+  await expect(presetImport).toBeHidden();
 
   await page.locator('[data-audio-source="sample"]').click();
   await expect(inputSelect).toHaveValue('full-drums-145');

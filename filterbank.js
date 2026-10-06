@@ -294,9 +294,9 @@
       return nextValue;
     }
 
-    setDynamicEq(source) {
+    setDynamicEq(source, restoreReference = false) {
       this.dynamicEqState = window.ResonantState.normalizeDynamicEqState(source);
-      if (!this.disposed) this.workletNode.port.postMessage({ type: 'set-dynamic-eq', ...this.dynamicEqState });
+      if (!this.disposed) this.workletNode.port.postMessage({ type: 'set-dynamic-eq', ...this.dynamicEqState, restoreReference });
       return this.dynamicEqState;
     }
 
@@ -311,6 +311,11 @@
       this.modulationState = source || null;
       if (!this.disposed) this.workletNode.port.postMessage({ type: 'set-modulation-state', ...(this.modulationState || {}) });
       return this.modulationState;
+    }
+
+    setModulationBaseValues(source) {
+      this.modulationState = source;
+      if (!this.disposed) this.workletNode.port.postMessage({ type: 'set-modulation-base-values', ...source });
     }
 
     resetLfoPhase(sourceId) {
