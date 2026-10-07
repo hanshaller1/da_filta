@@ -319,7 +319,7 @@ test('accepted resonator/P2 audio stays sample-identical with no macro configura
     for (const rate of [48000, 96000]) for (const active of [false, true]) {
       const options = { bandFrequencies: [...window.Filterbank.BAND_FREQUENCIES], bandQs: [...window.Filterbank.BAND_QS],
         bandGainLeft: Array(10).fill(20), bandGainRight: Array(10).fill(15), resonance: .3,
-        feedbackBandLeft: Array.from({ length: 10 }, (_, index) => index === 4), feedbackAllLeft: true, feedbackAllAmount: 25,
+        feedbackBandLeft: Array.from({ length: 10 }, (_, index) => index === 4), feedbackAllLeft: true, feedbackAllAmount: 25, feedbackTapModulation: 'exclude',
         modulationState: { filterbankEnabled: true, lfoModuleEnabled: active, envelopeModuleEnabled: active,
           lfoSources: Array.from({ length: 4 }, (_, index) => ({ enabled: true, rateHz: .7 + index,
             assignments: [{ id: `band.${index}`, targetId: `filterbank.band.${index}.gainDb`, amount: 5 },
