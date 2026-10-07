@@ -1184,6 +1184,48 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .dynamic-eq-view-toggle { min-height: 22px; padding: 2px 5px; border: 1px solid var(--button-border); border-radius: 3px; color: var(--muted-text); background: var(--button-background); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: .3px; cursor: pointer; }
 .dynamic-eq-view-toggle.active { color: var(--cyan); border-color: var(--cyan); background: var(--active-background); }
 .dynamic-eq-view-toggle:not(.active) { color: var(--muted-text); opacity: .62; }
+
+/* Semantic button paint only. Component selectors retain all box metrics and text sizes. */
+[data-mode-panel] :is(.ui-role-action, .ui-role-toggle, .ui-role-view, .ui-role-utility, .ui-role-danger) {
+  font-family: var(--font-ui);
+  color: var(--button-text);
+  border-color: var(--button-border);
+  background-color: var(--button-background);
+  opacity: 1;
+  cursor: pointer;
+}
+[data-mode-panel] .ui-role-view:not(.active):not([aria-pressed=true]):not([aria-selected=true]) {
+  color: var(--muted-text);
+  opacity: .62;
+}
+[data-mode-panel] .ui-role-utility { color: var(--secondary-text); }
+/* The intrinsically sized sensitivity reset keeps its local font weight. */
+[data-mode-panel] .ui-role-action:not([data-dynamic-eq-reset]) { font-weight: var(--weight-bold); }
+[data-mode-panel] .ui-role-danger {
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 55%, var(--button-border));
+}
+[data-mode-panel] :is(.ui-role-toggle, .ui-role-view, .ui-role-utility):is(.active, [aria-pressed=true], [aria-selected=true]) {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background-color: var(--active-background);
+}
+[data-mode-panel] :is(.ui-role-action, .ui-role-toggle, .ui-role-view, .ui-role-utility):not(:disabled):hover {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+[data-mode-panel] .ui-role-danger:not(:disabled):hover { color: var(--error); border-color: var(--error); }
+[data-mode-panel] :is(.ui-role-action, .ui-role-toggle, .ui-role-view, .ui-role-utility, .ui-role-danger):disabled {
+  color: var(--secondary-text);
+  border-color: var(--button-border);
+  background-color: var(--button-background);
+  opacity: .42;
+  cursor: not-allowed;
+}
+[data-mode-panel] :is(.ui-role-action, .ui-role-toggle, .ui-role-view, .ui-role-utility, .ui-role-danger):focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
 .dynamic-eq-graph { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
 .dynamic-eq-y-axis { z-index: 2; display: flex; width: max-content; flex-direction: column; justify-content: space-between; justify-self: start; grid-column: 1; grid-row: 1; color: var(--secondary-text); font-size: var(--text-micro); font-weight: var(--weight-regular); text-align: left; white-space: nowrap; pointer-events: none; }
 .dynamic-eq-plot { z-index: 1; position: relative; grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; border: 1px solid var(--output-border); background-color: var(--graph-background); background-image: linear-gradient(to bottom, var(--graph-grid) 1px, transparent 1px); background-size: 100% 20%; }
@@ -1433,6 +1475,19 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   font-size: var(--text-panel-title);
   font-weight: var(--weight-bold);
 }
+/* Workspace titles share paint and typography; local sizes retain their line boxes. */
+.filterbank-mode-panel .analyzer-title-status > strong,
+#mode-filter > .filter-response > header > strong,
+.clock-mod-panel > .lfo-workspace-header > strong,
+.lfo-mode-panel > .lfo-workspace-header > strong,
+.macro-mode-panel > .lfo-workspace-header > strong,
+.preset-workspace > .lfo-workspace-header > strong,
+.dynamic-eq-response > header > strong {
+  font-family: var(--font-ui);
+  font-weight: var(--weight-bold);
+  letter-spacing: 1px;
+  color: var(--cyan);
+}
 .analyzer-status {
   font-size: var(--text-value);
   font-weight: var(--weight-regular);
@@ -1446,6 +1501,31 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .dev-lab-group h2 {
   font-size: var(--text-section-title);
   font-weight: var(--weight-bold);
+}
+/* Group titles share emphasis; local font sizes and line boxes remain component-owned. */
+[data-mode-panel] .filterbank-controls-header > strong,
+[data-mode-panel] .filter-type-control > span,
+[data-mode-panel] .filter-type-group > strong,
+.clock-mod-direction-row > span,
+.clock-mod-source-control > span,
+.envelope-detector-row > .envelope-control-label,
+.dynamic-eq-sensitivity-heading > strong,
+.dynamic-eq-mode > span,
+.dynamic-eq-mode-heading > span,
+.macro-assignment-editor > .lfo-workspace-header > strong,
+.preset-snapshot > .lfo-workspace-header > strong {
+  font-family: var(--font-ui);
+  font-weight: var(--weight-bold);
+  color: var(--secondary-text);
+}
+/* Single-parameter labels are separate from group titles, including SOURCE INVERT. */
+[data-mode-panel] .filter-parameter-control > span,
+[data-mode-panel] .lfo-inline-control > span,
+[data-mode-panel] .clock-mod-inline-control > span,
+[data-mode-panel] .lfo-target-control > span,
+[data-mode-panel] .lfo-polarity-control > span {
+  font-family: var(--font-ui);
+  color: var(--muted-text);
 }
 .filterbank-controls-header .fb-all-control {
   font-size: var(--text-utility);
@@ -1708,8 +1788,25 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .lfo-target-control small { position: absolute; right: 0; bottom: -12px; left: 0; overflow: hidden; height: 9px; min-height: 9px; color: var(--secondary-text); font-size: 8px; letter-spacing: .2px; line-height: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .lfo-target-control.is-inactive small { color: var(--active-color, #f4d35e); }
 .lfo-reset { justify-self: end; min-height: 26px; padding: 3px 7px; font-size: 9px; }
-.lfo-source-actions { align-content: center; padding: 9px; }
-.lfo-mode-panel:not(.envelope-mode-panel) .lfo-controls { grid-template-rows: auto auto auto minmax(88px, 1fr); align-content: start; }
+#mode-lfo .lfo-source-actions { grid-template-columns: repeat(2, minmax(max-content, 1fr)); grid-template-rows: auto auto; align-content: center; padding: 5px 4px; }
+#mode-lfo .lfo-source-actions > span { grid-column: 1 / -1; }
+/* Keep the parameter track at its content height instead of shrinking below its children. */
+/* 91px reserves a complete assignment row (58px), its gap (8px), and ADD (25px). */
+#mode-lfo .lfo-controls { grid-template-rows: auto auto min-content minmax(91px, 1fr); gap: 6px; align-content: start; }
+#mode-lfo .lfo-assignments { grid-template-rows: minmax(58px, 1fr) auto; }
+@media (min-width: 561px) {
+  #mode-lfo .lfo-clock-row > .lfo-midi-status { grid-column: 5; grid-row: 1; align-self: start; padding-bottom: 0; }
+  #mode-lfo .lfo-clock-row > .lfo-midi-setup { grid-column: 5; grid-row: 1; }
+  #mode-lfo .lfo-controls > .lfo-parameter-grid { grid-template-columns: minmax(0, 1fr) minmax(max-content, 1fr) repeat(3, minmax(0, 1fr)); grid-template-rows: auto; }
+  #mode-lfo .lfo-parameter-grid > .filter-parameter-control,
+  #mode-lfo .lfo-parameter-grid > .lfo-polarity-control { padding-block: 5px; }
+}
+@media (min-width: 1051px) and (max-width: 1600px) {
+  #mode-lfo .lfo-parameter-grid > .filter-parameter-control > span { grid-column: 1 / -1; }
+  #mode-lfo .lfo-parameter-grid > .filter-parameter-control > output { grid-column: 2; }
+  #mode-lfo .lfo-polarity-control > div { flex-wrap: wrap; }
+  #mode-lfo .lfo-polarity-control button { min-width: max-content; }
+}
 .lfo-assignments, .lfo-assignment-list { display: grid; gap: 8px; min-width: 0; min-height: 0; }
 .lfo-assignments { grid-template-rows: minmax(0, 1fr) auto; }
 .lfo-assignment-list { align-content: start; overflow-y: auto; }
@@ -1740,6 +1837,12 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .lfo-midi-status { align-self: center; }
   .lfo-parameter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(55px, auto)); }
   .lfo-controls > .lfo-parameter-grid:not(.envelope-parameter-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #mode-lfo .lfo-source-actions { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; padding-inline: 0; }
+  #mode-lfo .lfo-parameter-grid > .filter-parameter-control > span { grid-column: 1 / -1; }
+  #mode-lfo .lfo-parameter-grid > .filter-parameter-control > output { grid-column: 2; }
+  #mode-lfo .lfo-polarity-control { padding-inline: 0; }
+  #mode-lfo .lfo-polarity-control > div { flex-wrap: wrap; }
+  #mode-lfo .lfo-polarity-control button { min-width: max-content; }
   .lfo-assignment-row { grid-template-columns: minmax(0, 1fr) minmax(72px, .6fr); }
   .lfo-assignment-list > .lfo-assignment-row { grid-template-columns: minmax(0, 1fr) 68px 38px auto; }
   .lfo-assignment-list .lfo-target-control { grid-column: 1 / -1; }
