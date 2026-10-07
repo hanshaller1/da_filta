@@ -28,8 +28,7 @@ Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungstheme
 1. Backlog-/Status-Cleanup
 2. Bestehende Quarantäne bereinigen
 3. Architektur-/Doku-Konsistenz
-4. UI/UX Cleanup: Mode-Workspace-Konsistenz mit gemeinsamen UI-Rollen erledigt;
-   übrige Layoutarbeit bleibt offen.
+4. UI/UX Cleanup
 5. Regression / Performance, einschließlich 96-kHz-Morph-Callback-Reserve
 6. Release-Härtung
 7. 1.0.0
