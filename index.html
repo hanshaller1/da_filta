@@ -289,7 +289,7 @@
           >
           <label class="control-card"
             ><span class="control-label">RESONANCE</span
-            ><label class="fb-all-control"><button class="fb-all-toggle" type="button" aria-label="FB All">FB ALL</button></label
+            ><label class="fb-all-control"><button class="fb-all-toggle ui-role-toggle" type="button" aria-label="FB All">FB ALL</button></label
             ><span class="control-row"
               ><span class="range-hit-area"
                 ><input
@@ -500,7 +500,7 @@
             </section>
             <section class="filter-mode-panel" id="mode-filter" role="tabpanel" aria-labelledby="mode-tab-filter" data-mode-panel="filter" hidden>
               <section class="filter-response" aria-label="Filter control response">
-                <header><strong>FILTER RESPONSE</strong><div class="filter-response-header-right"><span data-filter-response-descriptor>10-BAND CONTROL SHAPE</span><div class="filter-response-view-toggles" role="group" aria-label="Filtergraph layers"><button type="button" class="dynamic-eq-view-toggle" data-filter-view="input" aria-pressed="true" title="Reales Spektrum vor der Filterbank">INPUT</button><button type="button" class="dynamic-eq-view-toggle" data-filter-view="output" aria-pressed="true" title="Reales Spektrum am Ausgang der Filterbank">OUTPUT</button><button type="button" class="dynamic-eq-view-toggle" data-filter-view="filter" aria-pressed="true" title="10-Band Filter-Response">FILTER</button></div></div></header>
+                <header><strong>FILTER RESPONSE</strong><div class="filter-response-header-right"><span data-filter-response-descriptor>10-BAND CONTROL SHAPE</span><div class="filter-response-view-toggles" role="group" aria-label="Filtergraph layers"><button type="button" class="dynamic-eq-view-toggle ui-role-view" data-filter-view="input" aria-pressed="true" title="Reales Spektrum vor der Filterbank">INPUT</button><button type="button" class="dynamic-eq-view-toggle ui-role-view" data-filter-view="output" aria-pressed="true" title="Reales Spektrum am Ausgang der Filterbank">OUTPUT</button><button type="button" class="dynamic-eq-view-toggle ui-role-view" data-filter-view="filter" aria-pressed="true" title="10-Band Filter-Response">FILTER</button></div></div></header>
                 <div class="filter-response-chart" data-filter-view-input="true" data-filter-view-output="true" data-filter-view-filter="true">
                   <div class="filter-response-signal-axis" data-filter-signal-axis role="group" aria-label="Signalpegel dBFS"><span>0</span><span>−22.5</span><span>−45</span><span>−67.5</span><span>−90 dBFS</span></div>
                   <span class="filter-response-ceiling" data-filter-response-ceiling>+12 dB</span>
@@ -548,7 +548,7 @@
                 </section>
                 <section class="filter-controls clock-mod-controls" aria-label="Clock Mod controls">
                   <div class="filter-type-control clock-mod-wave-control"><span>WAVE</span><div class="filter-type-options clock-mod-wave-buttons" role="group" aria-label="Clock Mod waveform">
-                    <button type="button" data-clock-mod-waveform="sine">SINE</button><button type="button" data-clock-mod-waveform="square">SQUARE</button><button type="button" data-clock-mod-waveform="triangle">TRIANGLE</button><button type="button" data-clock-mod-waveform="saw">SAW</button><button type="button" data-clock-mod-waveform="random">RANDOM</button>
+                    <button type="button" data-clock-mod-waveform="sine" class="ui-role-toggle">SINE</button><button type="button" data-clock-mod-waveform="square" class="ui-role-toggle">SQUARE</button><button type="button" data-clock-mod-waveform="triangle" class="ui-role-toggle">TRIANGLE</button><button type="button" data-clock-mod-waveform="saw" class="ui-role-toggle">SAW</button><button type="button" data-clock-mod-waveform="random" class="ui-role-toggle">RANDOM</button>
                   </div></div>
                   <div class="clock-mod-parameters">
                     <label class="filter-parameter-control"><span>SOURCE FREQ</span><output data-clock-mod-frequency-output>1.00 Hz</output><input class="filter-style-slider" type="range" min="0" max="1000" step="1" data-clock-mod-frequency aria-label="Source frequency"></label>
@@ -556,16 +556,16 @@
                     <label class="filter-parameter-control"><span>MIDPOINT</span><output data-clock-mod-midpoint-output>0.0 dB</output><input class="filter-style-slider" type="range" min="-60" max="24" step="0.1" data-clock-mod-midpoint aria-label="Band gain midpoint"></label>
                   </div>
                   <div class="clock-mod-direction-row"><span>DIRECTION</span><div class="filter-type-options" role="group" aria-label="Clock Mod progression direction">
-                    <button type="button" data-clock-mod-direction="forward">FORWARD</button><button type="button" data-clock-mod-direction="backward">BACKWARD</button><button type="button" data-clock-mod-direction="ping-pong">PING-PONG</button><button type="button" data-clock-mod-direction="random">RANDOM</button>
+                    <button type="button" data-clock-mod-direction="forward" class="ui-role-toggle">FORWARD</button><button type="button" data-clock-mod-direction="backward" class="ui-role-toggle">BACKWARD</button><button type="button" data-clock-mod-direction="ping-pong" class="ui-role-toggle">PING-PONG</button><button type="button" data-clock-mod-direction="random" class="ui-role-toggle">RANDOM</button>
                   </div></div>
                   <div class="clock-mod-clock-row">
-                    <div class="clock-mod-source-control"><span>CLOCK SOURCE</span><div class="filter-type-options" role="group" aria-label="Clock source"><button type="button" data-clock-mod-source="internal">INTERNAL</button><button type="button" data-clock-mod-source="midi">MIDI</button></div></div>
+                    <div class="clock-mod-source-control"><span>CLOCK SOURCE</span><div class="filter-type-options" role="group" aria-label="Clock source"><button type="button" data-clock-mod-source="internal" class="ui-role-toggle">INTERNAL</button><button type="button" data-clock-mod-source="midi" class="ui-role-toggle">MIDI</button></div></div>
                     <label class="clock-mod-inline-control" data-clock-mod-bpm-control><span>INTERNAL BPM</span><input data-clock-mod-bpm type="number" min="1" max="10000" step="1" value="120" aria-label="Internal BPM"></label>
                     <div class="clock-mod-inline-control clock-mod-midi-tempo" data-clock-mod-midi-tempo><span>INCOMING BPM</span><output data-clock-mod-midi-bpm>−</output></div>
                     <label class="clock-mod-inline-control" data-clock-mod-scale-control><span>CLOCK SCALE</span><select data-clock-mod-scale aria-label="MIDI clock scale"><option>1/32</option><option>1/16</option><option>1/8</option><option>1/4</option><option>1/2</option><option>1/1</option><option>2/1</option><option>4/1</option></select></label>
                   </div>
-                  <div class="clock-mod-actions"><button class="dynamic-eq-view-toggle" type="button" data-clock-mod-right-invert aria-pressed="false">RIGHT INVERT OFF</button><button class="dynamic-eq-view-toggle" type="button" data-clock-mod-reset>RESET PROGRESSION</button></div>
-                  <div class="lfo-assignments"><div class="lfo-assignment-list" data-clock-mod-assignments aria-label="Clock Mod assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment" type="button" data-clock-mod-add-assignment>+ ADD ASSIGNMENT</button></div>
+                  <div class="clock-mod-actions"><button class="dynamic-eq-view-toggle ui-role-utility" type="button" data-clock-mod-right-invert aria-pressed="false">RIGHT INVERT OFF</button><button class="dynamic-eq-view-toggle ui-role-action" type="button" data-clock-mod-reset>RESET PROGRESSION</button></div>
+                  <div class="lfo-assignments"><div class="lfo-assignment-list" data-clock-mod-assignments aria-label="Clock Mod assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment ui-role-action" type="button" data-clock-mod-add-assignment>+ ADD ASSIGNMENT</button></div>
                 </section>
               </div>
             </section>
@@ -574,7 +574,7 @@
               <nav class="lfo-slot-navigator" data-lfo-slots aria-label="LFO slots"></nav>
               <div class="lfo-editor">
                 <section class="filter-response lfo-response" aria-label="Selected LFO waveform">
-                  <header><strong data-lfo-title>LFO 1 · SINE</strong><button class="dynamic-eq-view-toggle" type="button" data-lfo-source-enable aria-pressed="false">SOURCE OFF</button></header>
+                  <header><strong data-lfo-title>LFO 1 · SINE</strong><button class="dynamic-eq-view-toggle ui-role-utility" type="button" data-lfo-source-enable aria-pressed="false">SOURCE OFF</button></header>
                   <div class="filter-response-chart lfo-visualizer" data-lfo-visualizer>
                     <svg viewBox="0 0 1000 120" preserveAspectRatio="none" role="img" aria-label="Selected LFO waveform and audio-thread phase">
                       <line class="lfo-grid-line" x1="0" y1="6" x2="1000" y2="6"></line>
@@ -590,26 +590,26 @@
                 </section>
                 <section class="filter-controls lfo-controls" aria-label="Selected LFO controls">
                   <div class="filter-type-control lfo-wave-control"><span>WAVEFORM</span><div class="filter-type-options lfo-wave-buttons" role="group" aria-label="LFO waveform">
-                    <button type="button" data-lfo-waveform="sine">SINE</button><button type="button" data-lfo-waveform="triangle">TRIANGLE</button><button type="button" data-lfo-waveform="saw-up">SAW UP</button><button type="button" data-lfo-waveform="saw-down">SAW DOWN</button><button type="button" data-lfo-waveform="square">SQUARE</button><button type="button" data-lfo-waveform="pulse">PULSE</button><button type="button" data-lfo-waveform="sample-hold">RND</button><button type="button" data-lfo-waveform="noise">NOISE</button>
+                    <button type="button" data-lfo-waveform="sine" class="ui-role-toggle">SINE</button><button type="button" data-lfo-waveform="triangle" class="ui-role-toggle">TRIANGLE</button><button type="button" data-lfo-waveform="saw-up" class="ui-role-toggle">SAW UP</button><button type="button" data-lfo-waveform="saw-down" class="ui-role-toggle">SAW DOWN</button><button type="button" data-lfo-waveform="square" class="ui-role-toggle">SQUARE</button><button type="button" data-lfo-waveform="pulse" class="ui-role-toggle">PULSE</button><button type="button" data-lfo-waveform="sample-hold" class="ui-role-toggle">RND</button><button type="button" data-lfo-waveform="noise" class="ui-role-toggle">NOISE</button>
                   </div></div>
                   <div class="lfo-row lfo-clock-row">
-                    <div class="lfo-inline-control"><span>RATE MODE</span><div role="group" aria-label="LFO rate mode"><button class="dynamic-eq-view-toggle active" type="button" data-lfo-rate-mode="free">FREE</button><button class="dynamic-eq-view-toggle" type="button" data-lfo-rate-mode="sync">SYNC</button></div></div>
+                    <div class="lfo-inline-control"><span>RATE MODE</span><div role="group" aria-label="LFO rate mode"><button class="dynamic-eq-view-toggle active ui-role-toggle" type="button" data-lfo-rate-mode="free">FREE</button><button class="dynamic-eq-view-toggle ui-role-toggle" type="button" data-lfo-rate-mode="sync">SYNC</button></div></div>
                     <label class="lfo-inline-control"><span>CLOCK SOURCE</span><select data-lfo-clock-source aria-label="LFO clock source"><option value="internal">INTERNAL</option><option value="midi">MIDI</option></select></label>
                     <label class="lfo-inline-control" data-lfo-bpm-control><span>INTERNAL BPM</span><input data-lfo-bpm type="number" min="30" max="300" step="1" value="120" aria-label="Internal clock tempo"></label>
                     <label class="lfo-inline-control" data-lfo-division-control><span>DIVISION</span><select data-lfo-division aria-label="LFO clock division"><option>1/32</option><option>1/16</option><option>1/8</option><option>1/4</option><option>1/2</option><option>1/1</option><option>2/1</option><option>4/1</option></select></label>
                     <span class="lfo-midi-status" data-lfo-midi-status>INTERNAL · 120 BPM</span>
-                    <button class="dynamic-eq-view-toggle lfo-midi-setup" type="button" data-midi-setup>SETUP</button>
+                    <button class="dynamic-eq-view-toggle lfo-midi-setup ui-role-utility" type="button" data-midi-setup>SETUP</button>
                   </div>
                   <div class="lfo-parameter-grid">
                     <label class="filter-parameter-control lfo-rate-control"><span>FREE RATE</span><output data-lfo-rate-output>1.00 Hz</output><input class="filter-style-slider" type="range" min="0" max="1000" step="1" value="434" data-lfo-rate aria-label="LFO free rate"></label>
-                    <div class="lfo-inline-control lfo-source-actions"><span>SOURCE INVERT</span><button class="dynamic-eq-view-toggle" type="button" data-lfo-invert aria-pressed="false">INVERT OFF</button><button class="dynamic-eq-view-toggle" type="button" data-lfo-reset>RESET PHASE</button></div>
+                    <div class="lfo-inline-control lfo-source-actions"><span>SOURCE INVERT</span><button class="dynamic-eq-view-toggle ui-role-utility" type="button" data-lfo-invert aria-pressed="false">INVERT OFF</button><button class="dynamic-eq-view-toggle ui-role-action" type="button" data-lfo-reset>RESET PHASE</button></div>
                     <label class="filter-parameter-control"><span>PHASE</span><output data-lfo-phase-output>0 deg</output><input class="filter-style-slider" type="range" min="0" max="360" step="1" value="0" data-lfo-phase aria-label="LFO phase offset"></label>
-                    <div class="lfo-polarity-control"><span>POLARITY</span><div role="group" aria-label="LFO polarity"><button class="dynamic-eq-view-toggle active" type="button" data-lfo-polarity="bipolar">BIPOLAR</button><button class="dynamic-eq-view-toggle" type="button" data-lfo-polarity="unipolar">UNIPOLAR</button></div></div>
+                    <div class="lfo-polarity-control"><span>POLARITY</span><div role="group" aria-label="LFO polarity"><button class="dynamic-eq-view-toggle active ui-role-toggle" type="button" data-lfo-polarity="bipolar">BIPOLAR</button><button class="dynamic-eq-view-toggle ui-role-toggle" type="button" data-lfo-polarity="unipolar">UNIPOLAR</button></div></div>
                     <label class="filter-parameter-control"><span>OUTPUT AMOUNT</span><output data-lfo-output-amount-output>100 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="100" data-lfo-output-amount aria-label="LFO source output amount"></label>
                   </div>
                   <div class="lfo-assignments">
                     <div class="lfo-assignment-list" data-lfo-assignments aria-label="LFO assignments"></div>
-                    <button class="dynamic-eq-view-toggle lfo-add-assignment" type="button" data-lfo-add-assignment>+ ADD ASSIGNMENT</button>
+                    <button class="dynamic-eq-view-toggle lfo-add-assignment ui-role-action" type="button" data-lfo-add-assignment>+ ADD ASSIGNMENT</button>
                   </div>
                 </section>
               </div>
@@ -624,7 +624,7 @@
               </nav>
               <div class="lfo-editor envelope-editor">
                 <section class="filter-response lfo-response envelope-response" aria-label="Envelope level graph">
-                  <header><strong>RAW LEVEL · ENVELOPE</strong><button class="dynamic-eq-view-toggle" type="button" data-envelope-enable aria-pressed="false">SOURCE OFF</button></header>
+                  <header><strong>RAW LEVEL · ENVELOPE</strong><button class="dynamic-eq-view-toggle ui-role-utility" type="button" data-envelope-enable aria-pressed="false">SOURCE OFF</button></header>
                   <div class="filter-response-chart lfo-visualizer envelope-visualizer" data-envelope-visualizer>
                     <svg viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
                       <line class="lfo-grid-line" x1="0" y1="6" x2="1000" y2="6"></line>
@@ -640,8 +640,8 @@
                   <div class="lfo-row envelope-detector-row">
                     <span class="lfo-inline-control envelope-control-label">DETECTOR MODE</span>
                     <div class="envelope-mode-buttons" role="group" aria-label="Envelope detector mode">
-                      <button class="dynamic-eq-view-toggle active" type="button" data-envelope-mode="peak" aria-pressed="true">PEAK</button>
-                      <button class="dynamic-eq-view-toggle" type="button" data-envelope-mode="rms" aria-pressed="false">RMS</button>
+                      <button class="dynamic-eq-view-toggle active ui-role-toggle" type="button" data-envelope-mode="peak" aria-pressed="true">PEAK</button>
+                      <button class="dynamic-eq-view-toggle ui-role-toggle" type="button" data-envelope-mode="rms" aria-pressed="false">RMS</button>
                     </div>
                   </div>
                   <div class="lfo-parameter-grid envelope-parameter-grid">
@@ -652,7 +652,7 @@
                     <label class="filter-parameter-control"><span>OUTPUT AMOUNT</span><output data-envelope-output-amount-output>100 %</output><input class="filter-style-slider" type="range" min="0" max="100" step="1" value="100" data-envelope-output-amount aria-label="Envelope source output amount"></label>
                     <label class="filter-parameter-control"><span>THRESHOLD</span><output data-envelope-threshold-output>−48 dB</output><input class="filter-style-slider" type="range" min="-60" max="0" step="1" value="-48" data-envelope-threshold aria-label="Envelope threshold in decibels"></label>
                   </div>
-                  <div class="lfo-assignments"><div class="lfo-assignment-list" data-envelope-assignments aria-label="Envelope assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment" type="button" data-envelope-add-assignment>+ ADD ASSIGNMENT</button></div>
+                  <div class="lfo-assignments"><div class="lfo-assignment-list" data-envelope-assignments aria-label="Envelope assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment ui-role-action" type="button" data-envelope-add-assignment>+ ADD ASSIGNMENT</button></div>
                 </section>
               </div>
             </section>
@@ -662,11 +662,11 @@
                   <strong>DYNAMIC EQ RESPONSE</strong>
                   <span class="dynamic-eq-state" data-dynamic-eq-status>STEREO LINKED · ABS · PRE GAIN DETECTOR</span>
                   <div class="dynamic-eq-view-toggles" role="group" aria-label="Graph views">
-                    <button class="dynamic-eq-view-toggle active" type="button" data-dynamic-eq-view="input" aria-pressed="true">INPUT</button>
-                    <button class="dynamic-eq-view-toggle active" type="button" data-dynamic-eq-view="reference" aria-pressed="true">REF</button>
-                    <button class="dynamic-eq-view-toggle active" type="button" data-dynamic-eq-view="gain" aria-pressed="true">GAIN</button>
-                    <button class="dynamic-eq-view-toggle active" type="button" data-dynamic-eq-view="out" aria-pressed="true">OUT</button>
-                    <button class="dynamic-eq-view-toggle active" type="button" data-dynamic-eq-view="state" aria-pressed="true">STATE</button>
+                    <button class="dynamic-eq-view-toggle active ui-role-view" type="button" data-dynamic-eq-view="input" aria-pressed="true">INPUT</button>
+                    <button class="dynamic-eq-view-toggle active ui-role-view" type="button" data-dynamic-eq-view="reference" aria-pressed="true">REF</button>
+                    <button class="dynamic-eq-view-toggle active ui-role-view" type="button" data-dynamic-eq-view="gain" aria-pressed="true">GAIN</button>
+                    <button class="dynamic-eq-view-toggle active ui-role-view" type="button" data-dynamic-eq-view="out" aria-pressed="true">OUT</button>
+                    <button class="dynamic-eq-view-toggle active ui-role-view" type="button" data-dynamic-eq-view="state" aria-pressed="true">STATE</button>
                   </div>
                 </header>
                 <div class="dynamic-eq-graph" data-dynamic-eq-graph>
@@ -693,18 +693,18 @@
                   <div class="dynamic-eq-x-axis" data-dynamic-eq-x-axis></div>
                 </div>
                 <div class="dynamic-eq-legend"><span>INPUT · dBFS</span><span data-dynamic-eq-gain-scale>GAIN / OUT · SHARED SCALE ±12 dB</span><span data-dynamic-eq-out-scale>OUT · APPLIED GAIN L/R</span></div>
-                <div class="dynamic-eq-sensitivity"><div class="dynamic-eq-sensitivity-heading"><strong>SENSITIVITY</strong><button type="button" data-dynamic-eq-reset>RESET 100 %</button></div><div class="dynamic-eq-sensitivity-grid" data-dynamic-eq-sensitivity></div></div>
+                <div class="dynamic-eq-sensitivity"><div class="dynamic-eq-sensitivity-heading"><strong>SENSITIVITY</strong><button type="button" data-dynamic-eq-reset class="ui-role-action">RESET 100 %</button></div><div class="dynamic-eq-sensitivity-grid" data-dynamic-eq-sensitivity></div></div>
               </section>
               <section class="dynamic-eq-controls" aria-label="Dynamic EQ controls">
-                <div class="dynamic-eq-mode"><span>MODE</span><div role="group" aria-label="Dynamic EQ mode"><button type="button" data-dynamic-eq-mode="cut">CUT</button><button type="button" data-dynamic-eq-mode="boost">BOOST</button><button type="button" data-dynamic-eq-mode="balance">BALANCE</button></div></div>
+                <div class="dynamic-eq-mode"><span>MODE</span><div role="group" aria-label="Dynamic EQ mode"><button type="button" data-dynamic-eq-mode="cut" class="ui-role-toggle">CUT</button><button type="button" data-dynamic-eq-mode="boost" class="ui-role-toggle">BOOST</button><button type="button" data-dynamic-eq-mode="balance" class="ui-role-toggle">BALANCE</button></div></div>
                 <div class="dynamic-eq-control-grid" data-dynamic-eq-controls></div>
                 <div class="dynamic-eq-button-row">
-                  <div class="dynamic-eq-mode"><span>DETECTOR</span><div role="group" aria-label="Dynamic EQ detector"><button type="button" data-dynamic-eq-detector="peak">PEAK</button><button type="button" data-dynamic-eq-detector="rms">RMS</button></div></div>
-                  <div class="dynamic-eq-mode"><span>DETECTOR REFERENCE</span><div role="group" aria-label="Detector reference"><button type="button" data-dynamic-eq-reference="ABS">ABS</button><button type="button" data-dynamic-eq-reference="REL">REL</button></div></div>
+                  <div class="dynamic-eq-mode"><span>DETECTOR</span><div role="group" aria-label="Dynamic EQ detector"><button type="button" data-dynamic-eq-detector="peak" class="ui-role-toggle">PEAK</button><button type="button" data-dynamic-eq-detector="rms" class="ui-role-toggle">RMS</button></div></div>
+                  <div class="dynamic-eq-mode"><span>DETECTOR REFERENCE</span><div role="group" aria-label="Detector reference"><button type="button" data-dynamic-eq-reference="ABS" class="ui-role-toggle">ABS</button><button type="button" data-dynamic-eq-reference="REL" class="ui-role-toggle">REL</button></div></div>
                 </div>
                 <div class="dynamic-eq-button-row">
-                  <div class="dynamic-eq-mode"><span>STEREO</span><div role="group" aria-label="Stereo detector"><button type="button" data-dynamic-eq-stereo="LINKED">LINKED</button><button type="button" data-dynamic-eq-stereo="DUAL">DUAL</button></div></div>
-                  <div class="dynamic-eq-mode dynamic-eq-profile-mode"><div class="dynamic-eq-mode-heading"><span>REFERENCE PROFILE</span><output data-dynamic-eq-learn-status>NO PROFILE</output></div><div role="group" aria-label="Learn and freeze reference"><button type="button" data-dynamic-eq-learn>LEARN</button><button type="button" data-dynamic-eq-freeze>FREEZE</button></div></div>
+                  <div class="dynamic-eq-mode"><span>STEREO</span><div role="group" aria-label="Stereo detector"><button type="button" data-dynamic-eq-stereo="LINKED" class="ui-role-toggle">LINKED</button><button type="button" data-dynamic-eq-stereo="DUAL" class="ui-role-toggle">DUAL</button></div></div>
+                  <div class="dynamic-eq-mode dynamic-eq-profile-mode"><div class="dynamic-eq-mode-heading"><span>REFERENCE PROFILE</span><output data-dynamic-eq-learn-status>NO PROFILE</output></div><div role="group" aria-label="Learn and freeze reference"><button type="button" data-dynamic-eq-learn class="ui-role-action">LEARN</button><button type="button" data-dynamic-eq-freeze class="ui-role-toggle">FREEZE</button></div></div>
                 </div>
               </section>
             </section>
@@ -733,7 +733,7 @@
                   </div>
                   <section class="macro-assignment-editor" aria-label="Selected macro assignments">
                     <header class="lfo-workspace-header"><strong data-macro-editor-title>MACRO 1 &middot; ASSIGNMENTS</strong></header>
-                    <div class="lfo-assignments"><div class="lfo-assignment-list" data-macro-assignments aria-label="Macro assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment" type="button" data-macro-add-assignment>+ ADD ASSIGNMENT</button></div>
+                    <div class="lfo-assignments"><div class="lfo-assignment-list" data-macro-assignments aria-label="Macro assignments"></div><button class="dynamic-eq-view-toggle lfo-add-assignment ui-role-action" type="button" data-macro-add-assignment>+ ADD ASSIGNMENT</button></div>
                   </section>
                 </section>
               <section class="preset-workspace" aria-label="Presets and snapshots">
@@ -743,22 +743,22 @@
                   <label class="lfo-target-control"><span>NAME</span><input type="text" maxlength="64" data-preset-name aria-label="Presetname" autocomplete="off"></label>
                   <span class="preset-selected-name" data-preset-selected-name aria-label="Ausgewählter Presetname">INIT</span>
                   <div class="preset-actions">
-                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="load">LOAD</button>
-                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="save">SAVE AS</button>
-                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="update">UPDATE</button>
-                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="rename">RENAME</button>
-                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="duplicate">DUPLICATE</button>
-                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="delete">DELETE</button>
-                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="import">IMPORT</button>
-                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="export">EXPORT PRESET</button>
-                    <button class="dynamic-eq-view-toggle" type="button" data-preset-action="export-library">EXPORT LIBRARY</button>
+                    <button class="dynamic-eq-view-toggle ui-role-action" type="button" data-preset-action="load">LOAD</button>
+                    <button class="dynamic-eq-view-toggle ui-role-action" type="button" data-preset-action="save">SAVE AS</button>
+                    <button class="dynamic-eq-view-toggle ui-role-action" type="button" data-preset-action="update">UPDATE</button>
+                    <button class="dynamic-eq-view-toggle ui-role-action" type="button" data-preset-action="rename">RENAME</button>
+                    <button class="dynamic-eq-view-toggle ui-role-action" type="button" data-preset-action="duplicate">DUPLICATE</button>
+                    <button class="dynamic-eq-view-toggle ui-role-danger" type="button" data-preset-action="delete">DELETE</button>
+                    <button class="dynamic-eq-view-toggle ui-role-action" type="button" data-preset-action="import">IMPORT</button>
+                    <button class="dynamic-eq-view-toggle ui-role-action" type="button" data-preset-action="export">EXPORT PRESET</button>
+                    <button class="dynamic-eq-view-toggle ui-role-action" type="button" data-preset-action="export-library">EXPORT LIBRARY</button>
                   </div>
                   <input type="file" accept=".json,application/json" data-preset-import hidden>
-                  <div class="preset-confirmation" data-preset-confirmation hidden><span data-preset-confirm-label></span><button class="dynamic-eq-view-toggle" type="button" data-preset-confirm>CONFIRM</button><button class="dynamic-eq-view-toggle" type="button" data-preset-cancel>CANCEL</button></div>
+                  <div class="preset-confirmation" data-preset-confirmation hidden><span data-preset-confirm-label></span><button class="dynamic-eq-view-toggle ui-role-action" type="button" data-preset-confirm>CONFIRM</button><button class="dynamic-eq-view-toggle ui-role-action" type="button" data-preset-cancel>CANCEL</button></div>
                 </div>
                 <div class="preset-snapshots">
-                  <section class="preset-snapshot" aria-label="Snapshot A"><header class="lfo-workspace-header"><strong>SNAPSHOT A</strong><span data-snapshot-status="A">EMPTY</span></header><div class="preset-actions"><button class="dynamic-eq-view-toggle" type="button" data-snapshot-capture="A">CAPTURE A</button><button class="dynamic-eq-view-toggle" type="button" data-snapshot-recall="A" disabled>RECALL A</button></div></section>
-                  <section class="preset-snapshot" aria-label="Snapshot B"><header class="lfo-workspace-header"><strong>SNAPSHOT B</strong><span data-snapshot-status="B">EMPTY</span></header><div class="preset-actions"><button class="dynamic-eq-view-toggle" type="button" data-snapshot-capture="B">CAPTURE B</button><button class="dynamic-eq-view-toggle" type="button" data-snapshot-recall="B" disabled>RECALL B</button></div></section>
+                  <section class="preset-snapshot" aria-label="Snapshot A"><header class="lfo-workspace-header"><strong>SNAPSHOT A</strong><span data-snapshot-status="A">EMPTY</span></header><div class="preset-actions"><button class="dynamic-eq-view-toggle ui-role-action" type="button" data-snapshot-capture="A">CAPTURE A</button><button class="dynamic-eq-view-toggle ui-role-action" type="button" data-snapshot-recall="A" disabled>RECALL A</button></div></section>
+                  <section class="preset-snapshot" aria-label="Snapshot B"><header class="lfo-workspace-header"><strong>SNAPSHOT B</strong><span data-snapshot-status="B">EMPTY</span></header><div class="preset-actions"><button class="dynamic-eq-view-toggle ui-role-action" type="button" data-snapshot-capture="B">CAPTURE B</button><button class="dynamic-eq-view-toggle ui-role-action" type="button" data-snapshot-recall="B" disabled>RECALL B</button></div></section>
                 </div>
                 <label class="filter-parameter-control preset-morph"><span>MORPH · A ↔ B</span><output for="preset-morph" data-preset-morph-output>0 %</output><input id="preset-morph" class="filter-style-slider" type="range" min="0" max="100" step="1" value="0" data-preset-morph disabled aria-label="Morph zwischen Snapshot A und B"></label>
                 <div class="lfo-module-status" data-preset-status role="status" aria-live="polite">CAPTURE A + B TO ENABLE MORPH</div>
