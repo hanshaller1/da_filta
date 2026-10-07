@@ -38,7 +38,7 @@
   const outputGuardModuleLoads = new WeakMap();
   const outputProtectionModuleLoads = new WeakMap();
   const loadInputPreampModule = async audioContext => {
-    if (!audioContext?.audioWorklet?.addModule) throw new Error('AudioWorklet wird von diesem Browser oder AudioContext nicht unterstÃ¼tzt.');
+    if (!audioContext?.audioWorklet?.addModule) throw new Error('AudioWorklet wird von diesem Browser oder AudioContext nicht unterstützt.');
     const existingLoad = inputPreampModuleLoads.get(audioContext);
     if (existingLoad) return existingLoad;
     const moduleUrl = new URL('input-preamp-processor.js', window.location.href).href;

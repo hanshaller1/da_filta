@@ -1272,7 +1272,7 @@ const DEV_LAB_HELP = {
     title: 'DEV RESONANCE CURVE', what: 'Formt ausschließlich die positive Resonance-zu-Feedback-Gain-Kennlinie des COMMON-BUS MAIN-/FB-ALL-Pfads.',
     scope: 'COMMON BUS + FB ALL ENGINE = COMMON BUS: CURRENT verwendet 1.25 * resonance². SOFT KNEE verteilt den oberen kritischen Bereich über mehr Reglerweg und erreicht bei 1.00 weiterhin exakt 1.25. LOCAL LOOP EXP, lokaler Common Bus, negative Resonance und Legacy-Pfade bleiben bei der bisherigen Kennlinie.',
     values: [['CURRENT', 'Unverändert: K = 1.25 * resonance².'], ['SOFT KNEE', 'Glatter A/B-Versuch mit mehr Auflösung vor dem Maximum.']],
-    default: 'CURRENT', note: 'Nur Mapping; Topologie, Summierung, Saturation und FB-ALL-Level bleiben unverÃ¤ndert.'
+    default: 'CURRENT', note: 'Nur Mapping; Topologie, Summierung, Saturation und FB-ALL-Level bleiben unverändert.'
   },
   'data-feedback-all-saturation-return': {
     title: 'DEV MAIN SAT/RETURN', what: 'A/B-Versuch nur im MAIN-/FB-ALL-COMMON-BUS-Return mit normaler CURRENT-tanh-Saturation.',
