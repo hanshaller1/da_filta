@@ -1166,6 +1166,9 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
   .channel-mode-toggle { height: 18px; }
   .channel-mode-row, .channel-mode-reset-row { min-height: 18px; }
   .channel-mode-label, .channel-mode-state { font-size: 8px; }
+  .mode-tabs { max-height: 100%; }
+  .mode-tab-row { flex: 0 1 40px; min-height: 28px; }
+  .mode-select { min-height: 0; padding-block: 2px; }
 }
 
 [data-mode-panel][hidden] { display: none; }

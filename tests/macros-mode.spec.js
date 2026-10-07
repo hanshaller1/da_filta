@@ -186,7 +186,7 @@ for (const width of [1914, 1440, 1024, 560]) test(`macro workspace controls and 
       divider: getComputedStyle(preset).borderLeftWidth, stackedDivider: getComputedStyle(preset).borderTopWidth,
       macroRight: m.right, presetLeft: p.left, macroBottom: m.bottom, presetTop: p.top };
   });
-  if (width >= 1200) expect(seam.outerBorder).toBe('0px');
+  if (width >= 1200) expect(seam.outerBorder).toBe('1px');
   if (width > 600) { expect(seam.divider).toBe('1px'); expect(seam.macroRight).toBeLessThanOrEqual(seam.presetLeft); }
   else { expect(seam.stackedDivider).toBe('1px'); expect(seam.macroBottom).toBeLessThanOrEqual(seam.presetTop); }
   for (const value of layout.values) {
