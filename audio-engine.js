@@ -22,6 +22,18 @@
   const INPUT_PREAMP_PROCESSOR_NAME = 'resonant-input-preamp-processor';
   const INPUT_PREAMP_STAGES = Object.freeze(['linear', 'silk', 'tape', 'tube', 'console', 'crunch', 'destroy']);
   const FEEDBACK_ALL_LEVELS = Object.freeze(['raw', 'sqrt2', 'half', 'sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth']);
+  // The preamp is the stereo entry of the whole graph. SPEAKERS up-mixes a mono
+  // device or sample to identical L/R before Character and the dry/wet split;
+  // DISCRETE left R silent. Stereo sources are unchanged (2 -> 2 is not mixed).
+  const inputPreampNodeOptions = processorOptions => ({
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    outputChannelCount: [2],
+    channelCount: 2,
+    channelCountMode: 'explicit',
+    channelInterpretation: 'speakers',
+    processorOptions
+  });
   const inputPreampModuleLoads = new WeakMap();
   const outputGuardModuleLoads = new WeakMap();
   const outputProtectionModuleLoads = new WeakMap();
@@ -1035,15 +1047,9 @@
         await loadInputPreampModule(this.context);
         await loadOutputGuardModule(this.context);
         await loadOutputProtectionModule(this.context);
-        this.inputPreampNode = new AudioWorkletNode(this.context, INPUT_PREAMP_PROCESSOR_NAME, {
-          numberOfInputs: 1,
-          numberOfOutputs: 1,
-          outputChannelCount: [2],
-          channelCount: 2,
-          channelCountMode: 'explicit',
-          channelInterpretation: 'discrete',
-          processorOptions: { inputGainDb: this.inputGainDb, stage: this.inputPreampStage, characterAmount: this.inputCharacterAmount / 100 }
-        });
+        this.inputPreampNode = new AudioWorkletNode(this.context, INPUT_PREAMP_PROCESSOR_NAME, inputPreampNodeOptions({
+          inputGainDb: this.inputGainDb, stage: this.inputPreampStage, characterAmount: this.inputCharacterAmount / 100
+        }));
         this.dryGainNode = this.context.createGain();
         this.wetGainNode = this.context.createGain();
         this.modulationDryInvertNode = this.context.createGain();
@@ -1198,5 +1204,6 @@
     }
   }
 
+  AudioEngine.inputPreampNodeOptions = inputPreampNodeOptions;
   window.AudioEngine = AudioEngine;
 })();
