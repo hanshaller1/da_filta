@@ -200,6 +200,7 @@ responseModeControl.setAttribute('aria-label', 'Filterbank Response Ansicht');
 const normalResponseButton = document.createElement('button');
 const devResponseButton = document.createElement('button');
 normalResponseButton.type = devResponseButton.type = 'button';
+normalResponseButton.className = devResponseButton.className = 'ui-button ui-button--view';
 normalResponseButton.textContent = 'NORMAL'; devResponseButton.textContent = 'DEV LAB';
 normalResponseButton.dataset.responseMode = 'normal'; devResponseButton.dataset.responseMode = 'dev-lab';
 responseModeControl.append(normalResponseButton, devResponseButton);
@@ -217,12 +218,12 @@ const ANALYZER_OPTION_GROUPS = [
 ];
 const analyzerOptions = document.createElement('div');
 analyzerOptions.className = 'analyzer-options';
-analyzerOptions.innerHTML = '<button type="button" class="analyzer-options-toggle" aria-expanded="false" aria-controls="analyzer-options-popover" title="Analyzer-Anzeigen konfigurieren">VIEW</button><div id="analyzer-options-popover" class="analyzer-options-popover" hidden></div>';
+analyzerOptions.innerHTML = '<button type="button" class="analyzer-options-toggle ui-button ui-button--utility" aria-expanded="false" aria-controls="analyzer-options-popover" title="Analyzer-Anzeigen konfigurieren">VIEW</button><div id="analyzer-options-popover" class="analyzer-options-popover" hidden></div>';
 const analyzerOptionsToggle = analyzerOptions.querySelector('.analyzer-options-toggle');
 const analyzerOptionsPopover = analyzerOptions.querySelector('.analyzer-options-popover');
 ANALYZER_OPTION_GROUPS.forEach(([group, options]) => {
   const section = document.createElement('section');
-  section.innerHTML = `<strong>${group}</strong>`;
+  section.innerHTML = `<strong class="ui-section-title">${group}</strong>`;
   options.forEach(([key, label, tooltip]) => {
     const option = document.createElement('label');
     option.title = tooltip || `${label} nur anzeigen oder ausblenden.`;
@@ -276,6 +277,7 @@ spectrumForegroundControl.setAttribute('aria-label', 'Visualisierung im Vordergr
 const spectrumBarsButton = document.createElement('button');
 const spectrumCurveButton = document.createElement('button');
 spectrumBarsButton.type = spectrumCurveButton.type = 'button';
+spectrumBarsButton.className = spectrumCurveButton.className = 'ui-button ui-button--view';
 spectrumBarsButton.setAttribute('aria-label', 'Filterbank-Balken in den Vordergrund');
 spectrumCurveButton.setAttribute('aria-label', 'Spectrum in den Vordergrund');
 spectrumBarsButton.innerHTML = '<svg viewBox="0 0 20 16" aria-hidden="true" focusable="false"><rect x="1" y="8" width="3" height="7"/><rect x="6" y="3" width="3" height="12"/><rect x="11" y="6" width="3" height="9"/><rect x="16" y="1" width="3" height="14"/></svg>';
@@ -1822,12 +1824,12 @@ const renderSourceAssignments = (kind, source, list, moduleEnabled) => {
       const row = document.createElement('div');
       row.className = 'lfo-row lfo-assignment-row';
       row.dataset.assignmentId = assignment.id;
-      row.innerHTML = `<label class="lfo-target-control"><span>TARGET</span><select data-${kind}-target data-assignment-field="targetId" aria-label="${kind} assignment target"></select><small data-${kind}-target-state></small></label>
-        <label class="lfo-inline-control lfo-assignment-amount"><span>AMOUNT <output data-${kind}-amount-output></output></span><input class="filter-style-slider" type="range" min="-100" max="100" step="1" data-${kind}-amount data-assignment-field="amount" aria-label="${kind} assignment amount"></label>
-        <label class="lfo-inline-control"><span>CHANNEL</span><select data-${kind}-channel data-assignment-field="channel" aria-label="${kind} assignment channel"></select></label>
-        <label class="lfo-inline-control lfo-assignment-invert"><span>INVERT</span><input type="checkbox" data-${kind}-assignment-invert ${kind === 'envelope' ? 'data-envelope-invert' : ''} data-assignment-field="invert" aria-label="Invert ${kind} assignment"></label>
-        <div class="lfo-assignment-actions"><button class="dynamic-eq-view-toggle" type="button" data-${kind}-assignment-enable aria-label="Enable ${kind} assignment"></button><button class="dynamic-eq-view-toggle" type="button" data-${kind}-assignment-remove aria-label="Remove ${kind} assignment">×</button></div>
-        ${kind === 'clock-mod' ? '<label class="lfo-inline-control clock-mod-hold-control"><span>HOLD</span><select data-clock-mod-hold data-assignment-field="sourceId" aria-label="Clock Mod held output"></select></label>' : ''}`;
+      row.innerHTML = `<label class="lfo-target-control ui-control"><span class="ui-control-label">TARGET</span><select class="ui-control-input" data-${kind}-target data-assignment-field="targetId" aria-label="${kind} assignment target"></select><small data-${kind}-target-state></small></label>
+        <label class="ui-control lfo-inline-control lfo-assignment-amount"><span class="ui-control-label">AMOUNT <output class="ui-control-value" data-${kind}-amount-output></output></span><input class="filter-style-slider" type="range" min="-100" max="100" step="1" data-${kind}-amount data-assignment-field="amount" aria-label="${kind} assignment amount"></label>
+        <label class="ui-control lfo-inline-control"><span class="ui-control-label">CHANNEL</span><select class="ui-control-input" data-${kind}-channel data-assignment-field="channel" aria-label="${kind} assignment channel"></select></label>
+        <label class="ui-control lfo-inline-control lfo-assignment-invert"><span class="ui-control-label">INVERT</span><input type="checkbox" data-${kind}-assignment-invert ${kind === 'envelope' ? 'data-envelope-invert' : ''} data-assignment-field="invert" aria-label="Invert ${kind} assignment"></label>
+        <div class="lfo-assignment-actions"><button class="dynamic-eq-view-toggle ui-button ui-button--toggle" type="button" data-${kind}-assignment-enable aria-label="Enable ${kind} assignment"></button><button class="dynamic-eq-view-toggle ui-button ui-button--danger" type="button" data-${kind}-assignment-remove aria-label="Remove ${kind} assignment">×</button></div>
+        ${kind === 'clock-mod' ? '<label class="ui-control lfo-inline-control clock-mod-hold-control"><span class="ui-control-label">HOLD</span><select class="ui-control-input" data-clock-mod-hold data-assignment-field="sourceId" aria-label="Clock Mod held output"></select></label>' : ''}`;
       populateModulationTargetSelect(row.querySelector(`[data-${kind}-target]`));
       if (kind === 'clock-mod') row.querySelector('[data-clock-mod-hold]').replaceChildren(new Option('LATEST', 'clockMod.1'),
         ...Array.from({ length: 10 }, (_, band) => new Option(`BAND ${band + 1}`, `clockMod.1.band.${band}`)));
@@ -2143,6 +2145,7 @@ const renderClockModLocks = () => {
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.clockModLock = String(index);
+      button.className = 'ui-button ui-button--utility';
       button.setAttribute('aria-label', `Lock Clock Mod band ${index + 1} (${band.label})`);
       button.addEventListener('click', () => {
         const lockedBands = [...state.clockMod.lockedBands];
@@ -2386,12 +2389,12 @@ const renderLfoSlots = () => {
     const index = lfoSlotPage * LFO_SLOT_PAGE_SIZE + offset;
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `lfo-slot${index === selectedLfoIndex ? ' active' : ''}${source.enabled ? ' is-enabled' : ''}`;
+    button.className = `lfo-slot ui-slot${index === selectedLfoIndex ? ' active' : ''}${source.enabled ? ' is-enabled' : ''}`;
     button.dataset.lfoSlot = String(index);
     button.setAttribute('aria-pressed', String(index === selectedLfoIndex));
-    const number = document.createElement('span'); number.className = 'lfo-slot-number'; number.textContent = String(index + 1);
-    const status = document.createElement('span'); status.className = 'lfo-slot-state'; status.textContent = `${source.enabled ? 'ON' : 'OFF'} · ${source.waveform.toUpperCase()}`;
-    const detail = document.createElement('span'); detail.className = 'lfo-slot-detail';
+    const number = document.createElement('span'); number.className = 'lfo-slot-number ui-slot-name'; number.textContent = String(index + 1);
+    const status = document.createElement('span'); status.className = 'lfo-slot-state ui-slot-state'; status.textContent = `${source.enabled ? 'ON' : 'OFF'} · ${source.waveform.toUpperCase()}`;
+    const detail = document.createElement('span'); detail.className = 'lfo-slot-detail ui-slot-detail';
     const assigned = source.assignments.filter(assignment => assignment.targetId);
     const lostCount = assigned.filter(assignment => {
       const reason = lfoAssignmentStatus(assignment, source).reason;
@@ -2412,7 +2415,7 @@ const renderLfoSlots = () => {
   if (pageCount > 1) {
     const nav = document.createElement('div'); nav.className = 'lfo-page-nav'; nav.setAttribute('aria-label', 'LFO banks');
     for (let page = 0; page < pageCount; page += 1) {
-      const button = document.createElement('button'); button.type = 'button'; button.className = 'dynamic-eq-view-toggle';
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'dynamic-eq-view-toggle ui-button ui-button--utility';
       button.textContent = String.fromCharCode(65 + page); button.setAttribute('aria-pressed', String(page === lfoSlotPage));
       button.addEventListener('click', () => { selectedLfoIndex = page * LFO_SLOT_PAGE_SIZE; renderLfoControls(); });
       nav.append(button);
@@ -2624,7 +2627,7 @@ const filterTypeGroupsDefinition = [
   { label: 'CLASSIC', ids: ['lowpass', 'highpass', 'bandpass', 'notch'] },
   { label: 'EQ / TONE / FORMANT', ids: ['bell', 'lowshelf', 'highshelf', 'tilt', 'baxandall', 'formant'] }
 ];
-if (filterTypeGroups) filterTypeGroups.innerHTML = filterTypeGroupsDefinition.map(group => `<div class="filter-type-group"><strong>${group.label}</strong><div class="filter-type-options">${group.ids.map(id => filterTypeDefinitions.find(definition => definition.id === id)).filter(Boolean).map(definition => `<button type="button" data-filter-type="${definition.id}" role="option" aria-selected="false" aria-pressed="false">${definition.displayName}</button>`).join('')}</div></div>`).join('');
+if (filterTypeGroups) filterTypeGroups.innerHTML = filterTypeGroupsDefinition.map(group => `<div class="filter-type-group"><strong class="ui-section-title">${group.label}</strong><div class="filter-type-options">${group.ids.map(id => filterTypeDefinitions.find(definition => definition.id === id)).filter(Boolean).map(definition => `<button class="ui-button ui-button--toggle" type="button" data-filter-type="${definition.id}" role="option" aria-selected="false" aria-pressed="false">${definition.displayName}</button>`).join('')}</div></div>`).join('');
 const filterTypeButtons = [...document.querySelectorAll('[data-filter-type]')];
 const filterResponsePath = document.querySelector('[data-filter-response-path]');
 const filterResponseMarkers = document.querySelector('[data-filter-response-markers]');
@@ -2992,8 +2995,8 @@ BAND_DEFINITIONS.forEach((band, index) => {
   frequency.textContent = band.label.replace(' Hz', '').replace(' kHz', 'k');
   dynamicEqXAxis.append(frequency);
   const label = document.createElement('label');
-  label.className = 'dynamic-eq-sensitivity-item';
-  label.innerHTML = '<input class="filter-style-slider" type="range" min="0" max="100" step="1"><output>100</output>';
+  label.className = 'dynamic-eq-sensitivity-item ui-control';
+  label.innerHTML = '<input class="filter-style-slider" type="range" min="0" max="100" step="1"><output class="ui-control-value ui-control-value--compact">100</output>';
   const input = label.querySelector('input');
   input.setAttribute('aria-label', `${band.label} sensitivity`);
   input.addEventListener('input', () => {
@@ -3006,8 +3009,8 @@ BAND_DEFINITIONS.forEach((band, index) => {
 });
 dynamicEqDefinitions.forEach(([label, field, min, max, step, unit]) => {
   const control = document.createElement('label');
-  control.className = 'dynamic-eq-control filter-parameter-control';
-  control.innerHTML = `<span>${label.toUpperCase()}</span><output></output><input class="filter-style-slider" type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}">`;
+  control.className = 'dynamic-eq-control filter-parameter-control ui-control';
+  control.innerHTML = `<span class="ui-control-label">${label.toUpperCase()}</span><output class="ui-control-value"></output><input class="filter-style-slider" type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}">`;
   const input = control.querySelector('input');
   input.addEventListener('input', () => {
     state[field] = Number(input.value);
@@ -3603,7 +3606,7 @@ modeTabs.forEach((tab, index) => {
 });
 bands.innerHTML = BAND_DEFINITIONS.map((band,index) => `<article class="band-card"><output class="band-slider-value" data-band-value="${index}">0.0 dB</output><div class="fader-wrap"><span class="fader-label positive">+</span><div class="fader-track"><i class="classic-channel-marker classic-channel-marker-left" data-classic-marker="${index}-left" aria-hidden="true"></i><i class="classic-channel-marker classic-channel-marker-right" data-classic-marker="${index}-right" aria-hidden="true"></i><div class="fader-hit-area"><input class="band-fader" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" value="${BAND_GAIN_NEUTRAL}" data-band="${index}" aria-label="${band.label} Fader"></div></div><span class="fader-label negative">−</span></div><div class="band-value">${band.label}</div></article>`).join('');
 const filterbankBandControls = document.querySelector('.filterbank-band-controls');
-if (filterbankBandControls) filterbankBandControls.innerHTML = BAND_DEFINITIONS.map((band, index) => `<div class="filterbank-band-control" data-filterbank-band-control="${index}" aria-label="${band.label} Filterbank Controls"><button class="band-action" type="button" data-feedback-band="${index}" aria-pressed="false" title="COMMON BUS: Dieses Band speist den gemeinsamen Feedback-Bus; sein Return regt alle zehn Bänder dieses Kanals an.">FB</button></div>`).join('');
+if (filterbankBandControls) filterbankBandControls.innerHTML = BAND_DEFINITIONS.map((band, index) => `<div class="filterbank-band-control" data-filterbank-band-control="${index}" aria-label="${band.label} Filterbank Controls"><button class="band-action ui-button ui-button--toggle" type="button" data-feedback-band="${index}" aria-pressed="false" title="COMMON BUS: Dieses Band speist den gemeinsamen Feedback-Bus; sein Return regt alle zehn Bänder dieses Kanals an.">FB</button></div>`).join('');
 document.querySelectorAll('.band-card').forEach((card, index) => {
   card.querySelector('.fader-wrap')?.classList.add('center-fader');
   const channelFader = channel => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;

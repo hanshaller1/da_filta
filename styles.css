@@ -1717,7 +1717,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .lfo-controls > .lfo-parameter-grid:not(.envelope-parameter-grid) { grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 8px; }
 .lfo-controls > .lfo-parameter-grid:not(.envelope-parameter-grid) .filter-parameter-control { padding-inline: 4px; column-gap: 4px; }
 .lfo-controls > .lfo-parameter-grid:not(.envelope-parameter-grid) .lfo-polarity-control { padding-inline: 4px; }
-.lfo-controls > .lfo-parameter-grid:not(.envelope-parameter-grid) .lfo-polarity-control button { padding-inline: 2px; font-size: 8px; }
+.lfo-controls > .lfo-parameter-grid:not(.envelope-parameter-grid) .lfo-polarity-control button { padding-inline: 2px; }
 .clock-mod-controls .lfo-assignments { min-height: 88px; }
 .clock-mod-hold-control { grid-column: 1 / -1; }
 .lfo-assignment-row.is-inactive .lfo-target-control small { color: var(--active-color, #f4d35e); }
@@ -1771,6 +1771,8 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 .macro-assignment-editor { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; min-width: 0; min-height: 88px; }
 @media (max-width: 1050px) {
   .macro-controls { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .mode-shell:has(:is(#mode-mod, #mode-presets):not([hidden])) .ui-button:is(.ui-button--action, .ui-button--toggle, .ui-button--danger) { height: 32px; min-height: 32px; }
+  .mode-shell:has(:is(#mode-mod, #mode-presets):not([hidden])) .ui-control-input { height: 32px; min-height: 32px; }
 }
 @media (max-width: 560px) {
   .mode-shell:has(:is(#mode-mod, #mode-presets):not([hidden])) .mode-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1936,3 +1938,132 @@ input[type=range] { appearance: none; -webkit-appearance: none; height: 5px; bor
 
 .macro-mode-panel .lfo-add-assignment { min-height: 32px; }
 .macro-mode-panel .lfo-assignment-actions button { min-width: 32px; min-height: 32px; }
+
+/* Shared production UI roles. Existing classes continue to own layout and JS hooks. */
+.mode-workspace .ui-panel-title {
+  display: inline-block;
+  align-self: start;
+  min-height: 18px;
+  margin: 0;
+  color: var(--cyan);
+  font: var(--weight-bold) var(--text-panel-title)/1.2 var(--font-ui);
+  letter-spacing: 1px;
+  text-align: left;
+}
+.mode-workspace :is(.ui-section-title, .ui-control-label) {
+  margin: 0;
+  color: var(--secondary-text);
+  font: var(--weight-bold) var(--text-section-title)/1.2 var(--font-ui);
+  letter-spacing: .5px;
+}
+.mode-workspace .ui-section-title { min-height: 12px; }
+.mode-workspace .ui-button {
+  display: inline-flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  min-height: 26px;
+  margin: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--button-border);
+  border-radius: 3px;
+  color: var(--button-text);
+  background: var(--button-background);
+  font: var(--weight-semibold) var(--text-button)/1.2 var(--font-ui);
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  opacity: 1;
+  cursor: pointer;
+}
+.mode-workspace .ui-button--toggle { height: 22px; min-height: 22px; }
+.mode-workspace :is(.ui-button--view, .ui-button--utility) {
+  height: 22px;
+  min-height: 22px;
+  padding: 2px 5px;
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+}
+.mode-workspace .ui-button--utility { color: var(--secondary-text); }
+.mode-workspace .ui-button--view:not(.active):not([aria-pressed=true]) {
+  color: var(--secondary-text);
+  opacity: .62;
+}
+.mode-workspace .ui-button:is(.active, [aria-pressed=true], [aria-selected=true]) {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: var(--active-background);
+}
+.mode-workspace .ui-button:not(:disabled):hover { border-color: var(--cyan); color: var(--cyan); }
+.mode-workspace .ui-button--danger {
+  border-color: color-mix(in srgb, var(--error) 55%, var(--button-border));
+  color: var(--error);
+}
+.mode-workspace .ui-button--danger:not(:disabled):hover { border-color: var(--error); color: var(--error); }
+.mode-workspace .ui-button:disabled {
+  border-color: var(--button-border);
+  color: var(--secondary-text);
+  background: var(--button-background);
+  opacity: .42;
+  cursor: not-allowed;
+}
+.mode-workspace .ui-slot {
+  min-height: 39px;
+  padding: 4px 7px;
+  border: 1px solid var(--output-border);
+  border-radius: 3px;
+  color: var(--secondary-text);
+  background: var(--panel-background);
+  font: var(--weight-regular) var(--text-utility)/1.2 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.mode-workspace .ui-slot:is(.active, [aria-pressed=true]) {
+  border-color: var(--cyan);
+  color: var(--strong-text);
+  background: var(--active-background);
+}
+.mode-workspace .ui-slot:not(:disabled):hover { border-color: var(--cyan); }
+.mode-workspace .ui-slot:disabled { border-color: var(--output-border); color: var(--secondary-text); background: var(--panel-background); opacity: .42; cursor: not-allowed; }
+.mode-workspace .ui-slot-name { color: var(--cyan); font-size: var(--text-value-small); font-weight: var(--weight-bold); }
+.mode-workspace :is(.ui-slot-state, .ui-slot-detail) { color: var(--secondary-text); font-size: var(--text-micro); letter-spacing: .3px; }
+.mode-workspace .ui-slot.is-enabled .ui-slot-state,
+.mode-workspace .ui-slot.has-lost-target .ui-slot-detail { color: var(--active-color, var(--cyan)); }
+.mode-workspace .ui-slot:disabled :is(.ui-slot-name, .ui-slot-state, .ui-slot-detail) { color: var(--secondary-text); }
+.mode-workspace .ui-control { font-family: var(--font-ui); }
+.mode-workspace .filter-parameter-control.ui-control { row-gap: var(--panel-gap); }
+.mode-workspace .ui-control .ui-control-value {
+  box-sizing: border-box;
+  height: 20px;
+  min-height: 20px;
+  padding: 2px 4px;
+  border: 1px solid var(--output-border);
+  border-radius: 3px;
+  color: var(--strong-text);
+  background: var(--output-background);
+  font: var(--weight-semibold) var(--text-value-small)/14px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .3px;
+  text-align: right;
+}
+.mode-workspace .ui-control .ui-control-value--primary { height: 24px; min-height: 24px; font-size: var(--text-value-primary); font-weight: var(--weight-bold); line-height: 18px; }
+.mode-workspace .ui-control .ui-control-value--compact { height: 14px; min-height: 14px; padding: 0 2px; font-size: var(--text-micro); line-height: 12px; }
+.mode-workspace .ui-control-input {
+  box-sizing: border-box;
+  height: 27px;
+  min-height: 27px;
+  padding: 3px 6px;
+  border: 1px solid var(--output-border);
+  border-radius: 3px;
+  color: var(--strong-text);
+  background: var(--output-background);
+  font: var(--weight-semibold) var(--text-control-label)/1.2 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.mode-workspace .ui-control :is(input, select):disabled { color: var(--secondary-text); opacity: .42; cursor: not-allowed; }
+.mode-workspace .ui-control input[type=range]:disabled { filter: grayscale(1); }
+.mode-workspace :is(.ui-button, .ui-slot, .ui-control input, .ui-control select):focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
