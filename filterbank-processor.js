@@ -2323,6 +2323,10 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     // never fall through to a CURRENT feedback architecture when its topology
     // is inactive. It simply supplies no LOCAL return in that situation.
     const zdfActive = unifiedZdfActive || perBandZdfSelected;
+    // Only an active ZDF solver advances the gate/gain smoothers itself. With
+    // Per-Band ZDF selected but ISOLATED TPT active, no solver runs, so the
+    // band loop below must keep smoothing faders and gates exactly once.
+    const solverSmoothsControls = unifiedZdfActive || perBandZdfActive;
     const feedbackAllGate = this.feedbackAllGateTargets[channel] + this.feedbackGateSmoothingCoefficient * (this.feedbackAllGates[channel] - this.feedbackAllGateTargets[channel]);
     this.feedbackAllGates[channel] = feedbackAllGate;
     // A positive common-bus loop follows the already smoothed resonance
@@ -2381,7 +2385,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     let hasActiveLegacyFeedbackGate = usesLegacyFeedbackAll;
 
     for (let band = 0; band < this.bandCount; band += 1) {
-      const localGate = zdfActive ? feedbackGates[band]
+      const localGate = solverSmoothsControls ? feedbackGates[band]
         : feedbackGateTargets[band] + this.feedbackGateSmoothingCoefficient * (feedbackGates[band] - feedbackGateTargets[band]);
       feedbackGates[band] = localGate;
       if (usesLegacyLocalResonance && localGate > 1e-12) hasActiveLegacyFeedbackGate = true;
@@ -2510,7 +2514,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
           && Number.isFinite(maximumState);
       }
       globalTapSum += bandOutput;
-      if (!zdfActive) deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
+      if (!solverSmoothsControls) deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
       const staticGain = 1 + deltaGains[band];
       const modulationTarget = this.modulationBandGainTargets[channel][band];
       const modulationGain = modulationTarget + this.modulationGainSmoothingCoefficient
