@@ -47,6 +47,7 @@ Der Audioausgang bleibt Bandsumme -> Wet-Gain -> Mix -> Volume -> Output Guard
 | feedbackCore | zdf-per-band |
 | feedbackTopology | common-bus, als vorhandener ZDF-Dispatcher; LOCAL ist hier per-band |
 | feedbackTap / wetModel | post-gain / filterbank-sum |
+| feedbackTapModulation | include (seit 2026-10-07, siehe Nachtrag) |
 | feedbackAllEngine / feedbackAllSource | common-bus / post-gain-sum |
 | feedbackAllLevel / feedbackAllAmount | sqrt10 (1/√10) / 100 % |
 | feedbackAllResonanceCurve / SaturationReturn | current / current |
@@ -237,6 +238,30 @@ Es ist **keine exakte Erica-Emulation**. Offen bleiben Hardwaremessungen zu Q,
 Bandbreite, Loop-Gains, MAIN-Normalisierung, Sättigung, Tap-Punkt, Onset-Schwellen
 und Bauteiltoleranzen. FILTER, Dynamic EQ, Modulatoren, MIDI, Input Character,
 Output Guard, Final Safety, Presets und übrige Effekte werden nicht verändert.
+
+## Nachtrag 2026-10-07: Band-Modulation im Feedback-Tap
+
+Vorher gewichteten die ZDF-Cores ihre POST-GAIN-Taps (LOCAL und MAIN) nur mit
+dem Fader-Gain `1 + deltaGain`. LFO, Envelope, Clock Mod, FILTER- und
+Spread-Modulation veränderten ausschließlich den hörbaren Bandpegel. Ein per
+Modulation auf −12 dB gezogenes Band oszillierte deshalb unverändert weiter,
+ein Fader auf −12 dB beendete die Oszillation (LOCAL 5, Resonance 0,97:
+Abklingen 0 dB gegenüber etwa −53 dB). CURRENT bezog die Modulation bereits ein.
+
+Neu folgen beide Taps in UNIFIED und PER-BAND ZDF dem effektiven Band-Gain vor
+Dynamic EQ: `(1 + deltaGain) * modulationGain`. Der Modulations-Smoother wird
+dafür im Solver genau einmal je Band und Sample fortgeschrieben; die Bandschleife
+verwendet denselben Wert. Dynamic-EQ-Gain bleibt außerhalb des Loops. Ohne
+aktive Band-Modulation ist `modulationGain` exakt 1, alle bisherigen Zustände
+bleiben sample-identisch. DEV LAB `DEV FB TAP MOD` (`feedbackTapModulation`)
+stellt mit `FADER ONLY · LEGACY` das alte Verhalten für Vergleiche und alte
+DEV-Snapshots wieder her; Produkt-Presets speichern den Wert nicht.
+
+Gleichzeitig behoben: Bei PER-BAND ZDF mit `ISOLATED TPT` läuft kein Solver.
+Die Bandschleife übersprang trotzdem das Glätten von Fadern und Gates, sodass
+Laufzeitänderungen nicht hörbar wurden. Tests:
+`tests/filterbank-feedback-tap-modulation.spec.js`,
+`tests/filterbank-per-band-isolated-controls.spec.js`.
 
 ## Geänderte Dateien
 

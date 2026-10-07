@@ -316,7 +316,11 @@ test('no preset action leaves the full modulated production bank sample-identica
     engine.applyState({ ...engine.getState(), ...base });
     for (const rate of [48000, 96000]) {
       const options = { ...engine.getFilterbankState(), bandFrequencies: [...window.Filterbank.BAND_FREQUENCIES], bandQs: [...window.Filterbank.BAND_QS],
-        resonance: .3, feedbackBandLeft: Array.from({ length: 10 }, (_, i) => i === 4), feedbackAllLeft: true };
+        resonance: .3, feedbackBandLeft: Array.from({ length: 10 }, (_, i) => i === 4), feedbackAllLeft: true,
+        // The frozen reference predates modulation in the ZDF feedback tap; its
+        // contract is the explicit FADER ONLY legacy tap (covered separately in
+        // filterbank-feedback-tap-modulation.spec.js).
+        feedbackTapModulation: 'exclude' };
       const a = old.makeBank(rate, options), b = current.makeBank(rate, options);
       const input = [[new Float32Array(128).fill(.1), new Float32Array(128).fill(.05)]];
       const outA = [[new Float32Array(128), new Float32Array(128)], [new Float32Array(128)]], outB = [[new Float32Array(128), new Float32Array(128)], [new Float32Array(128)]];

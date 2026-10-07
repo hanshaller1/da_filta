@@ -1,6 +1,6 @@
 # da_filta Backlog
 
-Stand: 2026-10-06
+Stand: 2026-10-07
 
 Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungsthemen. Erledigte Punkte sollen aus dem offenen Backlog entfernt oder in einen kurzen Abschnitt „Erledigt“ verschoben werden. Neue bestätigte Aufgaben sollen hier ergänzt werden.
 
@@ -91,6 +91,16 @@ Feature Freeze bedeutet noch keinen Release. Keine V2-Arbeit in dieser Phase.
   - Self-Oscillation-Schwellen gegen Hardware abgleichen
   - analoge Bauteiltoleranzen nur nach Referenzmessung modellieren
   - CURRENT/Common Bus als eigenen da_filta-Charakter und Unified ZDF als DEV/LAB-Vergleich erhalten
+
+## Erledigt – Feedback-Tap / Input (2026-10-07)
+
+- Band-Modulation (LFO, Envelope, Clock Mod, FILTER, Spread) wirkt in UNIFIED und
+  PER-BAND ZDF auf LOCAL- und MAIN-POST-GAIN-Taps wie der Fader; DEV LAB
+  `DEV FB TAP MOD` erhält das alte FADER-ONLY-Verhalten. Dynamic EQ bleibt außerhalb.
+- Mono-Eingänge (Gerät oder Sample) werden vor Input Character auf L/R verteilt;
+  vorher blieb der rechte Kanal still.
+- PER-BAND ZDF + ISOLATED TPT (DEV): Fader- und Gate-Änderungen werden wieder geglättet
+  und hörbar.
 
 ## Erledigt – Erica-style Resonator (2026-10-02)
 

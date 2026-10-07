@@ -151,7 +151,7 @@ const groupForDevControl = control => {
   const attribute = control.querySelector('select')?.getAttributeNames().find(name => name.startsWith('data-')) ?? '';
   if (attribute === 'data-input-preamp-stage') return 'input';
   if (attribute === 'data-reference-level' || attribute === 'data-band-boost-db' || attribute === 'data-band-cut-db' || attribute === 'data-spread-max-offset-db' || attribute === 'data-wet-model') return 'filterbank';
-  if (attribute === 'data-feedback-topology' || attribute === 'data-feedback-tap' || attribute === 'data-local-loop-tuning' || attribute === 'data-feedback-core') return 'local-feedback';
+  if (attribute === 'data-feedback-topology' || attribute === 'data-feedback-tap' || attribute === 'data-feedback-tap-modulation' || attribute === 'data-local-loop-tuning' || attribute === 'data-feedback-core') return 'local-feedback';
   if (attribute === 'data-feedback-all-engine' || attribute === 'data-feedback-all-source' || attribute === 'data-post-gain-feedback-weight' || attribute === 'data-feedback-all-level') return 'main';
   return 'resonator';
 };
@@ -848,6 +848,7 @@ const addDevLabSelector = (label, attribute, options) => {
     'data-feedback-core': 'local-feedback',
     'data-local-loop-tuning': 'local-feedback',
     'data-feedback-tap': 'local-feedback',
+    'data-feedback-tap-modulation': 'local-feedback',
     'data-common-bus-saturation-mode': 'local-feedback',
     'data-common-bus-drive': 'local-feedback',
     'data-common-bus-ceiling': 'local-feedback',
@@ -983,6 +984,7 @@ const feedbackTopologySelect = addDevLabSelector('DEV FB TOPOLOGY', 'data-feedba
 const feedbackCoreSelect = addDevLabSelector('FEEDBACK CORE', 'data-feedback-core', [['current', 'CURRENT COMMON'], ['zdf', 'UNIFIED ZDF'], ['zdf-per-band', 'PER-BAND ZDF']]);
 const localLoopTuningSelect = addDevLabSelector('DEV LOCAL LOOP TUNING', 'data-local-loop-tuning', [['current', 'CURRENT'], ['compensated', 'COMPENSATED']]);
 const feedbackTapSelect = addDevLabSelector('DEV FB TAP', 'data-feedback-tap', [['pre-gain', 'PRE GAIN'], ['post-gain', 'POST GAIN']]);
+const feedbackTapModulationSelect = addDevLabSelector('DEV FB TAP MOD', 'data-feedback-tap-modulation', [['include', 'FADER + MOD'], ['exclude', 'FADER ONLY · LEGACY']]);
 const wetModelSelect = addDevLabSelector('DEV WET MODEL', 'data-wet-model', [['reference-delta', 'REFERENCE + DELTA'], ['filterbank-sum', 'FILTERBANK SUM']]);
 const commonBusSatSelect = addDevLabSelector('DEV FB SAT', 'data-common-bus-saturation-mode', [['current', 'CURRENT'], ['constant-ceiling', 'CONSTANT CEILING']]);
 const commonBusDriveSelect = addDevLabSelector('DEV FB DRIVE', 'data-common-bus-drive', [['0.5', '0.5'], ['1', '1'], ['2', '2'], ['4', '4'], ['8', '8'], ['16', '16']]);
@@ -1005,6 +1007,7 @@ if (wetModelSelect) wetModelSelect.value = 'filterbank-sum';
 if (feedbackTopologySelect) feedbackTopologySelect.value = 'common-bus';
 if (feedbackCoreSelect) feedbackCoreSelect.value = 'zdf-per-band';
 if (feedbackTapSelect) feedbackTapSelect.value = 'post-gain';
+if (feedbackTapModulationSelect) feedbackTapModulationSelect.value = 'include';
 if (feedbackAllEngineSelect) feedbackAllEngineSelect.value = 'common-bus';
 if (feedbackAllLevelSelect) feedbackAllLevelSelect.value = 'sqrt10';
 const feedbackAllAmountInput = addDevLabNumberControl({
@@ -1184,6 +1187,12 @@ const DEV_LAB_HELP = {
     values: [['PRE GAIN', 'Verwendet den unverstärkten Base-Bandpass-Ausgang.'], ['POST GAIN', 'Verwendet den mit (1 + deltaGain) gewichteten Band-Ausgang; Boost/Cut verändert dadurch zusätzlich den lokalen Loop-Tap.']],
     default: 'PRE GAIN', note: 'Experimenteller DEV-Wert; keine Änderung an Band-Gain selbst.'
   },
+  'data-feedback-tap-modulation': {
+    title: 'DEV FB TAP MOD', what: 'Legt fest, ob Band-Modulation in die POST-GAIN-Feedback-Taps der ZDF-Cores einfließt.',
+    scope: 'Nur UNIFIED ZDF und PER-BAND ZDF mit POST GAIN-Tap bzw. POST-GAIN-MAIN-Summe. Betrifft LOCAL und MAIN; CURRENT verwendet Modulation im Tap unverändert immer. Dynamic-EQ-Gain bleibt in beiden Fällen außerhalb des Loops.',
+    values: [['FADER + MOD', 'Der Tap folgt dem effektiven Band-Gain aus Fader plus LFO, Envelope, Clock Mod, FILTER- und Spread-Modulation. Moduliertes −12 dB wirkt auf die Resonanz wie ein Fader auf −12 dB.'], ['FADER ONLY · LEGACY', 'Bisheriges Verhalten: Nur der Fader gewichtet den Tap; Modulation verändert ausschließlich den hörbaren Pegel.']],
+    default: 'FADER + MOD', note: 'Ohne aktive Band-Modulation sind beide Werte sample-identisch.'
+  },
   'data-common-bus-saturation-mode': {
     title: 'DEV FB SAT', what: 'Wählt die Sättigungskennlinie der Common-Bus-Returns.',
     scope: 'Nur positive COMMON-BUS-Returns: lokaler Common Return und MAIN/FB-ALL-Return werden jeweils mit dieser Kennlinie gesättigt.',
@@ -1211,7 +1220,7 @@ const DEV_LAB_HELP = {
   'data-feedback-all-source': {
     title: 'DEV FB ALL SOURCE', what: 'Wählt die Quelle der MAIN-/FB-ALL-Summe.',
     scope: 'Nur COMMON-BUS FB ALL / MAIN; die Auswahl erfolgt nach Bildung der jeweiligen MAIN-Summe und vor Level, Resonance-Gain und Saturation.',
-    values: [['PRE GAIN SUM', 'Summe der Base-Band-Ausgänge vor Band-Gain.'], ['STATIC POST-GAIN SUM', 'Summe der mit statischem Band-Gain gewichteten Ausgänge; Dynamic-EQ-Gain wird hier nicht verwendet.']],
+    values: [['PRE GAIN SUM', 'Summe der Base-Band-Ausgänge vor Band-Gain.'], ['STATIC POST-GAIN SUM', 'Summe der mit Band-Gain vor Dynamic EQ gewichteten Ausgänge; Dynamic-EQ-Gain wird hier nicht verwendet. Ob Band-Modulation in ZDF-Cores einfließt, legt DEV FB TAP MOD fest.']],
     default: 'STATIC POST-GAIN SUM', note: 'Bei LEGACY wirkungslos; experimenteller MAIN-Tap-Vergleich.'
   },
   'data-post-gain-feedback-weight': {
@@ -1299,7 +1308,7 @@ const DEV_LAB_GROUP_HELP = {
   output: ['data-output-guard-enabled', 'data-output-guard-threshold', 'data-output-guard-attack-ms', 'data-output-guard-release-ms', 'data-output-protection-enabled', 'data-output-protection-threshold', 'data-output-protection-softness'],
   keyboard: ['data-key-step-percent', 'data-key-speed-hz'],
   filterbank: ['data-reference-level', 'data-band-boost-db', 'data-band-cut-db', 'data-spread-max-offset-db', 'data-wet-model'],
-  'local-feedback': ['data-feedback-topology', 'data-feedback-core', 'data-local-loop-tuning', 'data-feedback-tap', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
+  'local-feedback': ['data-feedback-topology', 'data-feedback-core', 'data-local-loop-tuning', 'data-feedback-tap', 'data-feedback-tap-modulation', 'data-common-bus-saturation-mode', 'data-common-bus-drive', 'data-common-bus-ceiling'],
   main: ['data-feedback-all-engine', 'data-feedback-all-source', 'data-post-gain-feedback-weight', 'data-feedback-all-level', 'data-feedback-all-amount', 'data-feedback-all-resonance-curve', 'data-feedback-all-saturation-return'],
   'negative-resonance': ['data-negative-resonance-mode', 'data-negative-resonance-curve', 'data-negative-resonance-amount', 'data-negative-resonance-local', 'data-negative-resonance-main', 'data-negative-resonance-phase'],
   resonator: ['data-positive-resonance-audition', 'data-positive-resonance-drive', 'data-positive-resonance-damping-floor', 'data-positive-resonance-output', 'data-positive-resonance-latency', 'data-positive-resonance-curve', 'data-positive-resonance-engine']
@@ -4383,6 +4392,10 @@ const updateDevControlRelevance = () => {
   setDevControlRelevance(feedbackCoreSelect, topology !== 'isolated-tpt', 'ZDF ist nur mit COMMON BUS oder LOCAL LOOP EXP aktiv.');
   setDevControlRelevance(localLoopTuningSelect, topology === 'local-loop-exp' && core === 'current' && audioEngine.positiveResonanceEngine === 'tpt', 'Nur mit LOCAL LOOP EXP + CURRENT + TPT aktiv.');
   setDevControlRelevance(feedbackTapSelect, topology === 'common-bus' || (topology === 'local-loop-exp' && core === 'zdf-per-band'), 'Nur für COMMON BUS oder LOCAL LOOP EXP + ZDF PER-BAND aktiv.');
+  const zdfPostGainLocalTap = (core === 'zdf' && topology === 'common-bus' && audioEngine.feedbackTap === 'post-gain')
+    || (core === 'zdf-per-band' && topology !== 'isolated-tpt' && audioEngine.feedbackTap === 'post-gain');
+  setDevControlRelevance(feedbackTapModulationSelect, zdfPostGainLocalTap || (core !== 'current' && staticMainTap),
+    'Nur mit UNIFIED/PER-BAND ZDF und POST-GAIN-Tap oder POST-GAIN-MAIN-Summe aktiv.');
   setDevControlRelevance(commonBusSatSelect, topology === 'common-bus' || mainBus, 'Nur mit COMMON-BUS-Return aktiv.');
   const constantCeiling = commonBusSatSelect && !commonBusSatSelect.disabled && audioEngine.commonBusSaturationMode === 'constant-ceiling';
   setDevControlRelevance(commonBusDriveSelect, constantCeiling, 'Nur mit COMMON-BUS-Return + CONSTANT CEILING aktiv.');
@@ -4447,6 +4460,7 @@ bindDevLabSelect(feedbackTopologySelect, value => { audioEngine.setFeedbackTopol
 bindDevLabSelect(feedbackCoreSelect, value => { audioEngine.setFeedbackCore(value); updateLocalLoopTuningRelevance(); }, 'zdf-per-band');
 bindDevLabSelect(localLoopTuningSelect, value => audioEngine.setLocalLoopTuning(value), 'current');
 bindDevLabSelect(feedbackTapSelect, value => audioEngine.setFeedbackTap(value), 'pre-gain');
+bindDevLabSelect(feedbackTapModulationSelect, value => audioEngine.setFeedbackTapModulation(value), 'include');
 bindDevLabSelect(wetModelSelect, value => audioEngine.setWetModel(value), 'reference-delta');
 bindDevLabSelect(commonBusSatSelect, value => audioEngine.setCommonBusSaturationMode(value), 'current');
 bindDevLabSelect(commonBusDriveSelect, value => audioEngine.setCommonBusDrive(value), '1');
@@ -4585,7 +4599,7 @@ const syncUiFromAudioState = (snapshot, fromPreset = false) => {
     [spreadMaxOffsetSelect, snapshot.spreadMaxOffsetDb],
     [referenceLevelSelect, snapshot.referenceLevel], [resonanceEngineSelect, snapshot.positiveResonanceEngine],
     [feedbackTopologySelect, snapshot.feedbackTopology], [feedbackCoreSelect, snapshot.feedbackCore], [localLoopTuningSelect, snapshot.localLoopTuning],
-    [feedbackTapSelect, snapshot.feedbackTap], [wetModelSelect, snapshot.wetModel],
+    [feedbackTapSelect, snapshot.feedbackTap], [feedbackTapModulationSelect, snapshot.feedbackTapModulation], [wetModelSelect, snapshot.wetModel],
     [commonBusSatSelect, snapshot.commonBusSaturationMode], [commonBusDriveSelect, snapshot.commonBusDrive],
     [commonBusCeilingSelect, snapshot.commonBusCeiling], [feedbackAllEngineSelect, snapshot.feedbackAllEngine],
     [feedbackAllSourceSelect, snapshot.feedbackAllSource], [postGainFeedbackWeightSelect, snapshot.postGainFeedbackWeight],
@@ -4764,6 +4778,7 @@ const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
   ['feedbackCore', value => audioEngine.setFeedbackCore(value)],
   ['localLoopTuning', value => audioEngine.setLocalLoopTuning(value)],
   ['feedbackTap', value => audioEngine.setFeedbackTap(value)],
+  ['feedbackTapModulation', value => audioEngine.setFeedbackTapModulation(value)],
   ['wetModel', value => audioEngine.setWetModel(value)],
   ['commonBusSaturationMode', value => audioEngine.setCommonBusSaturationMode(value)],
   ['commonBusDrive', value => audioEngine.setCommonBusDrive(value)],

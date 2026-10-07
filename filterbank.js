@@ -75,6 +75,7 @@
   const normalizeBandCutDb = value => [12, 24, 36, 48, 60].includes(Number(value)) ? Number(value) : BAND_CUT_DB;
   const normalizeFeedbackAllLevel = value => FEEDBACK_ALL_LEVELS.includes(value) ? value : 'raw';
   const normalizePostGainFeedbackWeight = value => value === 'soft-knee' ? 'soft-knee' : 'current';
+  const normalizeFeedbackTapModulation = value => value === 'exclude' ? 'exclude' : 'include';
   const normalizeFeedbackAllResonanceCurve = value => value === 'soft-knee' ? 'soft-knee' : 'current';
   const normalizeFeedbackAllSaturationReturn = value => value === 'drive-4-return-0.2' ? 'drive-4-return-0.2' : 'current';
   const normalizeFeedbackAllAmount = value => Number.isFinite(Number(value)) ? Math.min(100, Math.max(0, Number(value))) : 100;
@@ -159,6 +160,7 @@
       this.feedbackAllEngine = (initialState?.feedbackAllEngine ?? 'common-bus') === 'common-bus' ? 'common-bus' : 'legacy';
       this.feedbackAllSource = initialState?.feedbackAllSource === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum';
       this.postGainFeedbackWeight = normalizePostGainFeedbackWeight(initialState?.postGainFeedbackWeight);
+      this.feedbackTapModulation = normalizeFeedbackTapModulation(initialState?.feedbackTapModulation);
       this.feedbackAllLevel = normalizeFeedbackAllLevel(initialState?.feedbackAllLevel ?? 'sqrt10');
       this.feedbackAllAmount = normalizeFeedbackAllAmount(initialState?.feedbackAllAmount);
       this.feedbackAllResonanceCurve = normalizeFeedbackAllResonanceCurve(initialState?.feedbackAllResonanceCurve);
@@ -217,7 +219,7 @@
           positiveResonanceEngine: this.positiveResonanceEngine,
           feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel,
           commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling,
-          feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn,
+          feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackTapModulation: this.feedbackTapModulation, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn,
           negativeResonanceMode: this.negativeResonanceMode, negativeResonanceCurve: this.negativeResonanceCurve, negativeResonanceAmount: this.negativeResonanceAmount, negativeResonanceLocal: this.negativeResonanceLocal, negativeResonanceMain: this.negativeResonanceMain, negativeResonancePhase: this.negativeResonancePhase,
           smoothingTime: PARAMETER_SMOOTHING_SECONDS,
           feedbackGateSmoothingTime: FEEDBACK_GATE_SMOOTHING_SECONDS,
@@ -473,6 +475,7 @@
     setCommonBusCeiling(value) { if (!this.disposed) { this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; this.workletNode.port.postMessage({ type: 'set-common-bus-ceiling', value: this.commonBusCeiling }); } return this.commonBusCeiling; }
     setFeedbackAllEngine(value) { if (!this.disposed) { this.feedbackAllEngine = value === 'common-bus' ? 'common-bus' : 'legacy'; this.workletNode.port.postMessage({ type: 'set-feedback-all-engine', value: this.feedbackAllEngine }); } return this.feedbackAllEngine; }
     setFeedbackAllSource(value) { if (!this.disposed) { this.feedbackAllSource = value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; this.workletNode.port.postMessage({ type: 'set-feedback-all-source', value: this.feedbackAllSource }); } return this.feedbackAllSource; }
+    setFeedbackTapModulation(value) { if (!this.disposed) { this.feedbackTapModulation = normalizeFeedbackTapModulation(value); this.workletNode.port.postMessage({ type: 'set-feedback-tap-modulation', value: this.feedbackTapModulation }); } return this.feedbackTapModulation; }
     setPostGainFeedbackWeight(value) { if (!this.disposed) { this.postGainFeedbackWeight = normalizePostGainFeedbackWeight(value); this.workletNode.port.postMessage({ type: 'set-post-gain-feedback-weight', value: this.postGainFeedbackWeight }); } return this.postGainFeedbackWeight; }
     setFeedbackAllLevel(value) { if (!this.disposed) { this.feedbackAllLevel = normalizeFeedbackAllLevel(value); this.workletNode.port.postMessage({ type: 'set-feedback-all-level', value: this.feedbackAllLevel }); } return this.feedbackAllLevel; }
     setFeedbackAllAmount(value) { if (!this.disposed) { this.feedbackAllAmount = normalizeFeedbackAllAmount(value); this.workletNode.port.postMessage({ type: 'set-feedback-all-amount', value: this.feedbackAllAmount }); } return this.feedbackAllAmount; }
@@ -521,6 +524,7 @@
       this.feedbackAllEngine = (snapshot?.feedbackAllEngine ?? this.feedbackAllEngine) === 'common-bus' ? 'common-bus' : 'legacy';
       this.feedbackAllSource = (snapshot?.feedbackAllSource ?? this.feedbackAllSource) === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum';
       this.postGainFeedbackWeight = normalizePostGainFeedbackWeight(snapshot?.postGainFeedbackWeight ?? this.postGainFeedbackWeight);
+      this.feedbackTapModulation = normalizeFeedbackTapModulation(snapshot?.feedbackTapModulation ?? this.feedbackTapModulation);
       if (snapshot?.feedbackAllLevel !== undefined) this.feedbackAllLevel = normalizeFeedbackAllLevel(snapshot.feedbackAllLevel);
       if (snapshot?.feedbackAllAmount !== undefined) this.feedbackAllAmount = normalizeFeedbackAllAmount(snapshot.feedbackAllAmount);
       this.feedbackAllResonanceCurve = normalizeFeedbackAllResonanceCurve(snapshot?.feedbackAllResonanceCurve ?? this.feedbackAllResonanceCurve);
@@ -557,7 +561,7 @@
         , referenceLevel: this.referenceLevel, maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb, positiveResonanceEngine: this.positiveResonanceEngine
         , feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
-        , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
+        , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackTapModulation: this.feedbackTapModulation, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
         , negativeResonanceMode: this.negativeResonanceMode, negativeResonanceCurve: this.negativeResonanceCurve, negativeResonanceAmount: this.negativeResonanceAmount, negativeResonanceLocal: this.negativeResonanceLocal, negativeResonanceMain: this.negativeResonanceMain, negativeResonancePhase: this.negativeResonancePhase
       });
     }

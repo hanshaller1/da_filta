@@ -137,6 +137,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     this.feedbackAllEngine = this.readFeedbackAllEngine(processorOptions.feedbackAllEngine ?? 'common-bus');
     this.feedbackAllSource = this.readFeedbackAllSource(processorOptions.feedbackAllSource);
     this.postGainFeedbackWeight = this.readPostGainFeedbackWeight(processorOptions.postGainFeedbackWeight);
+    this.feedbackTapModulation = this.readFeedbackTapModulation(processorOptions.feedbackTapModulation);
     this.feedbackAllLevel = this.readFeedbackAllLevel(processorOptions.feedbackAllLevel ?? 'sqrt10');
     this.feedbackAllAmount = this.readFeedbackAllAmount(processorOptions.feedbackAllAmount);
     this.feedbackAllAmountTarget = this.feedbackAllAmount;
@@ -406,6 +407,19 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   readFeedbackAllEngine(value) { return value === 'common-bus' ? 'common-bus' : 'legacy'; }
   readFeedbackAllSource(value) { return value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; }
   readPostGainFeedbackWeight(value) { return value === 'soft-knee' ? 'soft-knee' : 'current'; }
+  // INCLUDE: ZDF post-gain taps follow the effective pre-dynamic band gain
+  // (fader x LFO/Envelope/Clock Mod/FILTER/spread modulation), like the
+  // audible band and the CURRENT core. EXCLUDE keeps the former fader-only tap.
+  readFeedbackTapModulation(value) { return value === 'exclude' ? 'exclude' : 'include'; }
+  // Advances one band's modulation-gain smoother exactly once per sample and
+  // returns the linear pre-dynamic gain seen by ZDF post-gain feedback taps.
+  smoothZdfTapGain(channel, band, deltaGain) {
+    const targets = this.modulationBandGainTargets[channel];
+    const gains = this.modulationBandGains[channel];
+    const target = targets[band];
+    gains[band] = target + this.modulationGainSmoothingCoefficient * (gains[band] - target);
+    return this.feedbackTapModulation === 'exclude' ? 1 + deltaGain : (1 + deltaGain) * gains[band];
+  }
   readFeedbackAllLevel(value) {
     return ['sqrt2', 'half', 'sqrt10', 'tenth', 'twentieth', 'fortieth', 'eightieth'].includes(value) ? value : 'raw';
   }
@@ -900,6 +914,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     for (let band = 0; band < this.bandCount; band += 1) {
       gates[band] = gateTargets[band] + this.feedbackGateSmoothingCoefficient * (gates[band] - gateTargets[band]);
       gains[band] = gainTargets[band] + this.bandGainSmoothingCoefficient * (gains[band] - gainTargets[band]);
+      const audibleGain = this.smoothZdfTapGain(channel, band, gains[band]);
       const filter = filters[band];
       if (!Number.isFinite(filter.ic1eq) || !Number.isFinite(filter.ic2eq)) {
         filter.reset();
@@ -907,7 +922,6 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       }
       const a = filter.baseK * filter.a2;
       const b = filter.baseK * (filter.a1 * filter.ic1eq + filter.a2 * (source - filter.ic2eq));
-      const audibleGain = 1 + gains[band];
       const localWeight = gates[band] * (localPost ? audibleGain : 1);
       const mainWeight = feedbackAllGate * level * (mainPost ? this.mainPostGainFeedbackWeight(audibleGain) : 1);
       localA += localWeight * a;
@@ -1026,9 +1040,9 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       // before either the implicit solve or the audible gain use.
       gates[band] = gateTargets[band] + this.feedbackGateSmoothingCoefficient * (gates[band] - gateTargets[band]);
       gains[band] = gainTargets[band] + this.bandGainSmoothingCoefficient * (gains[band] - gainTargets[band]);
+      const audibleGain = this.smoothZdfTapGain(channel, band, gains[band]);
 
       const gate = gates[band];
-      const audibleGain = 1 + gains[band];
       const weight = gate * (this.feedbackTap === 'post-gain' ? audibleGain : 1);
       if (Math.abs(feedbackGain) <= COMMON_BUS_RESONANCE_EPSILON || weight <= COMMON_BUS_RESONANCE_EPSILON) {
         returns[band] = 0;
@@ -1289,6 +1303,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     for (let band = 0; band < this.bandCount; band += 1) {
       gates[band] = gateTargets[band] + this.feedbackGateSmoothingCoefficient * (gates[band] - gateTargets[band]);
       gains[band] = gainTargets[band] + this.bandGainSmoothingCoefficient * (gains[band] - gainTargets[band]);
+      const audibleGain = this.smoothZdfTapGain(channel, band, gains[band]);
       const filter = filters[band];
       if (!Number.isFinite(filter.ic1eq) || !Number.isFinite(filter.ic2eq)) {
         filter.reset();
@@ -1296,7 +1311,6 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       }
       const p = filter.baseK * (filter.a1 * filter.ic1eq + filter.a2 * (source - filter.ic2eq));
       const d = filter.baseK * filter.a2;
-      const audibleGain = 1 + gains[band];
       const localWeight = gates[band] * (this.feedbackTap === 'post-gain' ? audibleGain : 1);
       const mainWeight = this.feedbackAllSource === 'post-gain-sum'
         ? this.mainPostGainFeedbackWeight(audibleGain) : 1;
@@ -2063,6 +2077,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
   }
   setFeedbackAllSource(value) { this.feedbackAllSource = this.readFeedbackAllSource(value); }
   setPostGainFeedbackWeight(value) { this.postGainFeedbackWeight = this.readPostGainFeedbackWeight(value); }
+  setFeedbackTapModulation(value) { this.feedbackTapModulation = this.readFeedbackTapModulation(value); }
   setFeedbackAllLevel(value) { this.feedbackAllLevel = this.readFeedbackAllLevel(value); }
   setFeedbackAllAmount(value, immediate = false) {
     this.feedbackAllAmountTarget = this.readFeedbackAllAmount(value);
@@ -2137,6 +2152,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.feedbackAllEngine !== undefined) this.setFeedbackAllEngine(data.feedbackAllEngine);
     if (data.feedbackAllSource !== undefined) this.setFeedbackAllSource(data.feedbackAllSource);
     if (data.postGainFeedbackWeight !== undefined) this.setPostGainFeedbackWeight(data.postGainFeedbackWeight);
+    if (data.feedbackTapModulation !== undefined) this.setFeedbackTapModulation(data.feedbackTapModulation);
     if (data.feedbackAllLevel !== undefined) this.setFeedbackAllLevel(data.feedbackAllLevel);
     if (data.feedbackAllAmount !== undefined) this.setFeedbackAllAmount(data.feedbackAllAmount, true);
     if (data.feedbackAllResonanceCurve !== undefined) this.setFeedbackAllResonanceCurve(data.feedbackAllResonanceCurve);
@@ -2280,6 +2296,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
     if (data.type === 'set-feedback-all-engine') { this.setFeedbackAllEngine(data.value); return; }
     if (data.type === 'set-feedback-all-source') { this.setFeedbackAllSource(data.value); return; }
     if (data.type === 'set-post-gain-feedback-weight') { this.setPostGainFeedbackWeight(data.value); return; }
+    if (data.type === 'set-feedback-tap-modulation') { this.setFeedbackTapModulation(data.value); return; }
     if (data.type === 'set-feedback-all-level') { this.setFeedbackAllLevel(data.value); return; }
     if (data.type === 'set-feedback-all-amount') { this.setFeedbackAllAmount(data.value); return; }
     if (data.type === 'set-feedback-all-resonance-curve') { this.setFeedbackAllResonanceCurve(data.value); return; }
@@ -2516,10 +2533,13 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       globalTapSum += bandOutput;
       if (!solverSmoothsControls) deltaGains[band] = deltaTargets[band] + this.bandGainSmoothingCoefficient * (deltaGains[band] - deltaTargets[band]);
       const staticGain = 1 + deltaGains[band];
-      const modulationTarget = this.modulationBandGainTargets[channel][band];
-      const modulationGain = modulationTarget + this.modulationGainSmoothingCoefficient
-        * (this.modulationBandGains[channel][band] - modulationTarget);
-      this.modulationBandGains[channel][band] = modulationGain;
+      // Active ZDF solvers already advanced this smoother for their feedback taps.
+      let modulationGain = this.modulationBandGains[channel][band];
+      if (!solverSmoothsControls) {
+        const modulationTarget = this.modulationBandGainTargets[channel][band];
+        modulationGain = modulationTarget + this.modulationGainSmoothingCoefficient * (modulationGain - modulationTarget);
+        this.modulationBandGains[channel][band] = modulationGain;
+      }
       const modulationOffsetTargetDb = this.modulationBandOffsetsByChannel[channel][band];
       const modulationOffsetDb = modulationOffsetTargetDb + this.modulationGainSmoothingCoefficient
         * (this.modulationBandOffsetsDbSmoothed[channel][band] - modulationOffsetTargetDb);
@@ -2654,6 +2674,7 @@ class DaFiltaProcessor extends AudioWorkletProcessor {
       diagnostics.feedbackTopology = this.feedbackTopology;
       diagnostics.localLoopTuning = this.localLoopTuning;
       diagnostics.feedbackTap = this.feedbackTap;
+      diagnostics.feedbackTapModulation = this.feedbackTapModulation;
       diagnostics.wetModel = this.wetModel;
       diagnostics.commonBusSaturationMode = this.commonBusSaturationMode;
       diagnostics.commonBusDrive = this.commonBusDrive;

@@ -111,6 +111,7 @@
       this.commonBusSaturationMode = 'current'; this.commonBusDrive = 1; this.commonBusCeiling = 1;
       this.feedbackAllEngine = 'common-bus'; this.feedbackAllSource = 'post-gain-sum';
       this.postGainFeedbackWeight = 'current';
+      this.feedbackTapModulation = 'include';
       this.feedbackAllLevel = 'sqrt10';
       this.feedbackAllAmount = 100;
       this.negativeResonanceMode = 'signed'; this.negativeResonanceCurve = 'same-as-positive'; this.negativeResonanceAmount = 100;
@@ -387,6 +388,7 @@
     setCommonBusCeiling(value) { this.commonBusCeiling = [0.25, 0.5, 1, 2, 4].includes(Number(value)) ? Number(value) : 1; this.filterbank?.setCommonBusCeiling(this.commonBusCeiling); return this.commonBusCeiling; }
     setFeedbackAllEngine(value) { this.feedbackAllEngine = value === 'common-bus' ? 'common-bus' : 'legacy'; this.filterbank?.setFeedbackAllEngine(this.feedbackAllEngine); return this.feedbackAllEngine; }
     setFeedbackAllSource(value) { this.feedbackAllSource = value === 'pre-gain-sum' ? 'pre-gain-sum' : 'post-gain-sum'; this.filterbank?.setFeedbackAllSource(this.feedbackAllSource); return this.feedbackAllSource; }
+    setFeedbackTapModulation(value) { this.feedbackTapModulation = value === 'exclude' ? 'exclude' : 'include'; this.filterbank?.setFeedbackTapModulation(this.feedbackTapModulation); return this.feedbackTapModulation; }
     setPostGainFeedbackWeight(value) { this.postGainFeedbackWeight = value === 'soft-knee' ? 'soft-knee' : 'current'; this.filterbank?.setPostGainFeedbackWeight(this.postGainFeedbackWeight); return this.postGainFeedbackWeight; }
     setFeedbackAllLevel(value) { this.feedbackAllLevel = FEEDBACK_ALL_LEVELS.includes(value) ? value : 'raw'; this.filterbank?.setFeedbackAllLevel(this.feedbackAllLevel); return this.feedbackAllLevel; }
     setFeedbackAllAmount(value) { this.feedbackAllAmount = Number.isFinite(Number(value)) ? Math.min(100, Math.max(0, Number(value))) : 100; this.filterbank?.setFeedbackAllAmount(this.feedbackAllAmount); return this.feedbackAllAmount; }
@@ -756,7 +758,7 @@
         , referenceLevel: this.referenceLevel, maxBandBoostDb: this.maxBandBoostDb, maxBandCutDb: this.maxBandCutDb, positiveResonanceEngine: this.positiveResonanceEngine
         , feedbackTopology: this.feedbackTopology, feedbackCore: this.feedbackCore, localLoopTuning: this.localLoopTuning, feedbackTap: this.feedbackTap, wetModel: this.wetModel
         , commonBusSaturationMode: this.commonBusSaturationMode, commonBusDrive: this.commonBusDrive, commonBusCeiling: this.commonBusCeiling
-        , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
+        , feedbackAllEngine: this.feedbackAllEngine, feedbackAllSource: this.feedbackAllSource, postGainFeedbackWeight: this.postGainFeedbackWeight, feedbackTapModulation: this.feedbackTapModulation, feedbackAllLevel: this.feedbackAllLevel, feedbackAllAmount: this.feedbackAllAmount, feedbackAllResonanceCurve: this.feedbackAllResonanceCurve, feedbackAllSaturationReturn: this.feedbackAllSaturationReturn
         , perChannelBands: this.perChannelBands
         , negativeResonanceMode: this.negativeResonanceMode, negativeResonanceCurve: this.negativeResonanceCurve, negativeResonanceAmount: this.negativeResonanceAmount, negativeResonanceLocal: this.negativeResonanceLocal, negativeResonanceMain: this.negativeResonanceMain, negativeResonancePhase: this.negativeResonancePhase
         , onDiagnostics: this.onDiagnostics
@@ -867,6 +869,7 @@
       this.setFeedbackAllEngine(snapshot?.feedbackAllEngine ?? this.feedbackAllEngine);
       this.setFeedbackAllSource(snapshot?.feedbackAllSource ?? this.feedbackAllSource);
       this.setPostGainFeedbackWeight(snapshot?.postGainFeedbackWeight ?? this.postGainFeedbackWeight);
+      this.setFeedbackTapModulation(snapshot?.feedbackTapModulation ?? this.feedbackTapModulation);
       this.setFeedbackAllLevel(snapshot?.feedbackAllLevel ?? this.feedbackAllLevel);
       this.setFeedbackAllAmount(snapshot?.feedbackAllAmount ?? this.feedbackAllAmount);
       this.setFeedbackAllResonanceCurve(snapshot?.feedbackAllResonanceCurve ?? this.feedbackAllResonanceCurve);
