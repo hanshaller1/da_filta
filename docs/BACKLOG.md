@@ -1,6 +1,6 @@
 # da_filta Backlog
 
-Stand: 2026-10-07
+Stand: 2026-10-09
 
 Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungsthemen. Erledigte Punkte sollen aus dem offenen Backlog entfernt oder in einen kurzen Abschnitt „Erledigt“ verschoben werden. Neue bestätigte Aufgaben sollen hier ergänzt werden.
 
@@ -9,17 +9,14 @@ Diese Datei sammelt offene Produkt-, DSP-, Modulations-, MIDI- und Wartungstheme
 Ergebnis der Review-Sitzung vom 2026-10-07 (Code, UI, Hardware-Handbuch). Die
 Liste ist nach Dringlichkeit geordnet; Details stehen in den verlinkten Dateien.
 
-### 1. Abschließen (liegt bereit)
+### 1. Abschließen
 
-- [ ] `feature/shared-bus-band-sat-core` committen: DEV-Core SHARED BUS · BAND SAT,
-  Test `tests/filterbank-shared-band-sat.spec.js`, Nachtrag in
-  [resonator-production.md](resonator-production.md).
-- [ ] Paritätstest `tests/dsp-performance.spec.js:164` ist auf
-  `fix/feedback-loop-modulation` rot (Diagnosefeld `feedbackTapModulation` aus
-  `2d3fd24`). Korrektur liegt uncommittet auf dem Feature-Branch und gehört vor
-  dem PR auf den Fix-Branch.
-- [ ] Hörtest für `fix/feedback-loop-modulation` (LFO auf Band-Gain bei hoher
-  Resonance), dann Push und PR nach `main`. Danach Feature-Branch nachziehen.
+- [x] `fix/feedback-loop-modulation` ist auf `main` gemergt und gepusht.
+- [x] `feature/shared-bus-band-sat-core` nach `main` gemergt (2026-10-09):
+  DEV-Core SHARED BUS · BAND SAT, Aufteilung von `app.js`, UI-Vereinheitlichung
+  und die Korrektur des Paritätstests `tests/dsp-performance.spec.js:164`.
+- [ ] Hörtest zur Feedback-Tap-Modulation (LFO auf Band-Gain bei hoher
+  Resonance) steht noch aus.
 
 ### 2. Echte Fehler (klein)
 
