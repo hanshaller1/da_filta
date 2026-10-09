@@ -23,9 +23,9 @@ Liste ist nach Dringlichkeit geordnet; Details stehen in den verlinkten Dateien.
 
 ### 2. Echte Fehler (klein)
 
-- [ ] Modus-Navigation unter 1200 px Breite ist ungestylt (außer in MOD/PRESETS).
-  Entweder Tabs für schmale Fenster stylen oder Mindestbreite 1200 px festlegen
-  und den halben schmalen Modus entfernen.
+- [x] Modus-Navigation unter 1200 px Breite gestylt; einspaltiges Layout unter
+  1050 px gilt für alle Modi (2026-10-09). Offen: Kopfzeile und globale Regler
+  scrollen bei 560 px horizontal, Theme-Auswahl überlappt dort die Kopfzeile.
 - [ ] `feedbackAllLevel`: ungültiger Wert fällt auf `raw` statt `sqrt10`
   (`filterbank.js`, `filterbank-processor.js` `readFeedbackAllLevel`), rund
   +10 dB MAIN-Gain. Vorher prüfen, ob Tests `raw` erwarten.
@@ -80,19 +80,29 @@ Liste ist nach Dringlichkeit geordnet; Details stehen in den verlinkten Dateien.
   DEV LAB.
 - [ ] `syncLegacyLfoAliases` und weitere Legacy-Spiegelungen abbauen.
 
-### 6. UI-Vereinheitlichung (eigener Branch, bricht Layout-Tests)
+### 6. UI-Vereinheitlichung
 
-- [ ] Drei feste Button-Größen an die `ui-role-*`-Klassen binden (derzeit 28
-  Varianten aus Höhe, Schrift und Gewicht außerhalb von DEV LAB).
-- [ ] Eine gemeinsame Parameter-Komponente (Label, Wert, Slider) mit gleichen
-  Schriftgrößen in allen Modi; Panel-Kopf vereinheitlichen.
-- [ ] Feste Pixelwerte durch die vorhandenen `--text-*`-Tokens ersetzen,
-  `font: inherit` für Buttons, Mindestschrift 9 px.
+Stand 2026-10-09, Regeln in [ui-conventions.md](ui-conventions.md#workspace-controls-2026-10-09).
+
+- [x] Drei Button-Größen (22/26/32 px) und eine Schrift an die `ui-role-*`-Klassen
+  gebunden; Selects und Felder folgen derselben Größe.
+- [x] Gleiche Schriftgrößen für Titel, Gruppentitel, Labels und Werte in allen
+  Modi.
+- [x] Tote und überstimmte Regeln aus `styles.css` entfernt.
+- [x] Abgeschnittene Zuweisungszeilen in LFO, Envelope und Clock Mod (HOLD-Feld,
+  „NO TARGET“) bei 1440×900 und 1914×907 behoben.
+- [ ] Panel-Kopf vereinheitlichen: FILTERBANK, FILTER und DYNAMIC EQ haben
+  Innenabstand, die übrigen Modi stehen bündig.
+- [ ] Restliche feste Schriftgrößen außerhalb der Workspaces auf `--text-*`
+  umstellen (Kopfzeile, DEV LAB, Analyzer-Mikrotelemetrie mit 6–7 px).
 - [ ] Zweckentfremdete Klassen umbenennen (`dynamic-eq-view-toggle` als
   allgemeiner Button, `filter-parameter-control`, `lfo-*` in fremden Modi).
-- [ ] Abgeschnittene Texte: Clock-Mod-Bandbeschriftung und HOLD-Feld, „NO
-  TARGET“ in LFO/Envelope, Status-Chips der Filterbank. Leerer MOD-Tab.
-- [ ] 36 Media-Query-Blöcke in `styles.css` zusammenführen.
+  Betrifft HTML, UI-Module und Tests.
+- [ ] Clock-Mod-Bandbeschriftung im Diagramm überlagert sich; Status-Chips der
+  Filterbank enden bei schmalem Fenster mitten im Wort. Leerer MOD-Tab.
+- [ ] Bei 1280×720 passen die Modulations-Modi nicht in den Arbeitsbereich und
+  scrollen intern.
+- [ ] 19 Media-Query-Bedingungen in `styles.css` zusammenführen.
 
 ### Größere Funktionslücken zum Original
 

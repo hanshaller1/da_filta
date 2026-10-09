@@ -20,6 +20,48 @@ text. Theme colors come from existing variables such as `--cyan`,
 `--panel-background`, `--output-border`, `--button-background` and
 `--active-background`.
 
+## Workspace controls (2026-10-09)
+
+Inside a workspace (`[data-mode-panel]`) the look of a control comes from its
+role, not from the mode it sits in.
+
+| Class | Use | Weight |
+| --- | --- | --- |
+| `ui-role-toggle` | on/off and one-of-many switches | semibold |
+| `ui-role-view` | switches that only change what a graph shows | semibold, muted when off |
+| `ui-role-utility` | secondary helpers (SETUP, VIEW, LOCK) | semibold, secondary colour |
+| `ui-role-action` | does something once (ADD, RESET, LOAD) | bold |
+| `ui-role-danger` | removes something | bold, error colour |
+
+Every `ui-role-*` button, every `select` and every text or number field takes
+its height from `--control-size` and its padding from `--control-padding`. A
+component never sets these on the control; the container picks a size:
+
+| Size | Token | Where |
+| --- | --- | --- |
+| default | `--control-height` (26px) | selects, fields and the buttons beside them |
+| compact | `--control-height-compact` (22px) | panel headers, FILTER TYPE grid, band FB, Clock Mod locks |
+| touch | `--control-height-touch` (32px) | PRESETS / SNAPSHOTS workspace |
+
+Type roles in a workspace:
+
+| Role | Size / weight | Examples |
+| --- | --- | --- |
+| Workspace title | `--text-panel-title` 15 / 700 | FILTER RESPONSE, LFO MODULATION |
+| Group title | `--text-section-title` 10 / 700 | WAVE, DIRECTION, DETECTOR, SNAPSHOT A |
+| Parameter label | `--text-control-label` 10 / 700 | above a slider |
+| Field label | `--text-utility` 9 / 400 | beside a select, field or switch |
+| Button | `--text-panel-button` 10 / 600, 9px from 1200 to 1599px | all `ui-role-*` buttons |
+| Parameter value | `--text-value-small` 11 / 600, tabular | slider read-outs |
+| Field value | `--text-value-compact` 10 / 400 | selects and fields |
+| Status, axis | `--text-utility` 9 or `--text-micro` 8 | header status, assignment state, graph axes |
+
+New controls get a role class and, if they need a different size, a container
+that sets `--control-size`. Do not add a font size or height to the control.
+
+Below 1200px the mode tabs are a grid above the workspace; below 1050px the page
+is one column with DEV / LAB at the end. Both hold for every mode.
+
 Repeated selectors are often intentional responsive or later feature overrides.
 Only remove a declaration when cascade order, specificity and media scope prove
 it redundant. Validate the affected elements' computed styles and geometry across
