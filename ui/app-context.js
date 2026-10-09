@@ -16,8 +16,12 @@ const {
   setBandBaseGain: setStateBandBaseGain
 } = window.ResonantState;
 const state = createInitialState();
+
+// Created in audio-io.js once every callback it needs exists.
 let audioEngine = null;
 const setAudioEngine = value => (audioEngine = value);
+
+// No-ops until their owner replaces them: app.js provides panic, dev-lab-telemetry.js the diagnostics refresh.
 let panic = () => {};
 const setPanic = value => (panic = value);
 let updateResonatorDiagnostics = () => {};

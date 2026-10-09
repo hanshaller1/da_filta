@@ -48,13 +48,13 @@ const addKeyboardPreferenceControl = ({ label, attribute, min, max, step, suffix
   input.addEventListener('change', () => apply(true)); input.addEventListener('blur', () => apply(true));
   control.append(title, input, unit); container.append(control); return input;
 };
-const keyStepInput = addKeyboardPreferenceControl({
+addKeyboardPreferenceControl({
   label: 'KEY STEP', attribute: 'data-key-step-percent', min: .1, max: 100, step: .1, suffix: '%',
   tooltip: 'Bestimmt, wie weit sich ein Band-Fader pro Tastaturschritt bewegt. Der Wert entspricht einem Prozentanteil des vollständigen Fader-Regelwegs. 5 % entspricht dem bisherigen Verhalten; 100 % bewegt den Fader mit einem Schritt bis zum jeweiligen Grenzwert.',
   value: () => keyboardPreferences.keyStepPercent,
   onChange: value => { keyboardPreferences.keyStepPercent = value; persistKeyboardPreferences(); }, integer: true
 });
-const keySpeedInput = addKeyboardPreferenceControl({
+addKeyboardPreferenceControl({
   label: 'KEY SPEED', attribute: 'data-key-speed-hz', min: 1, max: 60, step: 1, suffix: 'Hz',
   tooltip: 'Bestimmt, wie viele Fader-Schritte pro Sekunde beim Gedrückthalten einer Tastaturtaste ausgeführt werden. Der erste Schritt erfolgt sofort. 30 Hz entspricht dem bisherigen Verhalten.',
   value: () => keyboardPreferences.keySpeedHz,

@@ -25,7 +25,7 @@ taps have different positions; do not infer routing from a UI graph's location.
 
 | Component | Existing responsibility |
 | --- | --- |
-| `app.js`, `index.html`, `styles.css` | Controllers, workspace visibility, UI-only graphs, themes, MIDI setup, keyboard, product preset/snapshot/Morph controls and separate DEV/LAB snapshots |
+| `app.js`, `ui/*.js`, `index.html`, `styles.css` | Controllers, workspace visibility, UI-only graphs, themes, MIDI setup, keyboard, product preset/snapshot/Morph controls and separate DEV/LAB snapshots; see [UI modules](#ui-modules) |
 | `state.js` | Base configuration, normalization and compatibility; not a second DSP engine |
 | `presets-core.mjs` | Version-1 explicit production base projection using existing normalizers; user library/file exchange, immutable A/B snapshots and semantic Morph; no DSP or parallel application state |
 | `audio-engine.js` | Web Audio graph, source selection, transport forwarding and worklet messages |
@@ -83,6 +83,32 @@ measurement details are in [`presets-snapshots.md`](presets-snapshots.md).
 `tests/helpers/input-character-architecture*.cjs` and related measurement bundles
 are experiments, including frozen comparison variants. They are deliberately
 separate from production, even when a historical filename says "production".
+
+## UI modules
+
+`app.js` is the entry. It imports the modules under `ui/` in setup order; each
+module builds its part of the DOM and registers its listeners while it loads.
+
+| Modules | Area |
+| --- | --- |
+| `app-context.js` | State constants, the UI `state` object, the AudioEngine handle, `hooks` |
+| `dev-lab-panel.js`, `dev-lab-controls.js`, `dev-lab-bindings.js`, `dev-lab-help*.js`, `dev-lab-telemetry.js`, `sweetspots.js` | DEV / LAB panel, its controls and their engine bindings, help, telemetry/debug console, sweetspots |
+| `analyzer-header.js`, `spectrum-renderer.js`, `band-analyzer.js` | Filterbank response header, spectrum canvas, band bars and overlays |
+| `band-gain-range.js`, `bands.js`, `global-controls.js`, `global-audio-sync.js`, `keyboard-preferences.js`, `keyboard-shortcuts.js` | Band strips, global sliders, feedback buttons and keyboard control |
+| `modulation-assignments.js`, `macro-mode.js`, `filter-mode.js`, `dynamic-eq-mode.js`, `midi-clock.js`, `lfo-mode.js`, `clock-mod-mode.js`, `envelope-mode.js` | Workspace modes and the shared assignment editor |
+| `mode-navigation.js`, `mode-api.js` | Mode tabs and the `window.*Mode` APIs used by tests |
+| `audio-io.js`, `state-sync.js`, `presets.js`, `theme.js` | Audio source/devices and engine creation, engine-to-UI restore, presets, themes |
+
+Rules that keep the setup order deterministic:
+
+- A module imports only modules that `app.js` loads before it.
+- A call from an earlier module into a later one goes through `hooks` in
+  `app-context.js`. Each hook is declared there with its owning module, assigned
+  once by that module, and only used from event handlers and render calls.
+- A `let` that another module assigns is exported together with a setter from
+  the module that declares it.
+- `tests/ui-module-graph.test.mjs` checks the load order, the import direction
+  and the hooks.
 
 ## P1-C DSP and compatibility decisions
 

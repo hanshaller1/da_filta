@@ -8,7 +8,11 @@ Start: `npm start`
 Tests: `npm run test:browser`
 
 ## Repository map
-- `app.js` – UI, controllers, visualizations, application orchestration
+- `app.js` – entry: loads the `ui/` modules in setup order, wires panic and the audio transport
+- `ui/` – UI modules, one area each: `app-context.js` (shared state, engine handle, `hooks`),
+  `*-mode.js` (workspaces), `dev-lab-*.js`, `band-analyzer.js`, `bands.js`, `global-controls.js`,
+  `audio-io.js`, `state-sync.js`, `presets.js`, `sweetspots.js`. A module imports only modules that
+  load before it; calls in the other direction go through `hooks` (`tests/ui-module-graph.test.mjs`).
 - `audio-engine.js` – Web Audio graph, routing, AudioWorklets, analyzers
 - `state.js` – application state
 - `filterbank.js` – Filterbank control/support logic
@@ -51,19 +55,20 @@ Prefer existing architecture/state over parallel implementations.
 - Keep generated measurements under `tests/artifacts/`; tracked `tests/measurements/` files are historical reference fixtures.
 
 For FILTER tasks start with:
-`app.js`, `filter-shape-core.mjs` and relevant `tests/filter-*.spec.js`.
+`ui/filter-mode.js`, `filter-shape-core.mjs` and relevant `tests/filter-*.spec.js`.
 
 For FILTERBANK/DSP tasks start with:
 `filterbank.js`, `filterbank-processor.js`, `audio-engine.js`
 and relevant filterbank/DSP tests.
 
 For modulation/LFO tasks start with:
-`modulation-core.mjs`, `lfo-core.mjs` and relevant modulation/LFO tests.
+`modulation-core.mjs`, `lfo-core.mjs` and relevant modulation/LFO tests;
+for their UI `ui/lfo-mode.js` and `ui/modulation-assignments.js`.
 
 For Envelope Follower tasks start with:
 `envelope-core.mjs`, `modulation-core.mjs`,
 `tests/envelope-core.test.js`, `tests/envelope-follower.spec.js`.
-Inspect `filterbank-processor.js`, `audio-engine.js` or `app.js` only when the task crosses into DSP integration, routing or UI.
+Inspect `filterbank-processor.js`, `audio-engine.js` or `ui/envelope-mode.js` only when the task crosses into DSP integration, routing or UI.
 
 ## Safety
 Do not change DSP, gain staging, routing or output protection for purely UI tasks.

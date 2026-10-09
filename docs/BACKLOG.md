@@ -65,12 +65,16 @@ Liste ist nach Dringlichkeit geordnet; Details stehen in den verlinkten Dateien.
 - [ ] Aliasing: Eingangsstufen mit 2-fach-Oversampling erreichen bei +24 dB und
   hellem Material nur −22 bis −25 dB; `tanh` im Feedback ohne Oversampling.
 - [ ] Toter Parameter: Eingangs-Gain wird im Preamp-Worklet empfangen und
-  geglättet, aber nicht verwendet. Toter Code `channelSelection` in `app.js`.
+  geglättet, aber nicht verwendet. `channelSelection` in `ui/bands.js` ist nie
+  aktiv (Vorbereitung für Feedback je Kanal).
 
 ### 5. Wartbarkeit (nur vor größeren neuen Funktionen)
 
-- [ ] `app.js` (rund 4900 Zeilen, ein Geltungsbereich) in Module je Bereich
-  zerlegen: DEV LAB, Theme, MIDI, Analyzer, je Modus.
+- [x] `app.js` in 31 Module unter `ui/` zerlegt (2026-10-09); Regeln und
+  Übersicht in [architecture.md](architecture.md#ui-modules).
+- [ ] UI-Module weiter entzerren: `hooks` und Setter durch Ereignisse oder
+  kleinere Schnittstellen ersetzen, `state-sync.js` je Bereich aufteilen,
+  restliche überlange Ausdruckszeilen umbrechen.
 - [ ] Nicht genutzte Feedback-Architekturen aus `processChannelFrame` auslagern
   oder entfernen, sobald der Produkt-Core feststeht. Verliert A/B-Vergleiche im
   DEV LAB.
