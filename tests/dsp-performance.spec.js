@@ -171,6 +171,8 @@ test('unchanged P2 paths preserve P1-C parity and the corrected coupled solver p
     const plain = value => ArrayBuffer.isView(value) ? Array.from(value)
       : Array.isArray(value) ? value.map(plain) : value && typeof value === 'object'
         ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, plain(item)])) : value;
+    // feedbackTapModulation is a diagnostics field added after the frozen P1-C reference.
+    const referenceDiagnostics = message => { for (const channel of [message?.left, message?.right]) if (channel) delete channel.feedbackTapModulation; return message; };
     function state(h) {
       const keys = ['deltaGains', 'feedbackGates', 'feedbackReturns', 'localFeedbackReturns', 'commonFeedbackReturns', 'mainCommonFeedbackReturns',
         'mainCommonSaturationOutputs', 'zdfReturn', 'zdfLocalReturn', 'zdfMainReturn', 'zdfPerBandLocalReturns', 'zdfPerBandMainReturns',
@@ -184,7 +186,7 @@ test('unchanged P2 paths preserve P1-C parity and the corrected coupled solver p
           Array.from(h.bank.clockMod.heldLeft), Array.from(h.bank.clockMod.heldRight)],
         lfo: h.bank.lfoSources.map(x => [x.phase, x.phaseFrameCounter, x.sampleValue, x.randomState]),
         envelope: h.bank.envelopeSources.map(x => [x.value, x.rawLevel, x.rmsEnergy, x.rmsWindowIndex, x.delayRemainingSamples]),
-        messages: h.messages, lastMessage: plain(h.lastMessage) };
+        messages: h.messages, lastMessage: referenceDiagnostics(plain(h.lastMessage)) };
     }
     function solverMetrics(h) {
       const counter = () => ({ calls: 0, active: 0, iterations: 0, maxIterations: 0, maxResidual: 0 });
