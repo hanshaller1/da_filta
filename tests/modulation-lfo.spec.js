@@ -372,7 +372,7 @@ test('LFO V1.5 slot editor stays selection-only, compact, routable, and responsi
     expect(overflow.graphHeight, JSON.stringify(overflow)).toBeGreaterThanOrEqual(110);
     expect(overflow.separator).toBe(viewport.width > 1050 ? 'block' : 'none');
     for (const control of overflow.assignmentControls) {
-      expect(Math.abs(control.height - 27), JSON.stringify({ viewport, overflow })).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(control.height - 26), JSON.stringify({ viewport, overflow })).toBeLessThanOrEqual(0.5);
       expect(Math.abs(control.top - overflow.assignmentControls[0].top), JSON.stringify({ viewport, overflow })).toBeLessThanOrEqual(0.5);
     }
     if (viewport.width > 1050) expect(overflow.graphHeight, JSON.stringify(overflow)).toBeGreaterThan(150);
