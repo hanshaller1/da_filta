@@ -263,6 +263,44 @@ Laufzeitänderungen nicht hörbar wurden. Tests:
 `tests/filterbank-feedback-tap-modulation.spec.js`,
 `tests/filterbank-per-band-isolated-controls.spec.js`.
 
+## Nachtrag 2026-10-07: DEV-Core SHARED BUS · BAND SAT
+
+Das Handbuch der Hardware (S. 8, Blockschaltbild) führt jeden Bandausgang über
+seinen Schalter in den **gemeinsamen Eingangssummierer** zurück, der alle zehn
+Bänder speist; SWITCH ALL führt die Ausgangssumme aller Bänder dorthin. Zwei
+Hörproben am Gerät ergänzen das: Fremde Fader verändern den Klang eines
+oszillierenden Bands (gemeinsamer Rückweg), und zwei oszillierende Bänder
+bleiben stabil nebeneinander (Begrenzung je Band, nicht im Rückweg).
+
+PER-BAND ZDF (privater Rückweg) und UNIFIED ZDF (gemeinsame Begrenzung) bilden
+jeweils nur eine der beiden Beobachtungen ab. Der neue DEV-Core
+`feedbackCore: 'zdf-shared-band-sat'` kombiniert beides:
+
+```text
+r        = Summe_n( weight[n] * tanh(gain[n] * band[n](input + r)) )
+weight[n] = K_local * gate[n] + K_main * fbAllGate * level * amount
+output   = Summe_n( tanh(gain[n] * band[n]) * dynamicEqRatio[n] )
+```
+
+`gain[n]` ist Fader mal Modulation, `K` unverändert `sign(r) * 1.25 * r²`. Der
+Return ist eine skalare implizite Gleichung je Kanal (Newton mit Bisektion,
+Toleranz 1e-8). Die Stufe sättigt auch ohne Feedback; DEV FB TOPOLOGY, TAP,
+TAP MOD und FB SAT wirken in diesem Core nicht. Produktstandard und Presets
+bleiben PER-BAND ZDF.
+
+Messung 48 kHz, Resonance 1, aktive Bänder +12 dB, 50-ms-Rauschimpuls:
+
+| Fall | PER-BAND | UNIFIED | SHARED BUS · BAND SAT |
+|---|---|---|---|
+| 218 Hz + 1,5 kHz | beide, je +14 dB | nur 1401 Hz | 215 Hz +5,4 dB, 1434 Hz +3,5 dB |
+| 411 Hz, fremde Fader −12/0/+12 dB (RMS) | 3,54 / 3,54 / 3,54 | 3,65 / 3,98 / 5,45 | 1,12 / 1,53 / 2,00 |
+| 411 Hz, 3. Harmonische | −22,6 dB | −19,5 dB | −7,3 dB |
+| Einsatz bei +12 dB | zwischen 0,4 und 0,5 | zwischen 0,4 und 0,5 | zwischen 0,4 und 0,5 |
+
+Annahmen ohne Hardwarebeleg: symmetrisches `tanh` mit Ceiling 1, Sättigung auch
+ohne Feedback, MAIN ohne eigene Sättigung. Test:
+`tests/filterbank-shared-band-sat.spec.js`.
+
 ## Geänderte Dateien
 
 Produktion (vier Dateien):

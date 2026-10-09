@@ -68,7 +68,7 @@ const ANALYZER_SILENCE_DBFS = -90;
 const ANALYZER_SILENCE_RMS = 10 ** (ANALYZER_SILENCE_DBFS / 20);
 const finiteAnalyzerEnergy = value => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
 const getAnalyzerBandEnergyMetrics = packet => {
-  const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band';
+  const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band' || packet?.left?.feedbackCoreEffective === 'zdf-shared-band-sat';
   const left = (zdf ? packet?.left?.baseBandEnergy : packet?.left?.bandEnergy) || [];
   const right = (zdf ? packet?.right?.baseBandEnergy : packet?.right?.bandEnergy) || [];
   const frameCount = Math.max(1, finiteAnalyzerEnergy(packet?.left?.frameCount)) + Math.max(1, finiteAnalyzerEnergy(packet?.right?.frameCount));
@@ -692,7 +692,7 @@ const devLabTelemetry = (() => {
       ['RES TARGET', number(left.resonanceTarget)], ['RES SMOOTHED', number(left.smoothedResonance)], ['TOPOLOGY', left.feedbackTopology], ['TAP', left.feedbackTap], ['WET', left.wetModel], ['SAT', left.commonBusSaturationMode], ['DRIVE', number(left.commonBusDrive)], ['CEILING', number(left.commonBusCeiling)],
       ['POST GAIN FB WEIGHT', left.mainPostGainFeedbackWeightMode], ['FB ALL AMOUNT', `${number(left.feedbackAllAmount)} %`],
       ['CORE', left.feedbackCore !== 'current' && left.feedbackCoreEffective !== left.feedbackCore ? 'ZDF (INACTIVE: ISOLATED TPT)' : left.feedbackCore],
-      ...(left.feedbackCoreEffective === 'zdf' ? [
+      ...(left.feedbackCoreEffective === 'zdf' || left.feedbackCoreEffective === 'zdf-shared-band-sat' ? [
         ['ZDF LOCAL BUS L/R', `${number(left.zdfLocalBus)} / ${number(right.zdfLocalBus)}`],
         ['ZDF MAIN BUS L/R', `${number(left.zdfMainBus)} / ${number(right.zdfMainBus)}`],
         ['ZDF TOTAL RETURN L/R', `${number(left.zdfTotalReturn)} / ${number(right.zdfTotalReturn)}`],
@@ -745,12 +745,12 @@ const devLabTelemetry = (() => {
     const sourceCrestR = metrics.sourceRmsRight > 1e-9 ? right.sourcePeak / metrics.sourceRmsRight : 0;
     const wetCrestL = metrics.wetRmsLeft > 1e-9 ? left.wetPeak / metrics.wetRmsLeft : 0;
     const wetCrestR = metrics.wetRmsRight > 1e-9 ? right.wetPeak / metrics.wetRmsRight : 0;
-    detail.innerHTML = `<strong>${left.feedbackCoreEffective === 'zdf' || left.feedbackCoreEffective === 'zdf-per-band' ? 'DOMINANT BASE BAND' : 'DOMINANT BAND'}</strong><b>${frequencies[dominant.index]} Hz</b><span>DOMINANCE ${(dominant.dominance * 100).toFixed(0)} %</span><span>DOM STABLE ${((performance.now() - dominant.startedAt) / 1000).toFixed(1)} s</span><span>SAT ACT ${(metrics.sat * 100).toFixed(0)} % · RETURN/TAP ${metrics.feedbackRatio === null ? 'N/A' : metrics.feedbackRatio.toFixed(2)}</span><span>DC L/R ${number(metrics.dcLeft)} / ${number(metrics.dcRight)}</span><span>SRC CREST ${sourceCrestL.toFixed(2)} / ${sourceCrestR.toFixed(2)}</span><span>WET CREST ${wetCrestL.toFixed(2)} / ${wetCrestR.toFixed(2)}</span>`;
+    detail.innerHTML = `<strong>${left.feedbackCoreEffective === 'zdf' || left.feedbackCoreEffective === 'zdf-per-band' || left.feedbackCoreEffective === 'zdf-shared-band-sat' ? 'DOMINANT BASE BAND' : 'DOMINANT BAND'}</strong><b>${frequencies[dominant.index]} Hz</b><span>DOMINANCE ${(dominant.dominance * 100).toFixed(0)} %</span><span>DOM STABLE ${((performance.now() - dominant.startedAt) / 1000).toFixed(1)} s</span><span>SAT ACT ${(metrics.sat * 100).toFixed(0)} % · RETURN/TAP ${metrics.feedbackRatio === null ? 'N/A' : metrics.feedbackRatio.toFixed(2)}</span><span>DC L/R ${number(metrics.dcLeft)} / ${number(metrics.dcRight)}</span><span>SRC CREST ${sourceCrestL.toFixed(2)} / ${sourceCrestR.toFixed(2)}</span><span>WET CREST ${wetCrestL.toFixed(2)} / ${wetCrestR.toFixed(2)}</span>`;
     if (dominant.isSilent || !Number.isFinite(dominant.startedAt) || dominant.startedAt <= 0 || performance.now() < dominant.startedAt) {
       detail.querySelector('b').textContent = 'N/A';
       detail.querySelectorAll('span')[1].textContent = 'DOM STABLE N/A';
     }
-    bands.replaceChildren(...frequencies.map((frequency, index) => { const zdf = left.feedbackCoreEffective === 'zdf' || left.feedbackCoreEffective === 'zdf-per-band'; const energy = finite((zdf ? left.baseBandEnergy : left.bandEnergy)?.[index]) + finite((zdf ? right.baseBandEnergy : right.bandEnergy)?.[index]); const maxEnergy = Math.max(1e-12, dominant.energy); const row = document.createElement('div'); const gain = Math.max(audioEngine?.effectiveBandGainDbLeft?.[index] ?? 0, audioEngine?.effectiveBandGainDbRight?.[index] ?? 0); row.className = index === dominant.index ? 'is-dominant' : ''; row.innerHTML = `<span>${frequency >= 1000 ? `${(frequency / 1000).toFixed(1)} kHz` : `${frequency} Hz`}</span><i><b style="width:${Math.min(100, energy / maxEnergy * 100)}%"></b></i><em>${number(Math.max(finite((zdf ? left.baseBandPeak : left.bandPeak)?.[index]), finite((zdf ? right.baseBandPeak : right.bandPeak)?.[index])))}</em><small>${left.localGates?.[index] > .5 || right.localGates?.[index] > .5 ? 'FB ON' : 'FB OFF'} · ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} dB</small>`; return row; }));
+    bands.replaceChildren(...frequencies.map((frequency, index) => { const zdf = left.feedbackCoreEffective === 'zdf' || left.feedbackCoreEffective === 'zdf-per-band' || left.feedbackCoreEffective === 'zdf-shared-band-sat'; const energy = finite((zdf ? left.baseBandEnergy : left.bandEnergy)?.[index]) + finite((zdf ? right.baseBandEnergy : right.bandEnergy)?.[index]); const maxEnergy = Math.max(1e-12, dominant.energy); const row = document.createElement('div'); const gain = Math.max(audioEngine?.effectiveBandGainDbLeft?.[index] ?? 0, audioEngine?.effectiveBandGainDbRight?.[index] ?? 0); row.className = index === dominant.index ? 'is-dominant' : ''; row.innerHTML = `<span>${frequency >= 1000 ? `${(frequency / 1000).toFixed(1)} kHz` : `${frequency} Hz`}</span><i><b style="width:${Math.min(100, energy / maxEnergy * 100)}%"></b></i><em>${number(Math.max(finite((zdf ? left.baseBandPeak : left.bandPeak)?.[index]), finite((zdf ? right.baseBandPeak : right.bandPeak)?.[index])))}</em><small>${left.localGates?.[index] > .5 || right.localGates?.[index] > .5 ? 'FB ON' : 'FB OFF'} · ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} dB</small>`; return row; }));
     if (energyMetrics.isSilent) bands.querySelectorAll('i b').forEach(bar => { bar.style.width = '0%'; });
     const localTrace = responseLab.querySelector('[data-dev-lab-trace="common"]');
     localTrace.previousElementSibling.innerHTML = `${left.feedbackCoreEffective === 'zdf-per-band' ? 'LOCAL RETURN MAX ABS' : 'COMMON RETURN'} <i>L</i> <i>R</i>`;
@@ -771,7 +771,7 @@ const devLabTelemetry = (() => {
     const resetCount = Math.max(finite(packet.left.mainCommonNonFiniteResets), finite(packet.right.mainCommonNonFiniteResets));
     if (resetCount > sessionMax.resets) log('WARNING NON-FINITE RESET / MAIN COMMON BUS', { warning: true });
     sessionMax.resets = Math.max(sessionMax.resets, resetCount); sessionMax.local = Math.max(sessionMax.local, Math.abs(localReturnValue(packet.left, true)), Math.abs(localReturnValue(packet.right, true))); sessionMax.main = Math.max(sessionMax.main, Math.abs(finite(packet.left.mainCommonFeedbackReturn)), Math.abs(finite(packet.right.mainCommonFeedbackReturn))); sessionMax.saturator = Math.max(sessionMax.saturator, Math.abs(finite(packet.left.commonSaturationInput)), Math.abs(finite(packet.right.commonSaturationInput)), Math.abs(finite(packet.left.mainSaturationInput)), Math.abs(finite(packet.right.mainSaturationInput))); sessionMax.satActivity = Math.max(sessionMax.satActivity, metrics.sat);
-    const baseEnergy = packet.left.feedbackCoreEffective === 'zdf' || packet.left.feedbackCoreEffective === 'zdf-per-band';
+    const baseEnergy = packet.left.feedbackCoreEffective === 'zdf' || packet.left.feedbackCoreEffective === 'zdf-per-band' || packet.left.feedbackCoreEffective === 'zdf-shared-band-sat';
     const leftEnergy = baseEnergy ? packet.left.baseBandEnergy : packet.left.bandEnergy;
     const rightEnergy = baseEnergy ? packet.right.baseBandEnergy : packet.right.bandEnergy;
     const energy = Math.max(...(leftEnergy || []).map((value, index) => finite(value) + finite(rightEnergy?.[index]))); if (energy > sessionMax.bandEnergy) { sessionMax.bandEnergy = energy; sessionMax.bandIndex = nextDominant.index; }
@@ -984,7 +984,7 @@ const bandCutSelect = addDevLabSelector('DEV BAND CUT', 'data-band-cut-db', [['1
 const spreadMaxOffsetSelect = addDevLabSelector('DEV SPREAD MAX OFFSET', 'data-spread-max-offset-db', [['3', '3 dB'], ['6', '6 dB'], ['9', '9 dB'], ['12', '12 dB']]);
 if (spreadMaxOffsetSelect) spreadMaxOffsetSelect.value = '6';
 const feedbackTopologySelect = addDevLabSelector('DEV FB TOPOLOGY', 'data-feedback-topology', [['isolated-tpt', 'ISOLATED TPT'], ['common-bus', 'COMMON BUS · DA_FILTA-ORIGINAL'], ['local-loop-exp', 'LOCAL LOOP EXP']]);
-const feedbackCoreSelect = addDevLabSelector('FEEDBACK CORE', 'data-feedback-core', [['current', 'CURRENT COMMON'], ['zdf', 'UNIFIED ZDF'], ['zdf-per-band', 'PER-BAND ZDF']]);
+const feedbackCoreSelect = addDevLabSelector('FEEDBACK CORE', 'data-feedback-core', [['current', 'CURRENT COMMON'], ['zdf', 'UNIFIED ZDF'], ['zdf-per-band', 'PER-BAND ZDF'], ['zdf-shared-band-sat', 'SHARED BUS · BAND SAT']]);
 const localLoopTuningSelect = addDevLabSelector('DEV LOCAL LOOP TUNING', 'data-local-loop-tuning', [['current', 'CURRENT'], ['compensated', 'COMPENSATED']]);
 const feedbackTapSelect = addDevLabSelector('DEV FB TAP', 'data-feedback-tap', [['pre-gain', 'PRE GAIN'], ['post-gain', 'POST GAIN']]);
 const feedbackTapModulationSelect = addDevLabSelector('DEV FB TAP MOD', 'data-feedback-tap-modulation', [['include', 'FADER + MOD'], ['exclude', 'FADER ONLY · LEGACY']]);
@@ -1174,8 +1174,8 @@ const DEV_LAB_HELP = {
   },
   'data-feedback-core': {
     title: 'FEEDBACK CORE', what: 'DEV/LAB-Vergleich der vorhandenen Feedback-Cores; PER-BAND ZDF ist der Produktstandard.',
-    scope: 'PER-BAND ZDF löst LOCAL je Band und MAIN aus der Bandsumme gemeinsam ohne expliziten Sample-Delay. CURRENT COMMON erhält den ursprünglichen verzögerten Bus-Sound; UNIFIED ZDF verwendet einen gemeinsamen impliziten Return.',
-    values: [['CURRENT COMMON', 'Vorhandener CURRENT-Core; COMMON BUS oder LOCAL LOOP EXP bestimmt dessen Routing.'], ['UNIFIED ZDF', 'Gemeinsamer impliziter LOCAL/MAIN-Return.'], ['PER-BAND ZDF', 'Private implizite LOCAL-Returns plus separater gekoppelter MAIN-Return.']],
+    scope: 'PER-BAND ZDF löst LOCAL je Band und MAIN aus der Bandsumme gemeinsam ohne expliziten Sample-Delay. CURRENT COMMON erhält den ursprünglichen verzögerten Bus-Sound; UNIFIED ZDF verwendet einen gemeinsamen impliziten Return. SHARED BUS · BAND SAT folgt dem Blockschaltbild der Hardware: gemeinsamer linearer Eingangssummierer, Begrenzung in der Gain-Stufe jedes Bands.',
+    values: [['CURRENT COMMON', 'Vorhandener CURRENT-Core; COMMON BUS oder LOCAL LOOP EXP bestimmt dessen Routing.'], ['UNIFIED ZDF', 'Gemeinsamer impliziter LOCAL/MAIN-Return.'], ['PER-BAND ZDF', 'Private implizite LOCAL-Returns plus separater gekoppelter MAIN-Return.'], ['SHARED BUS · BAND SAT', 'Aktive Bänder speisen einen gemeinsamen impliziten Return in alle Bänder; jedes Band sättigt hinter Fader und Modulation selbst, auch ohne Feedback. FB ALL addiert alle Bänder auf denselben Summierer. DEV FB TOPOLOGY, TAP, TAP MOD und FB SAT wirken hier nicht.']],
     default: 'PER-BAND ZDF', note: 'Explizite DEV-Snapshots behalten ihren Core. Frequenzen, Q und normale FB-Bedienelemente bleiben unverändert.'
   },
   'data-local-loop-tuning': {
@@ -3655,7 +3655,7 @@ let hoveredAnalyzerBand = null;
 const toDb = value => `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1)} dB`;
 const getAnalyzerTelemetry = () => devLabTelemetry.getLatest?.() || null;
 const getEnergyPair = (packet, index) => {
-  const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band';
+  const zdf = packet?.left?.feedbackCoreEffective === 'zdf' || packet?.left?.feedbackCoreEffective === 'zdf-per-band' || packet?.left?.feedbackCoreEffective === 'zdf-shared-band-sat';
   const left = zdf ? packet?.left?.baseBandEnergy : packet?.left?.bandEnergy;
   const right = zdf ? packet?.right?.baseBandEnergy : packet?.right?.bandEnergy;
   return (Number(left?.[index]) || 0) + (Number(right?.[index]) || 0);
@@ -4387,7 +4387,8 @@ const updateDevControlRelevance = () => {
   const core = audioEngine.feedbackCore;
   const mainBus = topology !== 'isolated-tpt' && (core !== 'current' || audioEngine.feedbackAllEngine === 'common-bus');
   const staticMainTap = mainBus && audioEngine.feedbackAllSource === 'post-gain-sum';
-  const isolatedTpt = topology === 'isolated-tpt' && core !== 'zdf-per-band';
+  const sharedBandSat = core === 'zdf-shared-band-sat';
+  const isolatedTpt = topology === 'isolated-tpt' && core !== 'zdf-per-band' && !sharedBandSat;
   const positiveResonator = isolatedTpt && audioEngine.positiveResonanceEngine === 'tpt';
   const mainCurrentSaturation = mainBus && audioEngine.feedbackAllEngine === 'common-bus'
     && audioEngine.commonBusSaturationMode === 'current' && topology === 'common-bus';
@@ -4398,14 +4399,14 @@ const updateDevControlRelevance = () => {
   setDevControlRelevance(outputSoftnessInput, audioEngine.outputProtectionEnabled, 'Nur bei FINAL SAFETY ON aktiv.');
   setDevControlRelevance(referenceLevelSelect, audioEngine.wetModel === 'reference-delta', 'Nur mit REFERENCE + DELTA aktiv.');
   setDevControlRelevance(spreadMaxOffsetSelect, !state.perChannelBands, 'Nur im CLASSIC-Spread-Modus aktiv.');
-  setDevControlRelevance(feedbackCoreSelect, topology !== 'isolated-tpt', 'ZDF ist nur mit COMMON BUS oder LOCAL LOOP EXP aktiv.');
+  setDevControlRelevance(feedbackCoreSelect, topology !== 'isolated-tpt' || sharedBandSat, 'ZDF ist nur mit COMMON BUS oder LOCAL LOOP EXP aktiv.');
   setDevControlRelevance(localLoopTuningSelect, topology === 'local-loop-exp' && core === 'current' && audioEngine.positiveResonanceEngine === 'tpt', 'Nur mit LOCAL LOOP EXP + CURRENT + TPT aktiv.');
-  setDevControlRelevance(feedbackTapSelect, topology === 'common-bus' || (topology === 'local-loop-exp' && core === 'zdf-per-band'), 'Nur für COMMON BUS oder LOCAL LOOP EXP + ZDF PER-BAND aktiv.');
+  setDevControlRelevance(feedbackTapSelect, !sharedBandSat && (topology === 'common-bus' || (topology === 'local-loop-exp' && core === 'zdf-per-band')), 'Nur für COMMON BUS oder LOCAL LOOP EXP + ZDF PER-BAND aktiv; nicht mit SHARED BUS · BAND SAT.');
   const zdfPostGainLocalTap = (core === 'zdf' && topology === 'common-bus' && audioEngine.feedbackTap === 'post-gain')
     || (core === 'zdf-per-band' && topology !== 'isolated-tpt' && audioEngine.feedbackTap === 'post-gain');
-  setDevControlRelevance(feedbackTapModulationSelect, zdfPostGainLocalTap || (core !== 'current' && staticMainTap),
+  setDevControlRelevance(feedbackTapModulationSelect, !sharedBandSat && (zdfPostGainLocalTap || (core !== 'current' && staticMainTap)),
     'Nur mit UNIFIED/PER-BAND ZDF und POST-GAIN-Tap oder POST-GAIN-MAIN-Summe aktiv.');
-  setDevControlRelevance(commonBusSatSelect, topology === 'common-bus' || mainBus, 'Nur mit COMMON-BUS-Return aktiv.');
+  setDevControlRelevance(commonBusSatSelect, !sharedBandSat && (topology === 'common-bus' || mainBus), 'Nur mit COMMON-BUS-Return aktiv; nicht mit SHARED BUS · BAND SAT.');
   const constantCeiling = commonBusSatSelect && !commonBusSatSelect.disabled && audioEngine.commonBusSaturationMode === 'constant-ceiling';
   setDevControlRelevance(commonBusDriveSelect, constantCeiling, 'Nur mit COMMON-BUS-Return + CONSTANT CEILING aktiv.');
   setDevControlRelevance(commonBusCeilingSelect, constantCeiling, 'Nur mit COMMON-BUS-Return + CONSTANT CEILING aktiv.');
@@ -4453,6 +4454,7 @@ const updateLocalLoopTuningRelevance = () => {
   const localTitle = audioEngine.feedbackCore === 'zdf-per-band'
     ? 'LOCAL: Eigene Rückkopplung dieses Bands; FB ALL ergänzt eine separate gemeinsame MAIN-Schleife.'
     : audioEngine.feedbackCore === 'zdf' ? 'UNIFIED ZDF: Dieses Band speist den gemeinsamen impliziten Feedback-Return.'
+    : audioEngine.feedbackCore === 'zdf-shared-band-sat' ? 'SHARED BUS: Dieses Band speist den gemeinsamen Eingangssummierer aller Bänder und begrenzt sich in seiner eigenen Gain-Stufe.'
       : audioEngine.feedbackTopology === 'common-bus'
         ? 'COMMON BUS: Dieses Band speist den gemeinsamen Feedback-Bus; sein Return regt alle zehn Bänder dieses Kanals an.'
         : 'LOCAL: Rückkopplung dieses Bands im gewählten DEV/LAB-Pfad.';

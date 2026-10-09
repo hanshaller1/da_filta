@@ -85,7 +85,7 @@
   const normalizeNegativeResonancePhase = value => Number.isFinite(Number(value)) ? Math.min(180, Math.max(0, Number(value))) : 90;
   const normalizePositiveResonanceEngine = value => value === 'phase2' ? value : 'tpt';
   const normalizeLocalLoopTuning = value => value === 'compensated' ? 'compensated' : 'current';
-  const normalizeFeedbackCore = value => value === 'zdf-per-band' ? 'zdf-per-band' : value === 'zdf' ? 'zdf' : 'current';
+  const normalizeFeedbackCore = value => value === 'zdf-per-band' ? 'zdf-per-band' : value === 'zdf-shared-band-sat' ? 'zdf-shared-band-sat' : value === 'zdf' ? 'zdf' : 'current';
   const normalizeChannel = channel => {
     if (channel === 'left' || channel === 'L') return 'left';
     if (channel === 'right' || channel === 'R') return 'right';
