@@ -261,9 +261,15 @@ const renderFilterMode = () => {
   if (filterResponseMarkers) filterResponseMarkers.innerHTML = points.map((point, index) => `<line x1="${point.x}" y1="${zeroY.toFixed(2)}" x2="${point.x}" y2="${point.y.toFixed(2)}"></line><circle cx="${point.x}" cy="${point.y.toFixed(2)}" r="3"><title>${BAND_DEFINITIONS[index].label}: ${gains[index].toFixed(1)} dB</title></circle>`).join('');
   filterResponseZeroLine?.setAttribute('y1', zeroY.toFixed(2));
   filterResponseZeroLine?.setAttribute('y2', zeroY.toFixed(2));
-  if (filterResponseCeiling) { filterResponseCeiling.textContent = `+${boostDb} dB`; filterResponseCeiling.style.top = `${graphTop / graphViewBoxHeight * 100}%`; }
+  if (filterResponseCeiling) {
+    filterResponseCeiling.textContent = `+${boostDb} dB`;
+    filterResponseCeiling.style.top = `${graphTop / graphViewBoxHeight * 100}%`;
+  }
   if (filterResponseZeroLabel) filterResponseZeroLabel.style.top = `${zeroY / graphViewBoxHeight * 100}%`;
-  if (filterResponseFloor) { filterResponseFloor.textContent = `−${cutDb} dB`; filterResponseFloor.style.top = `${graphBottom / graphViewBoxHeight * 100}%`; }
+  if (filterResponseFloor) {
+    filterResponseFloor.textContent = `−${cutDb} dB`;
+    filterResponseFloor.style.top = `${graphBottom / graphViewBoxHeight * 100}%`;
+  }
   if (filterFrequencyMarkerLabel) {
     filterFrequencyMarkerLabel.hidden = typeDefinition.marker === 'formants';
     filterFrequencyMarkerLabel.textContent = formatFilterFrequency(markerFrequency);

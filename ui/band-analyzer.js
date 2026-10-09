@@ -70,7 +70,11 @@ setClearAnalyzerHover(() => {
 const renderAnalyzerDetail = (index, anchor) => {
   const detail = analyzerDetail;
   const container = responseChart;
-  detail.replaceChildren(...detailText(index).map((line, lineIndex) => { const row = document.createElement(lineIndex === 0 ? 'strong' : 'span'); row.textContent = line; return row; }));
+  detail.replaceChildren(...detailText(index).map((line, lineIndex) => {
+    const row = document.createElement(lineIndex === 0 ? 'strong' : 'span');
+    row.textContent = line;
+    return row;
+  }));
   detail.hidden = false;
   const containerRect = container.getBoundingClientRect();
   const rect = anchor?.getBoundingClientRect?.() || containerRect;
@@ -104,7 +108,13 @@ const refreshStatusStrip = () => {
     activeBands.length ? `FB ${activeBands.join(' ')}` : null,
     sat ? 'SAT' : null
   ].filter(Boolean);
-  liveStatusStrip.replaceChildren(...tokens.map(token => { const badge = document.createElement('span'); badge.textContent = token; if (token === 'MAIN' || token === 'SAT' || token === 'ZDF') badge.classList.add('is-active'); if (token === 'SAT') badge.classList.add('is-warning'); return badge; }));
+  liveStatusStrip.replaceChildren(...tokens.map(token => {
+    const badge = document.createElement('span');
+    badge.textContent = token;
+    if (token === 'MAIN' || token === 'SAT' || token === 'ZDF') badge.classList.add('is-active');
+    if (token === 'SAT') badge.classList.add('is-warning');
+    return badge;
+  }));
   liveStatusStrip.hidden = !analyzerDisplay.liveStatusStrip;
 };
 const updateOscillation = () => {
@@ -153,7 +163,9 @@ const animateAnalyzer = now => {
     });
     const pair = bars.querySelector(`[data-analyzer-band="${index}"]`);
     if (pair) {
-      pair.dataset.leftDb = info.display.leftDb.toFixed(3); pair.dataset.rightDb = info.display.rightDb.toFixed(3); pair.dataset.deltaDb = info.delta.toFixed(3);
+      pair.dataset.leftDb = info.display.leftDb.toFixed(3);
+      pair.dataset.rightDb = info.display.rightDb.toFixed(3);
+      pair.dataset.deltaDb = info.delta.toFixed(3);
       pair.classList.toggle('has-feedback', analyzerDisplay.feedbackActivity && info.feedback);
       pair.classList.toggle('is-dominant', analyzerDisplay.dominantBand && info.dominant);
       pair.classList.toggle('is-oscillating', analyzerDisplay.selfOscillation && info.oscillating);

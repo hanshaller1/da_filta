@@ -61,9 +61,16 @@ BAND_DEFINITIONS.forEach((band, index) => {
     dynamicEqBandDetail.hidden = false;
   };
   column.addEventListener('pointerenter', showBandDetail);
-  column.addEventListener('pointerleave', () => { if (document.activeElement !== column && !column.classList.contains('is-pinned')) { dynamicEqBandDetail.hidden = true; column.classList.remove('is-active'); } });
+  column.addEventListener('pointerleave', () => {
+    if (document.activeElement !== column && !column.classList.contains('is-pinned')) {
+      dynamicEqBandDetail.hidden = true;
+      column.classList.remove('is-active');
+    }
+  });
   column.addEventListener('focus', showBandDetail);
-  column.addEventListener('blur', () => { if (!column.classList.contains('is-pinned')) { dynamicEqBandDetail.hidden = true; column.classList.remove('is-active'); } });
+  column.addEventListener('blur', () => {
+    if (!column.classList.contains('is-pinned')) { dynamicEqBandDetail.hidden = true; column.classList.remove('is-active'); }
+  });
   column.addEventListener('click', event => {
     event.stopPropagation();
     const pin = !column.classList.contains('is-pinned');

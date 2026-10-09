@@ -13,7 +13,10 @@ const syncAudioParameters = () => {
 document.querySelector('[data-control="inputGain"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="dryWet"]').addEventListener('input', syncAudioParameters);
 document.querySelector('[data-control="volume"]').addEventListener('input', syncAudioParameters);
-document.querySelector('[data-control="resonance"]').addEventListener('input', () => { audioEngine.setResonance(state.resonance); updateDevControlRelevance(); });
+document.querySelector('[data-control="resonance"]').addEventListener('input', () => {
+  audioEngine.setResonance(state.resonance);
+  updateDevControlRelevance();
+});
 document.querySelector('[data-control="spread"]').addEventListener('input', () => {
   audioEngine.setSpread(state.spread);
   materializeSpreadDb(state.spread);
@@ -21,6 +24,10 @@ document.querySelector('[data-control="spread"]').addEventListener('input', () =
 });
 ['resonance', 'dryWet', 'inputGain', 'volume', 'spread'].forEach(name => {
   const slider = document.querySelector(`[data-control="${name}"]`); let previous = state[name];
-  slider?.addEventListener('input', () => { const next = state[name]; devLabTelemetry.logStateChange(name.toUpperCase(), Number(previous).toFixed(name === 'resonance' ? 2 : 1), Number(next).toFixed(name === 'resonance' ? 2 : 1)); previous = next; });
+  slider?.addEventListener('input', () => {
+    const next = state[name];
+    devLabTelemetry.logStateChange(name.toUpperCase(), Number(previous).toFixed(name === 'resonance' ? 2 : 1), Number(next).toFixed(name === 'resonance' ? 2 : 1));
+    previous = next;
+  });
 });
 syncAudioParameters();

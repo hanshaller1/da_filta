@@ -84,8 +84,13 @@ const negativeResonanceAmountInput = addDevLabNumberControl({ label: 'NEG AMOUNT
 const negativeResonanceLocalSelect = addDevLabSelector('NEG LOCAL', 'data-negative-resonance-local', [['on', 'ON'], ['off', 'OFF']]);
 const negativeResonanceMainSelect = addDevLabSelector('NEG MAIN', 'data-negative-resonance-main', [['on', 'ON'], ['off', 'OFF']]);
 const negativeResonancePhaseInput = addDevLabNumberControl({ label: 'NEG PHASE', attribute: 'data-negative-resonance-phase', min: 0, max: 180, step: 1, suffix: '°', tooltip: 'PHASE-Experiment: Zielstärke der stabilen negativen Phaseninteraktion.', value: () => audioEngine?.negativeResonancePhase ?? 90, onChange: value => audioEngine?.setNegativeResonancePhase(value), group: 'negative-resonance' });
-const updateNegativeResonanceRelevance = () => { if (negativeResonancePhaseInput) negativeResonancePhaseInput.disabled = negativeResonanceModeSelect?.value !== 'phase'; };
-negativeResonanceModeSelect?.addEventListener('change', event => { audioEngine?.setNegativeResonanceMode(event.target.value); updateNegativeResonanceRelevance(); });
+const updateNegativeResonanceRelevance = () => {
+  if (negativeResonancePhaseInput) negativeResonancePhaseInput.disabled = negativeResonanceModeSelect?.value !== 'phase';
+};
+negativeResonanceModeSelect?.addEventListener('change', event => {
+  audioEngine?.setNegativeResonanceMode(event.target.value);
+  updateNegativeResonanceRelevance();
+});
 negativeResonanceCurveSelect?.addEventListener('change', event => audioEngine?.setNegativeResonanceCurve(event.target.value));
 negativeResonanceLocalSelect?.addEventListener('change', event => audioEngine?.setNegativeResonanceLocal(event.target.value === 'on'));
 negativeResonanceMainSelect?.addEventListener('change', event => audioEngine?.setNegativeResonanceMain(event.target.value === 'on'));

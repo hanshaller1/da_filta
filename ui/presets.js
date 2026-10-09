@@ -26,7 +26,12 @@ const renderPresetControls = () => {
   const options = [{ label: 'FACTORY', entries: [{ id: 'factory:init', name: 'INIT' }] }, { label: 'USER', entries: presetStore.presets }];
   presetList.replaceChildren(...options.map(group => {
     const element = document.createElement('optgroup'); element.label = group.label;
-    group.entries.forEach(entry => { const option = document.createElement('option'); option.value = entry.id; option.textContent = entry.name; element.append(option); });
+    group.entries.forEach(entry => {
+      const option = document.createElement('option');
+      option.value = entry.id;
+      option.textContent = entry.name;
+      element.append(option);
+    });
     return element;
   }));
   presetList.value = selectedPresetId;
@@ -53,37 +58,84 @@ const downloadPresets = (data, filename) => {
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
 };
 const presetActions = {
-  load: () => { applyProductionState(selectedPresetId === 'factory:init' ? presetContract.init : presetStore.entry(selectedPresetId).state); setPresetStatus('PRESET LOADED'); },
-  save: () => { selectedPresetId = presetStore.saveAs(presetNameInput.value, captureProductionState()).id; renderPresetControls(); setPresetStatus('PRESET SAVED'); },
-  update: () => requestPresetConfirmation('UPDATE ausgewähltes User-Preset?', () => { presetStore.update(selectedPresetId, captureProductionState()); setPresetStatus('PRESET UPDATED'); }),
+  load: () => {
+    applyProductionState(selectedPresetId === 'factory:init' ? presetContract.init : presetStore.entry(selectedPresetId).state);
+    setPresetStatus('PRESET LOADED');
+  },
+  save: () => {
+    selectedPresetId = presetStore.saveAs(presetNameInput.value, captureProductionState()).id;
+    renderPresetControls();
+    setPresetStatus('PRESET SAVED');
+  },
+  update: () => requestPresetConfirmation('UPDATE ausgewähltes User-Preset?', () => {
+    presetStore.update(selectedPresetId, captureProductionState());
+    setPresetStatus('PRESET UPDATED');
+  }),
   rename: () => { presetStore.rename(selectedPresetId, presetNameInput.value); renderPresetControls(); setPresetStatus('PRESET RENAMED'); },
-  duplicate: () => { selectedPresetId = presetStore.duplicate(selectedPresetId, presetNameInput.value).id; renderPresetControls(); setPresetStatus('PRESET DUPLICATED'); },
-  delete: () => requestPresetConfirmation('DELETE ausgewähltes User-Preset?', () => { presetStore.delete(selectedPresetId); selectedPresetId = 'factory:init'; renderPresetControls(); setPresetStatus('PRESET DELETED'); }),
+  duplicate: () => {
+    selectedPresetId = presetStore.duplicate(selectedPresetId, presetNameInput.value).id;
+    renderPresetControls();
+    setPresetStatus('PRESET DUPLICATED');
+  },
+  delete: () => requestPresetConfirmation('DELETE ausgewähltes User-Preset?', () => {
+    presetStore.delete(selectedPresetId);
+    selectedPresetId = 'factory:init';
+    renderPresetControls();
+    setPresetStatus('PRESET DELETED');
+  }),
   import: () => document.querySelector('[data-preset-import]').click(),
-  export: () => { downloadPresets(presetStore.exportPreset(selectedPresetId), 'da-filta-preset.json'); setPresetStatus('PRESET EXPORTED'); },
-  'export-library': () => { downloadPresets(presetStore.exportLibrary(), 'da-filta-preset-library.json'); setPresetStatus('LIBRARY EXPORTED'); }
+  export: () => {
+    downloadPresets(presetStore.exportPreset(selectedPresetId), 'da-filta-preset.json');
+    setPresetStatus('PRESET EXPORTED');
+  },
+  'export-library': () => {
+    downloadPresets(presetStore.exportLibrary(), 'da-filta-preset-library.json');
+    setPresetStatus('LIBRARY EXPORTED');
+  }
 };
-presetList.addEventListener('change', () => { selectedPresetId = presetList.value; cancelPresetConfirmation(); renderPresetControls(); setPresetStatus('SELECTED · LOAD TO RECALL'); });
-document.querySelectorAll('[data-preset-action]').forEach(button => button.addEventListener('click', () => { cancelPresetConfirmation(); runPresetAction(presetActions[button.dataset.presetAction]); }));
-document.querySelector('[data-preset-confirm]').addEventListener('click', () => { const pending = presetConfirmation; cancelPresetConfirmation(); if (pending?.id === selectedPresetId) runPresetAction(pending.action); });
+presetList.addEventListener('change', () => {
+  selectedPresetId = presetList.value;
+  cancelPresetConfirmation();
+  renderPresetControls();
+  setPresetStatus('SELECTED · LOAD TO RECALL');
+});
+document.querySelectorAll('[data-preset-action]').forEach(button => button.addEventListener('click', () => {
+  cancelPresetConfirmation();
+  runPresetAction(presetActions[button.dataset.presetAction]);
+}));
+document.querySelector('[data-preset-confirm]').addEventListener('click', () => {
+  const pending = presetConfirmation;
+  cancelPresetConfirmation();
+  if (pending?.id === selectedPresetId) runPresetAction(pending.action);
+});
 document.querySelector('[data-preset-cancel]').addEventListener('click', cancelPresetConfirmation);
 document.querySelector('[data-preset-import]').addEventListener('change', async event => {
   const file = event.target.files[0]; if (!file) return;
-  try { const imported = presetStore.import(await file.text()); if (imported.length) selectedPresetId = imported[0].id; renderPresetControls(); setPresetStatus(`${imported.length} PRESETS IMPORTED`); }
+  try {
+    const imported = presetStore.import(await file.text());
+    if (imported.length) selectedPresetId = imported[0].id;
+    renderPresetControls();
+    setPresetStatus(`${imported.length} PRESETS IMPORTED`);
+  }
   catch (error) { setPresetStatus(`IMPORT ERROR: ${error.message}`); }
   finally { event.target.value = ''; }
 });
 document.querySelectorAll('[data-snapshot-capture]').forEach(button => button.addEventListener('click', () => runPresetAction(() => {
-  presetStore.capture(button.dataset.snapshotCapture, captureProductionState()); renderPresetControls(); setPresetStatus('SNAPSHOT CAPTURED');
+  presetStore.capture(button.dataset.snapshotCapture, captureProductionState());
+  renderPresetControls();
+  setPresetStatus('SNAPSHOT CAPTURED');
 })));
 document.querySelectorAll('[data-snapshot-recall]').forEach(button => button.addEventListener('click', () => runPresetAction(() => {
-  const slot = button.dataset.snapshotRecall; applyProductionState(presetStore.snapshots[slot]); presetMorph.value = slot === 'A' ? '0' : '100';
+  const slot = button.dataset.snapshotRecall;
+  applyProductionState(presetStore.snapshots[slot]);
+  presetMorph.value = slot === 'A' ? '0' : '100';
   document.querySelector('[data-preset-morph-output]').textContent = `${presetMorph.value} %`; setPresetStatus(`SNAPSHOT ${slot} RECALLED`);
 })));
 presetMorph.addEventListener('input', () => runPresetAction(() => {
   if (presetMorph.disabled) return;
   applyProductionState(presetContract.interpolatePresetState(presetStore.snapshots.A, presetStore.snapshots.B, Number(presetMorph.value), audioEngine), true);
-  document.querySelector('[data-preset-morph-output]').textContent = `${presetMorph.value} %`; setPresetStatus('MORPH · DISCRETE A < 50 % / B ≥ 50 %');
+  document.querySelector('[data-preset-morph-output]').textContent = `${presetMorph.value} %`;
+  setPresetStatus('MORPH · DISCRETE A < 50 % / B ≥ 50 %');
 }));
 document.querySelector('#mode-presets').addEventListener('keydown', event => {
   if (event.target.closest('button') && ['Enter', ' '].includes(event.key)) event.stopPropagation();

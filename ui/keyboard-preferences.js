@@ -17,7 +17,9 @@ const readKeyboardPreferences = () => {
 const keyboardPreferences = readKeyboardPreferences();
 const formatKeyboardPreference = (value, decimals) => String(Number(value.toFixed(decimals)));
 const persistKeyboardPreferences = () => {
-  try { window.localStorage.setItem(KEYBOARD_PREFERENCES_STORAGE_KEY, JSON.stringify(keyboardPreferences)); } catch { /* Storage may be unavailable. */ }
+  try {
+    window.localStorage.setItem(KEYBOARD_PREFERENCES_STORAGE_KEY, JSON.stringify(keyboardPreferences));
+  } catch { /* Storage may be unavailable. */ }
 };
 const addKeyboardPreferenceControl = ({ label, attribute, min, max, step, suffix, tooltip, value, onChange, integer = false }) => {
   const container = devLabGroups.get('keyboard');
@@ -25,12 +27,19 @@ const addKeyboardPreferenceControl = ({ label, attribute, min, max, step, suffix
   const control = document.createElement('label'); control.className = 'dev-lab-control';
   const title = document.createElement('span'); title.textContent = label;
   const input = document.createElement('input');
-  input.type = 'number'; input.min = String(integer ? 1 : min); input.max = String(max); input.step = String(integer ? 1 : step); input.value = formatKeyboardPreference(value(), integer ? 0 : (step < 1 ? 1 : 0));
+  input.type = 'number';
+  input.min = String(integer ? 1 : min);
+  input.max = String(max);
+  input.step = String(integer ? 1 : step);
+  input.value = formatKeyboardPreference(value(), integer ? 0 : (step < 1 ? 1 : 0));
   input.setAttribute(attribute, ''); input.setAttribute('aria-label', `${label} ${suffix}`); input.title = tooltip;
   const unit = document.createElement('em'); unit.textContent = suffix;
   const apply = restoreInvalid => {
     const numeric = Number(input.value);
-    if (input.value.trim() === '' || !Number.isFinite(numeric)) { if (restoreInvalid) input.value = formatKeyboardPreference(value(), step < 1 ? 1 : 0); return; }
+    if (input.value.trim() === '' || !Number.isFinite(numeric)) {
+      if (restoreInvalid) input.value = formatKeyboardPreference(value(), step < 1 ? 1 : 0);
+      return;
+    }
     const normalized = integer ? Math.round(numeric) : numeric;
     onChange(Math.min(max, Math.max(min, normalized)));
     input.value = formatKeyboardPreference(value(), integer ? 0 : (step < 1 ? 1 : 0));

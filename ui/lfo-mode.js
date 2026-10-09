@@ -183,7 +183,9 @@ const renderLfoSlots = () => {
     button.dataset.lfoSlot = String(index);
     button.setAttribute('aria-pressed', String(index === selectedLfoIndex));
     const number = document.createElement('span'); number.className = 'lfo-slot-number'; number.textContent = String(index + 1);
-    const status = document.createElement('span'); status.className = 'lfo-slot-state'; status.textContent = `${source.enabled ? 'ON' : 'OFF'} · ${source.waveform.toUpperCase()}`;
+    const status = document.createElement('span');
+    status.className = 'lfo-slot-state';
+    status.textContent = `${source.enabled ? 'ON' : 'OFF'} · ${source.waveform.toUpperCase()}`;
     const detail = document.createElement('span'); detail.className = 'lfo-slot-detail';
     const assigned = source.assignments.filter(assignment => assignment.targetId);
     const lostCount = assigned.filter(assignment => {
@@ -242,10 +244,16 @@ const renderLfoControls = () => {
   if (lfoRateInput) { lfoRateInput.value = String(rateToSlider(source.rateHz)); lfoRateInput.disabled = source.rateMode === 'sync'; }
   if (lfoPhaseInput) lfoPhaseInput.value = String(source.phaseOffsetDeg);
   if (lfoClockSourceSelect) lfoClockSourceSelect.value = state.lfoClock?.source || 'internal';
-  if (lfoBpmInput) { lfoBpmInput.value = String(state.lfoClock?.bpm ?? 120); lfoBpmInput.disabled = source.rateMode !== 'sync' || state.lfoClock?.source === 'midi'; }
+  if (lfoBpmInput) {
+    lfoBpmInput.value = String(state.lfoClock?.bpm ?? 120);
+    lfoBpmInput.disabled = source.rateMode !== 'sync' || state.lfoClock?.source === 'midi';
+  }
   if (lfoDivisionSelect) { lfoDivisionSelect.value = source.syncDivision; lfoDivisionSelect.disabled = source.rateMode !== 'sync'; }
   if (lfoClockSourceSelect) lfoClockSourceSelect.disabled = source.rateMode !== 'sync';
-  if (lfoInvertButton) { lfoInvertButton.textContent = source.invert ? 'INVERT ON' : 'INVERT OFF'; lfoInvertButton.setAttribute('aria-pressed', String(source.invert)); }
+  if (lfoInvertButton) {
+    lfoInvertButton.textContent = source.invert ? 'INVERT ON' : 'INVERT OFF';
+    lfoInvertButton.setAttribute('aria-pressed', String(source.invert));
+  }
   if (lfoBpmControl) lfoBpmControl.classList.toggle('is-inactive', source.rateMode !== 'sync' || state.lfoClock?.source === 'midi');
   if (lfoDivisionControl) lfoDivisionControl.classList.toggle('is-inactive', source.rateMode !== 'sync');
   const rateOutput = document.querySelector('[data-lfo-rate-output]');

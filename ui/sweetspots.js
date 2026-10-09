@@ -30,15 +30,28 @@ const readSweetspots = () => {
 };
 let sweetspots = readSweetspots();
 const persistSweetspots = () => {
-  try { window.localStorage.setItem(SWEETSPOT_STORAGE_KEY, JSON.stringify({ version: 1, slots: sweetspots })); } catch { /* Storage may be unavailable. */ }
+  try {
+    window.localStorage.setItem(SWEETSPOT_STORAGE_KEY, JSON.stringify({ version: 1, slots: sweetspots }));
+  } catch { /* Storage may be unavailable. */ }
 };
 // This is the complete, explicit DEV/LAB snapshot contract. Normal app state
 // is intentionally absent: DEV/LAB snapshots are experimental configurations,
 // not production presets.
 const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
-  ['macroSources', value => { Object.assign(state, window.ResonantState.normalizeMacroState({ macroSources: value })); commitMacroState(); }],
-  ['clockMod', value => { state.clockMod = window.ResonantState.normalizeClockModState(value); audioEngine.setClockModState(state.clockMod); renderClockModControls(); }],
-  ['envelopeModuleEnabled', value => { state.envelopeModuleEnabled = value === true; audioEngine.setModulationState(state); renderEnvelopeControls(); }],
+  ['macroSources', value => {
+    Object.assign(state, window.ResonantState.normalizeMacroState({ macroSources: value }));
+    commitMacroState();
+  }],
+  ['clockMod', value => {
+    state.clockMod = window.ResonantState.normalizeClockModState(value);
+    audioEngine.setClockModState(state.clockMod);
+    renderClockModControls();
+  }],
+  ['envelopeModuleEnabled', value => {
+    state.envelopeModuleEnabled = value === true;
+    audioEngine.setModulationState(state);
+    renderEnvelopeControls();
+  }],
   ['envelopeSources', value => {
     Object.assign(state, window.ResonantState.normalizeEnvelopeState({ envelopeSources: value }));
     commitEnvelopeState();
@@ -48,7 +61,11 @@ const DEV_LAB_SNAPSHOT_PROPERTIES = Object.freeze([
     commitLfoState();
   }],
   ['lfoModuleEnabled', value => { state.lfoModuleEnabled = value === true; commitLfoState(); }],
-  ['lfoClock', value => { state.lfoClock = normalizeClockState(value); audioEngine.setLfoClockState(state.lfoClock); renderLfoControls(); }],
+  ['lfoClock', value => {
+    state.lfoClock = normalizeClockState(value);
+    audioEngine.setLfoClockState(state.lfoClock);
+    renderLfoControls();
+  }],
   ['inputPreampStage', value => audioEngine.setInputPreampStage(value)],
   ['inputCharacterAmount', value => setInputCharacterAmount(value)],
   ['outputGuardEnabled', value => audioEngine.setOutputGuardEnabled(value)],

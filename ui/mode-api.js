@@ -58,7 +58,11 @@ window.EnvelopeMode = Object.freeze({
   getState: () => ({ envelopeModuleEnabled: state.envelopeModuleEnabled === true, selectedEnvelopeIndex,
     envelopeSources: (state.envelopeSources || []).map(source => ({ ...source, assignments: source.assignments.map(assignment => ({ ...assignment })) })) }),
   getAudioEngine: () => audioEngine,
-  getTelemetry: () => { const source = getEnvelopeSource(); const telemetry = source ? envelopeTelemetry.get(source.id) : null; return telemetry ? { ...telemetry } : null; },
+  getTelemetry: () => {
+    const source = getEnvelopeSource();
+    const telemetry = source ? envelopeTelemetry.get(source.id) : null;
+    return telemetry ? { ...telemetry } : null;
+  },
   getTargetRegistry: () => MODULATION_TARGETS.map(target => ({ id: target.id, label: target.label, group: target.group, channelRouting: target.channelRouting }))
 });
 window.ClockModMode = Object.freeze({

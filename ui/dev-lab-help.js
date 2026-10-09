@@ -30,7 +30,13 @@ const renderDevLabHelp = (title, entries) => {
     appendDevLabHelpText(section, help.scope);
     if (help.values?.length) {
       const values = document.createElement('ul');
-      help.values.forEach(([name, description]) => { const item = document.createElement('li'); const value = document.createElement('strong'); value.textContent = `${name} — `; item.append(value, description); values.append(item); });
+      help.values.forEach(([name, description]) => {
+        const item = document.createElement('li');
+        const value = document.createElement('strong');
+        value.textContent = `${name} — `;
+        item.append(value, description);
+        values.append(item);
+      });
       section.append(values);
     }
     appendDevLabHelpText(section, help.default);

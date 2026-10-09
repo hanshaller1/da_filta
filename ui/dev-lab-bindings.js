@@ -135,14 +135,32 @@ const bindDevLabSelect = (select, apply, fallback) => {
   if (!select) return;
   let previous = select.value ?? fallback;
   apply(previous);
-  select.addEventListener('change', event => { const next = event.target.value; apply(next); updateDevControlRelevance(); devLabTelemetry.logStateChange(select.previousElementSibling?.textContent || select.closest('label')?.querySelector('span')?.textContent || 'DEV PARAMETER', previous, next); previous = next; });
+  select.addEventListener('change', event => {
+    const next = event.target.value;
+    apply(next);
+    updateDevControlRelevance();
+    devLabTelemetry.logStateChange(select.previousElementSibling?.textContent || select.closest('label')?.querySelector('span')?.textContent || 'DEV PARAMETER', previous, next);
+    previous = next;
+  });
 };
 bindDevLabSelect(outputGuardSelect, value => audioEngine.setOutputGuardEnabled(value === 'on'), 'on');
 bindDevLabSelect(outputProtectionSelect, value => audioEngine.setOutputProtectionEnabled(value === 'on'), 'on');
 bindDevLabSelect(referenceLevelSelect, value => audioEngine.setReferenceLevel(value), '1');
 bindDevLabSelect(resonanceEngineSelect, value => audioEngine.setPositiveResonanceEngine(value), 'tpt');
-bindDevLabSelect(bandBoostSelect, value => { audioEngine.setBandBoostDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
-bindDevLabSelect(bandCutSelect, value => { audioEngine.setBandCutDb(value); invalidateAllSpreadCenters(); renderAnalyzerScale(); renderBandSliderValues(); renderFilterMode(); }, '12');
+bindDevLabSelect(bandBoostSelect, value => {
+  audioEngine.setBandBoostDb(value);
+  invalidateAllSpreadCenters();
+  renderAnalyzerScale();
+  renderBandSliderValues();
+  renderFilterMode();
+}, '12');
+bindDevLabSelect(bandCutSelect, value => {
+  audioEngine.setBandCutDb(value);
+  invalidateAllSpreadCenters();
+  renderAnalyzerScale();
+  renderBandSliderValues();
+  renderFilterMode();
+}, '12');
 bindDevLabSelect(spreadMaxOffsetSelect, value => {
   state.spreadMaxOffsetDb = audioEngine.setSpreadMaxOffsetDb(value);
   configureSpreadControl(state.spreadMaxOffsetDb);
@@ -171,7 +189,10 @@ const updateLocalLoopTuningRelevance = () => {
     fbAllButton.setAttribute('aria-pressed', String(state.feedbackAllLeft));
   }
 };
-bindDevLabSelect(feedbackTopologySelect, value => { audioEngine.setFeedbackTopology(value); updateLocalLoopTuningRelevance(); }, 'isolated-tpt');
+bindDevLabSelect(feedbackTopologySelect, value => {
+  audioEngine.setFeedbackTopology(value);
+  updateLocalLoopTuningRelevance();
+}, 'isolated-tpt');
 bindDevLabSelect(feedbackCoreSelect, value => { audioEngine.setFeedbackCore(value); updateLocalLoopTuningRelevance(); }, 'zdf-per-band');
 bindDevLabSelect(localLoopTuningSelect, value => audioEngine.setLocalLoopTuning(value), 'current');
 bindDevLabSelect(feedbackTapSelect, value => audioEngine.setFeedbackTap(value), 'pre-gain');

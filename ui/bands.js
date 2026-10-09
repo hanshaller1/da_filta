@@ -17,7 +17,11 @@ document.querySelectorAll('.band-card').forEach((card, index) => {
   const channelFader = channel => `<div class="channel-fader"><div class="fader-track"><div class="fader-hit-area"><input class="band-fader band-fader-channel" type="range" min="${BAND_GAIN_MIN}" max="${BAND_GAIN_MAX}" step="0.1" data-band="${index}" data-channel="${channel}" aria-label="${BAND_DEFINITIONS[index].label} ${channel === 'left' ? 'Left' : 'Right'}"></div></div><output data-band-channel-value="${index}-${channel}">0.0 dB</output></div>`;
   card.insertAdjacentHTML('beforeend', `<div class="channel-faders">${channelFader('left')}<button class="band-link-toggle" type="button" data-band-link="${index}" aria-label="${BAND_DEFINITIONS[index].label} L/R verketten" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07.07l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></svg></button>${channelFader('right')}</div>`);
 });
-const formatValue = (name,value) => { if(name==='dryWet') return `${Math.round(value)} %`; if(name==='inputGain'||name==='volume'||name==='spread') return `${name === 'spread' && Number(value) > 0 ? '+' : ''}${Number(value).toFixed(1)} dB`; return Number(value).toFixed(2).replace(/\.?0+$/,''); };
+const formatValue = (name,value) => {
+  if(name==='dryWet') return `${Math.round(value)} %`;
+  if(name==='inputGain'||name==='volume'||name==='spread') return `${name === 'spread' && Number(value) > 0 ? '+' : ''}${Number(value).toFixed(1)} dB`;
+  return Number(value).toFixed(2).replace(/\.?0+$/,'');
+};
 const faders = [...document.querySelectorAll('.center-fader .band-fader')];
 const renderAnalyzerScale = () => {
   const boost = getBandBoostDb(); const cut = getBandCutDb();
@@ -66,7 +70,10 @@ const renderBand = index => {
     if (marker) marker.style.bottom = `${(bandGainDbToBipolarPercent(gainDb, getBandBoostDb(), getBandCutDb()) + 100) / 2}%`;
   });
   const link = document.querySelector(`[data-band-link="${index}"]`);
-  if (link) { link.classList.toggle('active', Boolean(state.bandChannelLinked[index])); link.setAttribute('aria-pressed', String(Boolean(state.bandChannelLinked[index]))); }
+  if (link) {
+    link.classList.toggle('active', Boolean(state.bandChannelLinked[index]));
+    link.setAttribute('aria-pressed', String(Boolean(state.bandChannelLinked[index])));
+  }
   updateAnalyzerBand(index);
 };
 const setBandPairByDb = (index, sourceChannel, targetControl) => {
@@ -133,7 +140,8 @@ const setFeedbackAll = (channel, enabled) => {
     else state.feedbackAllRight = Boolean(enabled);
     audioEngine?.setFeedbackAll(targetChannel, enabled);
   });
-  devLabTelemetry.logStateChange('FB ALL', setFeedbackAll.last ?? 'OFF', enabled ? 'ON' : 'OFF'); setFeedbackAll.last = enabled ? 'ON' : 'OFF';
+  devLabTelemetry.logStateChange('FB ALL', setFeedbackAll.last ?? 'OFF', enabled ? 'ON' : 'OFF');
+  setFeedbackAll.last = enabled ? 'ON' : 'OFF';
   scheduleAnalyzerRender();
   refreshStatusStrip();
 };
@@ -145,9 +153,14 @@ faders.forEach((slider,index) => {
 document.querySelectorAll('.band-fader-channel').forEach(input => {
   const index = Number(input.dataset.band); const channel = input.dataset.channel;
   const change = () => state.bandChannelLinked[index] ? setBandPairByDb(index, channel, input.value) : setBandBaseGain(channel, index, input.value, true);
-  input.addEventListener('input', change); input.addEventListener('dblclick', () => state.bandChannelLinked[index] ? setBandPairByDb(index, channel, BAND_GAIN_NEUTRAL) : setBandBaseGain(channel, index, BAND_GAIN_NEUTRAL, true));
+  input.addEventListener('input', change);
+  input.addEventListener('dblclick', () => state.bandChannelLinked[index] ? setBandPairByDb(index, channel, BAND_GAIN_NEUTRAL) : setBandBaseGain(channel, index, BAND_GAIN_NEUTRAL, true));
 });
-document.querySelectorAll('[data-band-link]').forEach(button => button.addEventListener('click', () => { const index = Number(button.dataset.bandLink); state.bandChannelLinked[index] = !state.bandChannelLinked[index]; renderBand(index); }));
+document.querySelectorAll('[data-band-link]').forEach(button => button.addEventListener('click', () => {
+  const index = Number(button.dataset.bandLink);
+  state.bandChannelLinked[index] = !state.bandChannelLinked[index];
+  renderBand(index);
+}));
 
 export {
   bands, formatValue, faders, renderAnalyzerScale, renderBandSliderValues, invalidateSpreadCenter,

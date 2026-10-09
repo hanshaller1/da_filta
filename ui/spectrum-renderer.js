@@ -240,7 +240,10 @@ const spectrumRenderer = (() => {
   };
   const schedule = () => { if (!animationFrame && shouldRender()) animationFrame = requestAnimationFrame(draw); };
   const refresh = () => { if (shouldRender()) schedule(); };
-  const setVisible = nextVisible => { visible = Boolean(nextVisible); if (!visible && animationFrame) { cancelAnimationFrame(animationFrame); animationFrame = 0; } else refresh(); };
+  const setVisible = nextVisible => {
+    visible = Boolean(nextVisible);
+    if (!visible && animationFrame) { cancelAnimationFrame(animationFrame); animationFrame = 0; } else refresh();
+  };
   const setForeground = nextForeground => { foreground = nextForeground === 'spectrum' ? 'spectrum' : 'bars'; updateButtons(); refresh(); };
   spectrumBarsButton.addEventListener('click', () => setForeground('bars'));
   spectrumCurveButton.addEventListener('click', () => setForeground('spectrum'));

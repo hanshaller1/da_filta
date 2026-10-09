@@ -175,7 +175,10 @@ const renderClockModControls = () => {
     clockModMidpointInput.value = String(Math.min(limits.boost, Math.max(-limits.cut, config.midpointDb)));
   }
   if (clockModMidpointOutput) clockModMidpointOutput.textContent = `${config.midpointDb >= 0 ? '+' : ''}${config.midpointDb.toFixed(1)} dB`;
-  if (clockModBpmInput) { clockModBpmInput.value = String(config.internalBpm); clockModBpmInput.disabled = config.clockSource !== 'internal'; }
+  if (clockModBpmInput) {
+    clockModBpmInput.value = String(config.internalBpm);
+    clockModBpmInput.disabled = config.clockSource !== 'internal';
+  }
   clockModBpmControl?.classList.toggle('is-inactive', config.clockSource !== 'internal');
   if (clockModMidiTempo) clockModMidiTempo.classList.toggle('is-inactive', config.clockSource !== 'midi');
   if (clockModScaleInput) { clockModScaleInput.value = config.clockScale; clockModScaleInput.disabled = config.clockSource !== 'midi'; }

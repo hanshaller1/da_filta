@@ -139,7 +139,9 @@ const positionAnalyzerOptionsPopover = () => {
   analyzerOptionsPopover.style.top = `${Math.round(top)}px`;
 };
 analyzerOptionsToggle.addEventListener('click', () => { hideAnalyzerDetails(); setAnalyzerOptionsOpen(analyzerOptionsPopover.hidden); });
-document.addEventListener('pointerdown', event => { if (!analyzerOptions.contains(event.target)) { hideAnalyzerDetails(); setAnalyzerOptionsOpen(false); } });
+document.addEventListener('pointerdown', event => {
+  if (!analyzerOptions.contains(event.target)) { hideAnalyzerDetails(); setAnalyzerOptionsOpen(false); }
+});
 document.addEventListener('keydown', event => { if (event.key === 'Escape') setAnalyzerOptionsOpen(false); });
 window.addEventListener('resize', positionAnalyzerOptionsPopover);
 analyzerHeaderControls?.prepend(analyzerOptions);

@@ -35,10 +35,16 @@ const renderSampleOptions = () => {
   if (!inputDeviceSelect) return;
   inputDeviceSelect.replaceChildren();
   SAMPLE_LIBRARY.forEach(sample => {
-    const option = document.createElement('option'); option.value = sample.id; option.textContent = sample.name; inputDeviceSelect.append(option);
+    const option = document.createElement('option');
+    option.value = sample.id;
+    option.textContent = sample.name;
+    inputDeviceSelect.append(option);
   });
   if (!SAMPLE_LIBRARY.length) {
-    const option = document.createElement('option'); option.value = ''; option.textContent = 'Kein integriertes Sample'; inputDeviceSelect.append(option);
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Kein integriertes Sample';
+    inputDeviceSelect.append(option);
   }
   inputDeviceSelect.value = selectedSampleId;
   inputDeviceSelect.setAttribute('aria-label', 'Integrierter Audio-Loop');
@@ -129,7 +135,11 @@ const updateAudioStatus = (status, message = '') => {
 };
 setAudioEngine(new AudioEngine({
   onStatusChange: updateAudioStatus,
-  onDevicesChanged: devices => { knownInputDevices = devices.inputs; if (audioSourceMode === 'device') renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät'); renderDevices(outputDeviceSelect, devices.outputs, 'Standardausgabe'); },
+  onDevicesChanged: devices => {
+    knownInputDevices = devices.inputs;
+    if (audioSourceMode === 'device') renderDevices(inputDeviceSelect, devices.inputs, 'Kein Input-Gerät');
+    renderDevices(outputDeviceSelect, devices.outputs, 'Standardausgabe');
+  },
   onDiagnostics: packet => { devLabTelemetry.receive(packet); scheduleAnalyzerRender(); },
   onDynamicEqTelemetry: packet => {
     setDynamicEqTelemetry(packet);

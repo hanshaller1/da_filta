@@ -124,7 +124,12 @@ const addDevLabSelector = (label, attribute, options) => {
   title.textContent = label;
   const select = document.createElement('select');
   select.setAttribute(attribute, '');
-  options.forEach(([value, text]) => { const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option); });
+  options.forEach(([value, text]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = text;
+    select.append(option);
+  });
   control.append(title, select);
   container.append(control);
   return select;

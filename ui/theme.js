@@ -67,7 +67,12 @@ const changeSaturation = (color, saturation) => {
   const nextSaturation = clamp((lightness > .5 ? chroma / (2 - max - min) : chroma / (max + min)) * saturation, 0, 1);
   const q = lightness < .5 ? lightness * (1 + nextSaturation) : lightness + nextSaturation - lightness * nextSaturation;
   const p = 2 * lightness - q;
-  const channel = offset => { let t = hue + offset; if (t < 0) t += 1; if (t > 1) t -= 1; return (t < 1 / 6 ? p + (q - p) * 6 * t : t < .5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p) * 255; };
+  const channel = offset => {
+    let t = hue + offset;
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    return (t < 1 / 6 ? p + (q - p) * 6 * t : t < .5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p) * 255;
+  };
   return hex([channel(1 / 3), channel(0), channel(-1 / 3)]);
 };
 const adjustColor = (color, brightness, saturation) => {
@@ -135,25 +140,44 @@ const applyCustomTheme = theme => {
   set('--overlay-opacity', theme.backgroundGrid ? String(.025 + theme.grid / 100 * .18) : '0');
   set('--overlay-line-x', withAlpha(accent, .11)); set('--overlay-line-y', withAlpha(accent, .14));
   set('--panel-background', gradient(mixColor(panel, lightTheme ? '#ffffff' : accent, theme.gradients ? .035 : 0), panel));
-  set('--panel-border', border); set('--panel-shadow', theme.shadows ? `0 3px 12px ${withAlpha(background, .3)}, inset 0 0 14px ${withAlpha(accent, .035)}` : 'none');
+  set('--panel-border', border);
+  set('--panel-shadow', theme.shadows ? `0 3px 12px ${withAlpha(background, .3)}, inset 0 0 14px ${withAlpha(accent, .035)}` : 'none');
   set('--secondary-text', secondaryText); set('--muted-text', mutedText); set('--strong-text', strongText);
   set('--output-background', output); set('--output-border', mixColor(border, output, .25));
-  set('--button-background', gradient(mixColor(button, lightTheme ? '#ffffff' : accent, .04), button)); set('--button-border', mixColor(border, text, .08)); set('--button-text', text);
+  set('--button-background', gradient(mixColor(button, lightTheme ? '#ffffff' : accent, .04), button));
+  set('--button-border', mixColor(border, text, .08));
+  set('--button-text', text);
   set('--band-button-background', gradient(mixColor(button, accent, .04), button)); set('--band-button-border', border);
   set('--active-background', gradient(mixColor(active, accent, .15), active));
   set('--active-shadow', glow ? `0 0 ${Math.round(3 + glow * 12)}px ${withAlpha(accent, .12 + glow * .48)}` : 'none');
-  set('--range-track', theme.gradients ? `linear-gradient(90deg, ${accent}, ${mixColor(accent, panel, .64)})` : accent); set('--range-thumb-border', strongText); set('--range-thumb-shadow', glow ? `0 0 ${Math.round(2 + glow * 9)}px ${withAlpha(accent, .2 + glow * .55)}` : 'none');
-  set('--graph-background', graphBackground); set('--graph-grid', withAlpha(mixColor(accent, text, .22), .42)); set('--theme-grid-background', `linear-gradient(to bottom, color-mix(in srgb, var(--graph-grid) ${theme.grid}%, transparent) 1px, transparent 1px)`);
-  set('--graph-zero', withAlpha(accent, .58)); set('--graph-zero-shadow', glow ? `0 0 ${Math.round(2 + glow * 6)}px ${withAlpha(accent, glow * .42)}` : 'none');
-  set('--graph-left', theme.gradients ? `linear-gradient(${mixColor(left, '#ffffff', .17)}, ${left})` : left); set('--graph-right', theme.gradients ? `linear-gradient(${mixColor(right, '#ffffff', .14)}, ${right})` : right); set('--graph-left-color', left); set('--graph-right-color', right); set('--graph-left-shadow', glow ? `0 0 ${Math.round(2 + glow * 6)}px ${withAlpha(left, glow * .45)}` : 'none');
+  set('--range-track', theme.gradients ? `linear-gradient(90deg, ${accent}, ${mixColor(accent, panel, .64)})` : accent);
+  set('--range-thumb-border', strongText);
+  set('--range-thumb-shadow', glow ? `0 0 ${Math.round(2 + glow * 9)}px ${withAlpha(accent, .2 + glow * .55)}` : 'none');
+  set('--graph-background', graphBackground);
+  set('--graph-grid', withAlpha(mixColor(accent, text, .22), .42));
+  set('--theme-grid-background', `linear-gradient(to bottom, color-mix(in srgb, var(--graph-grid) ${theme.grid}%, transparent) 1px, transparent 1px)`);
+  set('--graph-zero', withAlpha(accent, .58));
+  set('--graph-zero-shadow', glow ? `0 0 ${Math.round(2 + glow * 6)}px ${withAlpha(accent, glow * .42)}` : 'none');
+  set('--graph-left', theme.gradients ? `linear-gradient(${mixColor(left, '#ffffff', .17)}, ${left})` : left);
+  set('--graph-right', theme.gradients ? `linear-gradient(${mixColor(right, '#ffffff', .14)}, ${right})` : right);
+  set('--graph-left-color', left);
+  set('--graph-right-color', right);
+  set('--graph-left-shadow', glow ? `0 0 ${Math.round(2 + glow * 6)}px ${withAlpha(left, glow * .45)}` : 'none');
   set('--spectrum-left', left); set('--spectrum-right', right);
-  set('--fader-track', mixColor(output, background, .46)); set('--fader-track-shadow', theme.shadows ? `0 0 0 2px ${mixColor(background, '#000000', .35)}, 0 0 8px ${withAlpha(accent, .13)}` : 'none'); set('--fader-thumb', strongText);
+  set('--fader-track', mixColor(output, background, .46));
+  set('--fader-track-shadow', theme.shadows ? `0 0 0 2px ${mixColor(background, '#000000', .35)}, 0 0 8px ${withAlpha(accent, .13)}` : 'none');
+  set('--fader-thumb', strongText);
   // Error/panic stays intentionally independent from the user accent.
   set('--error', lightTheme ? '#b43d35' : '#ff8b82');
   runtimeThemeActive = true;
   document.dispatchEvent(new Event('da-filta-theme-change'));
 };
-const readCustomTheme = () => { try { const stored = JSON.parse(window.localStorage.getItem(CUSTOM_THEME_STORAGE_KEY) || 'null'); return stored && typeof stored === 'object' ? stored : null; } catch { return null; } };
+const readCustomTheme = () => {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(CUSTOM_THEME_STORAGE_KEY) || 'null');
+    return stored && typeof stored === 'object' ? stored : null;
+  } catch { return null; }
+};
 const updateCustomOption = () => {
   const hasCustom = Boolean(readCustomTheme());
   if (customThemeOption) customThemeOption.disabled = !hasCustom;
@@ -163,7 +187,10 @@ const syncEditorUI = () => {
   if (!editorTheme) return;
   themeEditorBase.textContent = getBaseThemeName(editorTheme.baseTheme);
   themeEditorFields.forEach(field => { field[field.type === 'checkbox' ? 'checked' : 'value'] = editorTheme[field.dataset.themeField]; });
-  themeEditorOutputs.forEach(output => { const key = output.dataset.themeOutput; output.textContent = key === 'saturation' ? `${editorTheme[key]}%` : editorTheme[key]; });
+  themeEditorOutputs.forEach(output => {
+    const key = output.dataset.themeOutput;
+    output.textContent = key === 'saturation' ? `${editorTheme[key]}%` : editorTheme[key];
+  });
   themeEditorStatus.textContent = runtimeThemeActive && !editorThemeSaved ? 'UNSAVED' : '';
 };
 const readStoredTheme = () => {
@@ -206,7 +233,12 @@ themeEditorFields.forEach(field => field.addEventListener('input', () => {
   editorTheme[key] = field.type === 'checkbox' ? field.checked : field.type === 'range' ? Number(field.value) : colorFromValue(field.value);
   editorThemeSaved = false; applyCustomTheme(editorTheme); syncEditorUI();
 }));
-themeEditorReset?.addEventListener('click', () => { const base = editorTheme?.baseTheme || document.body.dataset.theme || 'current'; applyTheme(base); editorTheme = captureEditorTheme(base); syncEditorUI(); });
+themeEditorReset?.addEventListener('click', () => {
+  const base = editorTheme?.baseTheme || document.body.dataset.theme || 'current';
+  applyTheme(base);
+  editorTheme = captureEditorTheme(base);
+  syncEditorUI();
+});
 themeEditorSave?.addEventListener('click', () => {
   if (!editorTheme) editorTheme = captureEditorTheme(document.body.dataset.theme || 'current');
   try { window.localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, JSON.stringify({ version: 1, ...editorTheme })); } catch { return; }

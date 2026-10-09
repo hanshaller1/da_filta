@@ -27,7 +27,13 @@ document.querySelectorAll('[data-control]').forEach(slider => {
   });
   update();
 });
-document.querySelectorAll('[data-feedback-band]').forEach(button => button.addEventListener('click', () => { const index=Number(button.dataset.feedbackBand); const nextValue=!state.feedbackBandLeft[index]; setBandFeedback('left', index, nextValue); button.classList.toggle('active',nextValue); button.setAttribute('aria-pressed',String(nextValue)); }));
+document.querySelectorAll('[data-feedback-band]').forEach(button => button.addEventListener('click', () => {
+  const index=Number(button.dataset.feedbackBand);
+  const nextValue=!state.feedbackBandLeft[index];
+  setBandFeedback('left', index, nextValue);
+  button.classList.toggle('active',nextValue);
+  button.setAttribute('aria-pressed',String(nextValue));
+}));
 const fbAllButton = document.querySelector('.fb-all-toggle');
 const channelModeToggle = document.querySelector('[data-channel-toggle]');
 const bandResetButton = document.querySelector('[data-band-reset]');
@@ -71,7 +77,13 @@ bandResetButton?.addEventListener('click', resetBandControls);
 const fbAllControl = fbAllButton?.closest('.fb-all-control');
 if (fbAllControl) document.querySelector('.filterbank-fb-all-group')?.append(fbAllControl);
 fbAllButton.title = 'Separater MAIN-Feedback-Bus mit eigenem Schalter; unabhängig von den einzelnen FB-Bandtasten.';
-fbAllButton.addEventListener('click', () => { const nextValue=!state.feedbackAllLeft; setFeedbackAll('left', nextValue); fbAllButton.classList.toggle('active',nextValue); fbAllButton.textContent='FB ALL'; fbAllButton.setAttribute('aria-pressed',String(nextValue)); });
+fbAllButton.addEventListener('click', () => {
+  const nextValue=!state.feedbackAllLeft;
+  setFeedbackAll('left', nextValue);
+  fbAllButton.classList.toggle('active',nextValue);
+  fbAllButton.textContent='FB ALL';
+  fbAllButton.setAttribute('aria-pressed',String(nextValue));
+});
 const renderGlobalControlValue = (name, value, precise = false) => {
   const definition = GLOBAL_CONTROL_DEFINITIONS[name];
   const slider = document.querySelector(`[data-control="${name}"]`);
